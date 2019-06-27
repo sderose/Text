@@ -1,0 +1,6 @@
+Utilities and data for working with text files (including Unicode, but little or
+no markup -- the notion "plain text" is, imho, barely even meaningful).
+
+As with all my utilities, use "-h" to get help.
+
+
