@@ -1,0 +1,275 @@
+#!/usr/bin/perl -w
+#
+# anycat: Better versio of *nix 'cut' utility.
+#
+# 2013-04-23: Written by Steven J. DeRose.
+#
+# To do:
+#     Test.
+#     Port to Python on top of PowerWalk.
+#     Integrate with 'ds'?
+#
+use strict;
+use Getopt::Long;
+use Encode;
+# search.cpan.org/~pmqs/IO-Compress-2.060/lib/IO/Uncompress/AnyUncompress.pm
+use IO::Uncompress::AnyUncompress;
+
+use sjdUtils;
+use alogging;
+
+my $version = "2013-04-23";
+
+my $color         = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
+my $iencoding     = "";
+my $ilineends     = "U";
+my $lines         = $ENV{LINES} || 0;
+my $oencoding     = "";
+my $olineends     = "U";
+my $quiet         = 0;
+my $recursive     = 0;
+my $verbose       = 0;
+
+
+###############################################################################
+#
+my %getoptHash = (
+    "color!"                       => \$color,
+    "h|help"                       => sub { system "perldoc $0"; exit; },
+    "iencoding=s"                  => \$iencoding,
+    "ilineends=s"                  => \$ilineends,
+    "listEncodings|list-encodings" => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "oencoding=s"                  => \$oencoding,
+    "olineends=s"                  => \$olineends,
+    "q!"                           => \$quiet,
+    "recursive!"                   => \$recursive,
+    "unicode!"                     => sub { $iencoding=$oencoding="utf8"; },
+    "v+"                           => \$verbose,
+    "version"                      => sub {
+        die "Version of $version, by Steven J. DeRose.\n";
+    },
+    );
+
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+
+###############################################################################
+# Set implied options, validate option values...
+#
+sjdUtils::setColors($color);
+sjdUtils::setVerbose($verbose);
+
+if ($lines) { $lines--; }
+
+$ilineends = uc(substr($ilineends."U",0,1));
+if    ($ilineends eq "M") { $/ = chr(13); }
+elsif ($ilineends eq "D") { $/ = chr(13).chr(10); }
+else { }
+
+$olineends = uc(substr($olineends."U",0,1));
+if    ($olineends eq "M") { $\ = chr(13); }
+elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+else { }
+
+if ($oencoding) {
+    print "";
+    binmode(STDOUT, ":encoding($oencoding)");
+}
+
+if (scalar(@ARGV)==0) {
+    push @ARGV, "-";
+	($quiet) || warn "Reading from stdin...\n";
+}
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $totalRecs  = 0;
+my $nDirs      = 0;
+my $nFiles     = 0;
+my $nBinary    = 0;
+my $nMissing   = 0;
+
+if (!$ARGV[0]) {
+    push @ARGV, "-";
+}
+while (my $file = shift) {
+    doOneItem($file);
+}
+
+($quiet) || warn
+    "Done, $nFiles files, $totalRecs records.\n";
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+sub doOneItem {
+    my ($file) = @_;
+    if ($file =~ m/(#|~|\.bak)$/) {
+        vMsg(0, "Probable backup file being processed: '$file'");
+    }
+    if ($file eq "-" || -f $file) {
+        doOneFile($file);
+    }
+    elsif (-d $file) {
+        $nDirs++;
+        if (!$recursive) {
+            vMsg(0, "Skipping directory '$file'");
+        }
+        else {
+            opendir(D, $file);
+            while (my $child = readdir(D)) {
+                if ($child eq '.' || $child eq '..') { next; }
+                doOneItem($child);
+            }
+            closedir(D);
+        }
+    }
+    elsif (!-e $file) {
+        vMsg(0, "Can't find file '$file'");
+        $nMissing++;
+    }
+    else {
+        vMsg(0, "What is '$file'?");
+    }
+} # doOneItem
+
+
+sub doOneFile {
+    my ($file) = @_;
+    my $fh = undef;
+
+    # Add option MultiStream=>1 ?
+    if (!($fh = new IO::Uncompress::AnyUncompress $file)) {
+    #if (!open($fh, "<$file")) {
+        vMsg(0, "Failed to open '$file'."); # Msg in $AnyUncompressError
+        return();
+    }
+    if ($iencoding) {
+        binmode($fh, ":encoding($iencoding)"); ### not sure if this works
+    }
+    $nFiles++;
+
+    my $recnum = 0;
+    while (my $rec = <$fh>) {
+        $recnum++;
+        print($rec);
+        if ($lines && -t STDOUT && ($recnum % $lines) == 0) {
+            read(STDIN, my $buf, 1);
+        }
+    } # EOF
+    $totalRecs += $recnum;
+} # doOneFile
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+anycat [options] file
+
+A version of C<cat>/C<zcat> that should handle a variety of compression types.
+
+Also, if environment variable LINES is set, it waits for you to hit RETURN
+after every screen-ful (poor-man's C<more> -- just pipe to C<more> or C<less>
+if you want a real pager).
+
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--iencoding> I<e>
+
+Specify character encoding for input. Incompatible with I<--bytes>.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--listEncodings>
+
+Show all available character encodings, then exit.
+
+=item * B<--oencoding> I<e>
+
+Specify character encoding for output.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--recursive>
+
+Process directories recursively.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8> I<--oencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+
+=head1 Known Bugs and Limitations
+
+Little tested yet.
+
+
+
+=head1 Related commands
+
+C<cat>, C<zcat>,...
+
+C<IO::Uncompress::AnyUncompress> -- CPAN package to open various
+compressed formats.
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

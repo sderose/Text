@@ -1,0 +1,171 @@
+#!/usr/bin/perl -w
+#
+# droplinebreak: remove newlines before/after lines containing regex.
+#
+# 2006-12-13: Written by Steven J. DeRose.
+# 2008-08-31 sjd: BSD.
+# 2011-10-04 sjd: Fix ARGV to _ in GetOpt.
+#
+# To do:
+#     Option to *replace* the linebreaks instead of just dropping them,
+#         such as to put in a field-delimiter.
+#     Rename -lineends to -outlineends, support input lineend types.
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2011-10-04";
+
+my $expr          = "";
+my $dropPreceding = 0;
+my $dropFollowing = 1;
+my $lineends      = "U";
+my $quiet         = 0;
+my $replace       = "";
+my $verbose       = 0;
+
+# Process options
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+	"b"                 => sub { $dropPreceding = 1; $dropFollowing = 1; },
+	"f"                 => sub { $dropPreceding = 0; $dropFollowing = 1; },
+	"p"                 => sub { $dropPreceding = 1; $dropFollowing = 0; },
+	"linends=s"         => sub { $lineends = uc(substr($_[1]."U",0,1)); },
+	"h|help|?"          => sub { system "perldoc $0"; exit; },
+	"q|quiet!"          => \$quiet,
+	"replace=s"         => \$replace,
+	"v|verbose+"        => \$verbose,
+    "version"           => sub {
+		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+	}
+	);
+
+($result) || die "Bad options.\n";
+
+
+# Validate and default options
+#
+$lineends = substr($lineends."U",0,1);
+(index("MDU",$lineends) >= 0) ||
+	die "Unknown line-end type $lineends.\n";
+
+$expr = shift;
+($expr) || die "No regex specified.\n";
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $last = 0; # No pending line-break from prior line.
+open my $fh, "<&STDIN";
+while (my $rec = <$fh>) {
+	chomp($rec);
+
+	if ($rec !~ m/$expr/) { # If this line does not match
+		if ($last) { printBreak(); }
+		print $rec;
+		$last = 1;
+	}
+	else { # If this line does match
+        if ($last) { # Prior line did *not* drop intervening line break
+			if ($dropPreceding) {
+				if ($replace) { print "$replace"; }
+			}
+			else {
+				printBreak();
+			}
+		}
+        print $rec;
+		if ($dropFollowing) {
+			$last = 0; # Definitely drop this trailing one
+			if ($replace) { print "$replace"; }
+		}
+		else {
+			$last = 1; # keep following newline, unless next line pre drops it.
+		}
+	}
+} # while not EOF
+if ($last) { printBreak(); }
+close $fh;
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+sub printBreak {
+	if    ($lineends eq "M") { print "\r";   }
+	elsif ($lineends eq "D") { print "\r\n"; }
+	else                     { print "\n";   }
+}
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+droplinebreak [options] 'regex'
+
+Delete the linebreak at the end of lines that match the (Perl-style) regex.
+(the line need not match in its entirety -- use ^ and \$ if you want that).
+
+
+
+=head1 Options
+
+=over
+
+=item * B<-b>
+
+Drop line-ends preceding *and* following each matched line.
+
+=item * B<-f>
+
+Drop line-end following each matched line (the default).
+
+=item * B<--linends> I<t>
+
+Output M (mac), D (dos), or U (*nix default) line-ends.
+
+=item * B<-p>
+
+Drop line-end preceding each matched line.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<-r> I<string>
+
+Put in this string in place of the dropped line breaks.
+
+=item * B<--version>
+
+Display version info and exit.
+
+=back
+
+
+
+=head1 Known bugs and limitations
+
+The I<-r> option is not fully tested.
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

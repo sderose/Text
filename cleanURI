@@ -1,0 +1,134 @@
+#!/usr/bin/perl -w
+#
+# cleanURI
+#
+# 2010-09-29: Written by Steven J. DeRose.
+# 2010-10-07 sjd: Rename copy/paste.
+# 
+# To do:
+#
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2012-10-22";
+
+my $copy          = 1;
+my $paste      = 0;
+my $quiet         = 0;
+my $verbose       = 0;
+
+
+###############################################################################
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "copy!"                   => \$copy,
+    "paste!"                  => \$paste,
+    "h|help"                  => sub {
+        system "perldoc $0";
+        exit;
+    },
+    "q!"                      => \$quiet,
+    "v+"                      => \$verbose,
+    "version"                 => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    );
+
+($result) || die "Bad options.\n";
+
+
+###############################################################################
+# Set implied options, validate option values...
+#
+my $s = $ARGV[0];
+if ($paste) {
+    $s = `xclip -out`;
+}
+
+# http://go2.wordpress.com/?id=725X1342&site=quoderatech.wordpress.com&url=http%3A%2F%2F2006.xmlconference.org%2Fproceedings%2F162%2Fpresentation.html&sref=http%3A%2F%2Fquoderat.megginson.com%2F2007%2F01%2F11%2Fjon-bosaks-xml-2006-keynote-now-online%2F
+
+$s =~ s/^.*http/http/;
+$s =~ s/&.*$//;
+$s =~ s/%([0-9a-f][0-9a-f])/{ chr(hex($1)); }/ige;
+
+if (!$quiet && $s =~ m/[^-a-zA-Z0-9!\$&'()*+.:;=?]/) {
+    warn "Invalid character(s) in URI:\n$s.\n";
+}
+
+print "\n$s";
+if ($copy) {
+    $s =~ s/(['$!])/\\$1/g;
+    my $cmd = "echo \"$s\" | xclip -in";
+    ($verbose) && warn "Running: $cmd\n";
+    system $cmd || warn "\nxclip failed.\n";
+}
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+cleanURI [options] file
+
+Clean up a URI such as from Google pointing to a PDF. Remove any stuff before
+the last 'http' (such as google's URI rather than the ultimate one), and 
+undo % escapes. Doesn't do anything special for UTF-8.
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over 
+
+=item * B<--copy>
+
+Put the result on the clipboard (via xclip).
+
+=item * B<--paste>
+
+Take input from the cliboard (via xclip).
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--verbose> OR B<-v>
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+
+=head1 Known Bugs and Limitations
+
+Google search links commonly have additional parameters at the end, which 
+are not necessarily removed correctly.
+
+
+
+=head1 Related commands
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons 
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

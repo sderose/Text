@@ -1,0 +1,2572 @@
+#!/usr/bin/perl -w
+#
+# dumpx: A better hex-dump utility, at least for 'text'.
+#
+# Why?
+#    od's interface. It's hard to get it to display based on characters,
+#    and it gets byte order wrong in some settings. It can't align X and A,
+#    and it can't produce a legible ASCII text. You can't easily go to whatever
+#    offset you want (except at the start). This layout is much more like an
+#    old CMS hex dump program (probably was a local mod at Brown University
+#    by Peter DiCamillo; at any rate it was really good).
+#
+# History:
+# Long ago (~1980?): Written in C by Steven J. DeRose.
+# 2006-06-03: Ported to Perl and made options more like Unix od.
+# 2006-09-12: Make -x synonym for -h. Implement $linesToShow.
+# 2006-09-13: Support stdin when no file argument.
+# 2006-10-02: Make color options like ls/grep. Split up help.
+# 2006-11-03: Add -cc.
+# 2006-11-07: Add -color controls.
+# 2007-01-11 sjd: Add -skipLines, -lineend.
+# 2007-02-15 sjd: Add -linenum.
+# 2007-08-29 sjd: Improve -listchars. Add -codepage.
+# 2007-09-05 sjd: Add unicode classes.
+# 2007-11-27 sjd: Start strict.
+# 2008-02-13 sjd: Add perl -w, fix a few bugs, esp. with colorizing.
+# 2008-08-31 sjd: Check for BSD.
+# 2010-02-24 sjd: Clean up options. use strict. fullnames & unicode.
+# 2010-03-01 sjd: Getopt::Long.
+# 2010-05-07 sjd: Control pictures/control symbols. Color fixes. perldoc.
+# 2010-10-26ff sjd: Packagize 'reader'. Start -break. Rename -codePage to
+#     -iencoding, -ltype to -ilineends. Break out dumpOneChunk().
+#     Separate -verbose from (od-like) -v. Add -substitute, -useCarat.
+#     Null-pad at EOF. Fix color bug.
+# 2010-11-02ff sjd: Yet more color bugs. Clean up -user macro stack handling.
+#     Work on -user mode. Offset printing in -user. Add -colHeaderBase.
+# 2011-06-27 sjd: Implement -j.
+# 2011-08-08 sjd: Fix bug in colorizing w/ showABe().
+# 2011-08-29f sjd: Break options into a hash, to help -user mode.
+#     Revamp lines/columns handling, user Find escaping. Add -addressWidth.
+#     Re-org and synchronize option variables, getopt entries, and perldoc.
+#     Rename option variables to match long option names from od.
+#     Colorize and fix bugs in showHead.
+# 2012-02-09 sjd: Start integrating, cleaning up charset handling w/ Encode.
+# 2013-03-28 sjd: Finish -break (nee -newlines). Clean up options. Count
+#     column position in lines. Add interactive command 'c' to identify chars.
+#     Add -lineNum. Fix -showGutter. Move showAlphaSide() call up and clean
+#     up width calculations. Stop showing NULs at EOF. Start real UTF8 support.
+# 2013-06-27f: Sync RecordFile.pm. Add showUCS. Clean up getName, getPrintChar.
+#     Add footnotes for chars without short names. Switch to passing around
+#     byte arrays instead of strings. Generalize colorizing.
+#     Fixing utf8. Make showUCS and showAbe gather up chars! howManyBytes().
+# 2013-08-12: More work on cleaning up colorizing. Make categories consistent.
+#     Sync color options w/ recently-added 'colorizer' package. Lose $cRed, etc.
+# 2014-09-01: Make --decimal not break due to colorizer.
+# 2017-02-08: Switch to my ColorManager package.
+#
+# To do:
+#     Finishing colorizer & color defaulting.
+#     Integrate RecordFile then delete 'reader' package. Esp. for compression.
+#     --break for non-*nix line-end types (or any code point chosen!)
+#     Add 'column number within line' as a display option.
+#     Integrate HTML::Entities to get char names.
+#     Have a UCS2 mode, with wide areas?
+#     Option to just show plain text *except* where there's funky stuff,
+#         or to recode funky stuff visible inline: the na[uuml]ve\n[tlingit digit 4]...
+#
+# Low priority:
+#     Sync/Integrate with lessFields? Or at least TabularFormats.pm.
+#     -pix for spaces doesn't work (likewise for null)
+#     Colorize showHeader, and figure out how often to show it.
+#     Auto-adjust for window width and height.
+#     Buffer for scrollback even with STDIN?
+#     Count & report number of duplicate lines in a row.
+#
+use strict;
+use Getopt::Long;
+use Encode;
+use charnames ':full';
+use Unicode::UCD 'charscript';
+use Unicode::UCD 'charblock';
+use HTML::Entities;
+
+use sjdUtils;
+use alogging;
+#use ColorManager;
+#my $colorOff = ColorManager::getColorString('off');
+
+our $VERSION_DATE = "2017-02-08";
+
+
+###############################################################################
+# Store options in a hash (mainly to help w/ user mode)
+#
+my %args = (
+    # non-od-like options
+    "addressWidth"       => 8,     # How wide to show the offset?
+    "blankLine"          => 1,     # Put in an extra blank line
+    "break"              => 0,     # Break at newlines
+
+    "charForSpace"       => chr(0x2423), # underscore-ish form.
+
+    "cc"                 => "",    # chars to color
+    "colorSpace"         => 0,     # Try to display newlines in Red?
+    "colorXML"           => 0,     # Color angle brackets and ampersands
+    "colorCONTROLS"      => 0,     # Color chars 00-31 and 128-159
+    "colorNonASCII"      => 1,     # Color chars >127
+    "colorClass"         => "",    # Perl name for Unicode color class
+    "colorClassNegated"  => "",
+    "carg"               =>
+        ($ENV{USE_COLOR} && -t STDOUT) ? "auto":"off",
+
+    "dcolumns"           => $ENV{COLUMNS} || 80,
+    "dlines"             => $ENV{LINES} || 40,
+    "width"              => 0,     # Characters per display line
+    "cwidth"             => 3,     # Width per char (incl leading space)
+    "G1ok"               => 1,     # Ok to print G1 (Latin-1) characters?
+    "headerBase"         => 16,
+    "iencoding"          => "",
+    "ilineends"          => "u",
+    "skipLines"          => 0,     # If non-zero, skip to this line num.
+    "listChars"          => 0,     # Just show Latin-1 table
+    "logfilename"        => "",
+    "LOG"                => 0,
+    "newlineDisplayChar" => "?",
+    "nlines"             => 0, # ???
+    "noteColor"          => "/Yellow",
+    "notes"              => 1,
+    # Is there a better way to check for Unicode support by the console?
+    "oencoding"          => (($ENV{LANG} =~ m/UTF-?8/) ? "utf8":""),
+    "quiet"              => 0,
+
+    "showAlphaSide"      => 1,
+    "showGutter"         => 0,     # Split alpha columns at middle
+    "showHeader"         => 0,     # Show column header w/ low-order nibbles
+    "showLineNumber"     => 0,
+
+    "skipLines"          => 0,
+    # "subst"            => chr(0x2426);
+    "subst"              => chr(0xA4),
+
+    "useCarat"           => 0,     # Show controls as ^A-^Z
+    "useControlSymbols"  => 1,     # Show controls as Unicode symbols
+    "user"               => 0,     # Run in interactive mode?
+    "voption"            => 0,     # Don't leave out duplicate lines
+    "verbose"            => 0,     # Add debugging info
+
+    # od-like options
+    "addressRadix"       => 0,     # What base to use to show file offsets
+    "linesToShow"        => "",    # List of line types to display, in order
+    "outputDuplicates"   => 1,
+    "readBytes"          => 0,     # 0 means no limit
+    "skipBytes"          => 0,     # Where to start from
+    );
+
+
+###############################################################################
+# Parse options
+#
+my %getoptHash = (
+    # non-od-like options
+    "addressWidth=i"           => \$args{addressWidth},
+    "blankLine!"               => \$args{blankLine},
+    "break|newlines!"          => \$args{break},
+    "color=s"                  => sub { $args{carg}; },
+    "nocolor"                  => sub { $args{carg} = "off"; },
+    "cc=s"                     => sub { $args{cc} .= strcvt($_[1]); },
+    "charForSpace=n"           => \$args{charForSpace},
+    "cwidth=i"                 => \$args{cwidth},
+    "G1ok|g1ok!"               => \$args{G1ok},
+    "headerBase=i"             => \$args{headerBase},
+    "help"                     => sub { system "perldoc $0"; exit; },
+    "iencoding=s"              => \$args{iencoding},
+    "ilineends=s"              => \$args{ilineends},
+    "listChars!"               => sub {
+        $args{listChars} = 1;
+        $args{blankLine} = 1;
+        $args{cwidth} = 4;
+    },
+    "listEncodings"            => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+
+    "noteColor=s"              => \$args{noteColor},
+    "notes!"                   => \$args{notes},
+
+    "showAlphaSide|sas!"       => \$args{showAlphaSide},
+    "showGutter|sq!"           => \$args{showGutter},
+    "showHeader|sh!"           => \$args{showHeader},
+    "showLineNumber|sln!"      => \$args{showLineNumber},
+    "substitute=s"             => \$args{subst},
+
+    "u"                        => sub { $args{linesToShow} .= "u "; },
+    "unicode!"                 => sub { $args{iencoding} = "utf8"; },
+    "useCarat|uc!"             => \$args{useCarat},
+    "useControlSymbols|pix!"   => \$args{useControlSymbols},
+    "user|interactive!"        => \$args{user},
+    "utf8!"                    => sub { $args{iencoding} .= "u "; },
+    "verbose+"                 => \$args{verbose},
+    "version!"                 => sub {
+        die "Version of $args{version} = $_[1], by Steven J. DeRose.";
+    },
+
+
+    # od-like options
+    "a"                        => sub { $args{linesToShow} .= "a "; },
+    "A=i"                      => \$args{addressRadix},
+    "c"                        => sub { $args{linesToShow} .= "c "; },
+    "d"                        => sub { $args{linesToShow} .= "d "; },
+    "h"                        => sub {
+        $args{linesToShow} .= "h ";
+        ($args{quiet}) || warn
+            "(did you mean '-help'? '-h' = hexadecimal)\n";
+    },
+    "j=i"                      => \$args{skipBytes},
+    "jl|skip-lines=i"          => sub { $args{skip_lines} = $_[1]; },
+    "linenum!"                 => \$args{showLineNumber},
+    "N|read-bytes|readBytes=i" => \$args{readBytes},
+    "o"                        => sub { $args{linesToShow} .= "o "; },
+    "v|output-duplicates"      => sub {
+        $args{outputDuplicates} = $_[1];
+        ($args{quiet}) || warn
+            "(did you mean '-verbose'? -v = -output-duplicates)\n";
+    },
+    "V+"                       => \$args{voption},
+    "w|width=i"                => \$args{width},
+    "x"                        => sub { $args{linesToShow} .= "h "; },
+    ); # process options
+
+Getopt::Long::Configure ("no_ignore_case");
+(GetOptions(%getoptHash)) || die "Bad options.\n";
+
+
+###############################################################################
+# Process options
+#
+if ($args{"width"} < 1) {
+    $args{"width"} = 16;
+}
+
+my %encodings = ();
+for my $k (Encode->encodings(":all")) {
+    $encodings{$k} = 1;
+}
+
+my $COL = new colorizer();
+checkOptionValues();
+
+
+###############################################################################
+# Global constants and such
+#
+my $gapToAlphaSide     = "  ";     # Show between lines and -as side
+my $lbar               = "|";      # Show before -as
+my $rbar               = "|";      # Show after -as
+my $ldaquo             = "\xAB";   #
+my $mid                = "~";      #
+my $rdaquo             = "\xBB";   #
+my $eofPadChar         = chr(0);   # Or 0xFFFD?
+
+# Short names for the C0 and C1 control characters.
+# PAD, HOP, and SGCI are listed as "XXX" in Unicode (acc. Wikipedia).
+my @C0names = (
+          "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
+          " BS", " HT", " LF", " VT", " FF", " CR", " SO", " SI",
+          "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB",
+          "CAN", " EM", "SUB", "ESC", " FS", " GS", " RS", " US");
+my @C1names = (
+          "PAD", "HOP",  "BPH", "NBH", "IND", "NEL", "SSA", "ESA",
+          "HTS", "HTJ",  "VTS", "PLD", "PLU",  "RI", "SS2", "SS3",
+          "DCS", "PU1",  "PU2", "STS", "CCH",  "MW", "SPA", "EPA",
+          "SOS", "SGCI", "SCI", "CSI",  "ST", "OSC",  "PM", "APC",
+          "NBS");
+if (scalar @C0names != 32 || scalar @C1names != 33) {
+    warn "\nname tables broken.\n\n";
+}
+
+my %lgMap = (
+        "ARABIC"     => "AR",
+        "ARMENIAN"   => "hy",
+        "COPTIC"     => "CP",
+        "CYRILLIC"   => "CY",
+        "BENGALI"    => "bn",
+        "DEVANAGARI" => "DV",
+        "GREEK"      => "GR",
+        "HEBREW"     => "HB",
+        "HIRAGANA"   => "HG",
+        "KATAKANA"   => "KK",
+        "LATIN"      => "LA",
+        # EASTERN ARABIC-INDIC GEORGIAN HANGUL KAERITEN THAI TIBETAN
+
+        "OPENING"    => "OPEN",
+        "CLOSING"    => "CLOS",
+        "BRACKET"    => "bkt",
+        "CJK UNIFIED" => "CJKU",
+        "ENCLOSED"   => "ENC",
+        "SUPPLEMENT" => "SUP",
+        "SYMBOL"     => "SYM",
+        #black-letter serif sans-serif double-struck inverse centered script
+        #superscript subscript
+        #circled bracketed parenthesized squared
+        #HALFWIDTH (anti)clockwise non-spacing spacing
+    );
+
+# General state/globals
+#
+my $bytesDumpedSoFar = 0;       # To support -N option ($readBytes)
+my $theReader        = undef;   # Data source
+my $ofn              = 0;       # file name for interactive log
+my @notes            = ();      # Footnotes, for long character names.
+
+
+###############################################################################
+###############################################################################
+# For -listChars, make fake input data, call usual display code.
+#
+if ($args{listChars}) {
+    print "Latin-1 chart:\n";
+    my $s = "";
+    for (my $i=1; $i<=255; $i++) {
+        $s .= chr($i);
+    }
+    ($args{verbose}) && print "Got string: '$s'.\n";
+    $theReader = new reader();
+    $theReader->addText($s);
+    $theReader->{offset} = 0;
+    while ($s ne "") {
+        my $in = substr($s,0,$args{width});
+        foreach my $typ (split(/ +/,$args{linesToShow})) {
+            if    ($typ eq "h") {showHex();        }
+            elsif ($typ eq "d") {showDecimal();    }
+            elsif ($typ eq "o") {showOctal();      }
+            elsif ($typ eq "c") {showCStyle();     }
+            elsif ($typ eq "a") {showABe(); }
+            elsif ($typ eq "u") {showUCS(); }
+        }
+        ($args{blankLine}) && print("\n");
+        $s = substr($s,$args{width});
+    }
+    print "Done.\n";
+    exit;
+} # listChars
+
+
+###############################################################################
+#
+if ($args{skipBytes} && $args{showLineNumber}) {
+    warn "Can't show line numbers when -j has been used, sorry.\n";
+    $args{showLineNumber} = 0;
+}
+
+if (!$ARGV[0]) {
+    ($args{user}) && die "Can't run interactive AND take data from stdin.\n";
+    ($theReader = new reader("&STDIN")) || die
+        "Could not create reader object on STDIN.\n";
+}
+elsif (!-r $ARGV[0]) {
+    die "Can't find file '$ARGV[0]'.\n";
+}
+else {
+    $theReader = new reader($ARGV[0],$args{iencoding});
+    ($theReader) || die
+        "Could not create reader object on '$ARGV[0]'.\n";
+    if ($args{recordSep}) {
+        # $INPUT_RECORD_SEPARATOR = $recordSep;
+        $/ = $args{recordSep};
+    }
+}
+warn "\n";
+binmode(STDERR, ":encoding(utf8)");
+
+if ($args{oencoding}) {
+    print "";
+    binmode(STDOUT, ":encoding(".$args{oencoding}.")");
+}
+elsif ($args{useControlSymbols}) {
+    ($args{verbose}) && warn
+        "Forcing -oencoding to 'utf8' for -useControlSymbols.\n";
+    print "";
+    binmode(STDOUT, ":encoding(utf8)");
+}
+elsif ($args{iencoding} eq "utf8") {
+    ($args{verbose}) && warn "Defaulting -oencoding to '" .
+        $args{iencoding} . "', same as -iencoding.\n";
+    print "";
+    binmode(STDOUT, ":".$args{iencoding});
+}
+
+if ($args{skipLines} > 0) {
+    ($args{verbose}) && warn "Scanning to line $args{skipLines}...\n";
+    my $rc = $theReader->seekRecord($args{skipLines});
+    if ($rc < 0) {
+        my ($lineNum, $colNum) = $theReader->tellRecord();
+        die "Couldn't reach starting line $args{skipLines}, EOF at line " .
+            $lineNum . ", column " . $colNum . ".\n";
+    }
+    ($args{verbose}) && warn
+        "Line $args{skipLines} is at offset " . $theReader->tell() . ".\n";
+}
+elsif ($args{skipBytes}) {
+    $theReader->seek($args{skipBytes});
+}
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+if ($args{user}) {
+    interact();
+}
+else {
+    ($args{verbose}>1) && warn "Starting...\n";
+    while ($args{readBytes}==0 || $bytesDumpedSoFar<$args{readBytes}) {
+        dumpPage() || last;
+    }
+}
+
+exit;
+
+
+
+##############################################################################
+##############################################################################
+# Display several chunks of n chars in various forms.
+# Return 0 (FALSE) on EOF.
+#
+sub dumpPage {
+    ($args{linesToShow}) || die "linesToShow not set.\n";
+    my $pageLoc = $theReader->tell();
+    if ($args{showLineNumber}) {
+        my ($lineNum, $colNum) = $theReader->tellRecord();
+        print "*** At line " . $lineNum . ", column " . $colNum . " ***\n";
+    }
+    my $displayLines = 0;
+    if ($args{showHeader}) {
+        showColumnHeaders($pageLoc);
+        $displayLines++;
+    }
+
+    while ($displayLines < $args{nlines}) {
+        $displayLines++;
+        my $fileOffset  = $theReader->tell();
+        my ($lineNum, $colNum) = $theReader->tellRecord();
+        my $bytes = $theReader->readBytes($args{width}, $args{break});
+        if (!defined $bytes || scalar(@{$bytes}) <= 0) { return(0); }
+        ($args{verbose}>1) && warn sprintf(
+            "\nAt offset d%08d, x%08x, o%08o (%dK, %dM)\n",
+            $fileOffset,$fileOffset,$fileOffset,
+            $fileOffset>>10, $fileOffset>>20);
+        ($args{blankLine}) && print("\n");
+        dumpOneChunk($bytes,$fileOffset,$lineNum,$colNum);
+        if ($args{notes}) {
+            for my $note (@notes) {
+                print "         " . $COL->colorize($note, $args{"noteColor"}) . "\n";
+            }
+        }
+        @notes = ();
+        $bytesDumpedSoFar += scalar(@{$bytes});
+        if ($args{readBytes}!=0 &&
+            $bytesDumpedSoFar > $args{readBytes}) { return(0); }
+    }
+    return(1);
+} # dumpPage
+
+# Show one chunk (a line's-worth of characters, probably in multiple forms).
+#
+BEGIN {
+    my $lastChunk = []; # local static
+    my $alreadyDidStars = 0;
+    sub dumpOneChunk {
+        my ($curChunk,$fileOffset,$lineNum,$colNum) = @_;
+
+        # Suppress printing duplicate lines
+        if (eqArray($lastChunk,$curChunk) && !$args{voption}) {
+            if (!$alreadyDidStars) {
+                print " *******  (duplicate line(s))  *******\n";
+                ($args{blankLine}) && print "\n";
+            }
+            $alreadyDidStars++;
+            return;
+        }
+        else {
+            $alreadyDidStars = 0;
+        }
+
+        ($args{verbose}>1) && warn
+            "---- chunk '" . toString($curChunk) . "' ----\n";
+
+        # Show the side chars (first line only)?
+        my $needAlphaSide = $args{showAlphaSide};
+        my $dbuf = "";
+        foreach my $typ (split(/ */,$args{linesToShow})) {
+            if    ($typ eq "h") {
+                $dbuf = showHex($curChunk,$fileOffset,$lineNum,$colNum);
+            }
+            elsif ($typ eq "d") {
+                $dbuf = showDec($curChunk,$fileOffset,$lineNum,$colNum);
+            }
+            elsif ($typ eq "o") {
+                $dbuf = showOct($curChunk,$fileOffset,$lineNum,$colNum);
+            }
+            elsif ($typ eq "c") {
+                $dbuf = showCSt($curChunk,$fileOffset,$lineNum,$colNum);
+            }
+            elsif ($typ eq "u") {
+                $dbuf = showUCS($curChunk,$fileOffset,$lineNum,$colNum);
+            }
+            elsif ($typ eq "a") {
+                $dbuf = showABe($curChunk,$fileOffset,$lineNum,$colNum);
+            }
+            else {
+                die "Unknown display format '$typ' in '$args{linesToShow}'.\n";
+            }
+            my $charsShort = $args{width} - scalar(@{$curChunk});
+            if ($charsShort > 0) {
+                $dbuf .= " " x ($charsShort * $args{cwidth}) . "  ";
+            }
+            if ($needAlphaSide) {
+                $dbuf .= genAlphaSide($curChunk);
+                $needAlphaSide = 0;
+            }
+            print($dbuf . $COL->clearColor() . "\n");
+        } # for
+        $lastChunk = $curChunk;
+    } # dumpOneChunk
+
+    sub eqArray {
+        my ($lastChunk, $curChunk) = @_;
+        if (scalar(@{$lastChunk}) != scalar(@{$curChunk})) { return(0); }
+        for (my $i=0; $i<scalar(@{$lastChunk}); $i++) {
+             if ($lastChunk->[$i] != $curChunk->[$i]) { return(0); }
+        }
+        return(1);
+    }
+
+    sub toString {
+        my ($chunk) = @_;
+        my $buf = "";
+        for my $c (@{$chunk}) {
+            $buf .= chr($c);
+        }
+    }
+} # END
+
+
+##############################################################################
+# Generate each particular kind of display.
+#
+sub showColumnHeaders { # Header row with the low-order digit of the offsets.
+    my ($loc) = @_;
+    my $p1 = showOffset(0,0); # get spaces as wide as addressWidth
+    for (my $i=0; $i<$args{width}; $i++) {
+        $p1 .= sprintf("%".$args{cwidth}."x", $i % $args{headerBase});
+        $p1 .= getGutterWhenNeeded($i);
+    }
+
+    my $p2 = "";
+    for (my $i=0; $i<$args{width}; $i++) {
+        $p2 .= sprintf("%1x", $i % $args{headerBase});
+        $p2 .= getGutterWhenNeeded($i);
+    }
+    my $buf = $p1 . $gapToAlphaSide . "$lbar$p2$rbar";
+    if ($args{carg} ne "off") {
+        $buf = $COL->colorize($buf, "Magenta");
+    }
+    else {
+        print "carg: '$args{carg}'\n";
+    }
+    print "$buf\n";
+} # showColumnHeaders
+
+sub showHex { # Always individual bytes
+    my ($bytes,$loc,$lineNum,$colNum) = @_;
+    my $p = showOffset($loc,16);
+    for (my $i=0; $i<scalar(@{$bytes}); ) {
+        my $cnum = $bytes->[$i];
+        my $c = chr($cnum);
+        #my $field = getCodePointFromRtfByteArray($bytes,$i);
+        my $field = sprintf(" %02x", $cnum);
+        #my $utf8nBytes = nBytesInUTF8ofCodePoint($cnum);
+        #if ($utf8nBytes <= 0) {
+        #    warn "Bad code point.\n";
+        #    last;
+        #}
+        $p .= $COL->colorChars($cnum,$field,"showHex") .
+            getGutterWhenNeeded($i);
+        $i ++; #= $utf8nBytes;
+    }
+    return($p);
+} # showhHex
+
+sub showDec {
+    my ($bytes,$loc,$lineNum,$colNum) = @_;
+    my $p = showOffset($loc,10);
+    for (my $i=0; $i<$args{width} && $i<scalar(@{$bytes}); $i++) {
+        my $cnum = $bytes->[$i];
+        my $c = chr($cnum);
+        my $field = _lpad(($i<scalar(@{$bytes})) ? sprintf("%d",$cnum):" ");
+        $field = $COL->colorChars($cnum,$field,"showDec");
+        $p .= $field;
+        $p .= getGutterWhenNeeded($i);
+    }
+    return($p);
+} # showDecimal
+
+sub showOct {
+    my ($bytes,$loc,$lineNum,$colNum) = @_;
+    my $p = showOffset($loc,8);
+    for (my $i=0; $i<$args{width} && $i<scalar(@{$bytes}); $i++) {
+        my $cnum = $bytes->[$i];
+        my $c = chr($cnum);
+        my $field = _lpad(($i<scalar(@{$bytes})) ? sprintf("%o",$cnum):" ");
+        $field = $COL->colorChars($cnum,$field,"showOct");
+        $p .= $field;
+        $p .= getGutterWhenNeeded($i);
+    }
+    return($p);
+} # showOctal
+
+sub showCSt {
+    my ($bytes,$loc,$lineNum,$colNum) = @_;
+    my $p = showOffset($loc,0); # just spaces
+    for (my $i=0; $i<$args{width} && $i<scalar(@{$bytes}); $i++) {
+        my $cnum = $bytes->[$i];
+        my $c = chr($cnum);
+        my $cn = getCName($cnum);
+        $p .= $cn;
+        $p .= getGutterWhenNeeded($i);
+    }
+    return($p);
+} # showCSt
+
+sub showABe { # chars for Latin-1, Notes for wide chars
+    my ($bytes,$loc,$lineNum,$colNum) = @_;
+    my $p = showOffset($loc,0); # width to match
+    for (my $i=0; $i<$args{width} && $i<scalar(@{$bytes}); ) {
+        my ($codePoint, $nbytes) = getCodePointFromRtfByteArray($bytes,$i);
+        my $field;
+        if ($nbytes == 1) {
+            $field = chr($codePoint);
+        }
+        else {
+            my $fieldWidth = $nbytes * $args{cwidth};
+            $field = $ldaquo . getName(chr($codePoint)) . $rdaquo .
+                (" " x ($fieldWidth/2));
+            $field = $COL->colorize(_lpad($field, $fieldWidth), "Red");
+        }
+        $p .= $field;
+        $p .= getGutterWhenNeeded($i);
+        $i += $nbytes;
+    } # for
+    return($p);
+} # showABe
+
+sub showUCS {
+    my ($bytes,$loc,$lineNum,$colNum) = @_;
+    my $p = showOffset($loc,0); # width to match
+    my $field;
+    for (my $i=0; $i<$args{width} && $i<scalar(@{$bytes}); ) {
+        my ($codePoint, $nbytes) = getCodePointFromRtfByteArray($bytes,$i);
+        $field = sprintf("U+%04x", $codePoint);
+        $field = _lpad($codePoint, $nbytes*$args{cwidth});
+        $p .= $field;
+        $p .= getGutterWhenNeeded($i);
+        $i += $nbytes;
+    } # for
+    return($p);
+} # showUCS
+
+
+sub nBytesInUTF8ofCodePoint { # RFC 3629
+    my ($n) = @_;
+    if ($n <=  0x00007F) { return(1); }
+    if ($n <=  0x0007FF) { return(2); }
+    if ($n <=  0x00FFFF) { return(3); }
+    if ($n <=  0x10FFFF) { return(4); }
+    warn sprintf("Code point outside of Unicode range: d%08d x%08x 0%08o\n",
+                 $n, $n, $n);
+    return(-1);
+} # nBytesInUTF8ofCodePoint
+
+# How many bytes at the starting point in the array, to make a UTF-8 char?
+# Examine first byte to see how long it is.
+#
+sub howManyBytes {
+    my ($bytes, $start) = @_;
+    my $byte1 = $bytes->[$start||0];
+    if (($byte1 & 0b11111100) == 0b11111100) { return(6); }
+    if (($byte1 & 0b11111000) == 0b11111000) { return(5); }
+    if (($byte1 & 0b11110000) == 0b11110000) { return(4); }
+    if (($byte1 & 0b11100000) == 0b11100000) { return(3); }
+    if (($byte1 & 0b11000000) == 0b11000000) { return(2); }
+    return(1);
+}
+
+# Convert an array of UTF-8 bytes to a code-point integer.
+#
+sub getCodePointFromRtfByteArray {
+    my ($bytes, $start) = @_;
+
+    my $siz = howManyBytes($bytes, $start);
+    my @utfBytes = @{$bytes}[$start..($start+$siz-1)];
+    push @utfBytes, '\0';
+
+    my $utfChar = pack('U', @utfBytes);
+    my $codePoint = ord($utfChar);
+
+    if ($args{verbose}>2 || ($args{verbose} && $siz>1)) {
+        (0) && warn(sprintf(
+            "\ngetUCS: start at %02d, byte %08b '%s', size %d, array %d\n",
+            $start, $bytes->[$start], chr($bytes->[$start]),
+            $siz, scalar(@utfBytes)));
+        warn sprintf("   Returning d%05d U+%04x '%s'.\n",
+                     $codePoint, $codePoint, $utfChar);
+    }
+    return($codePoint, $siz);
+} # getCodePointFromRtfByteArray
+
+
+###############################################################################
+# Return a $width-wide string of the characters (using '.' for nonprintables),
+# to be displayed to the right of the first numeric display line.
+# (doesn't do anything for halfwidth/fullwidth distinctions, combining, ...)
+#
+sub genAlphaSide {
+    my ($bytes) = @_;
+    my $side = $COL->clearColor() . $gapToAlphaSide . $lbar;
+    for (my $i=0; $i<$args{width} && $i<scalar(@{$bytes}); $i++) {
+        if ($i<scalar(@{$bytes})) {
+            $side .= getPrintChar($bytes->[$i]) || " ";
+        }
+        else {
+            $side .= " ";
+        }
+        $side .= getGutterWhenNeeded($i);
+    }
+    $side .= $COL->clearColor() . $rbar;
+    # update $oldColor???
+    return($side);
+} # genAlphaSide
+
+
+# See if we're just before mid-line, and user wants a gutter. Return it.
+#
+sub getGutterWhenNeeded {
+    my ($i) = @_;
+    if ($args{showGutter} &&
+        ($i == ($args{width}>>1)-1)) {
+        return("  ");
+    }
+    return("");
+} # getGutterWhenNeeded
+
+#} # END
+
+
+###############################################################################
+# Return a number (typically a file offset), in specified base.
+# Special case: pass base 0 to just get spaces.
+#
+sub showOffset {
+    my ($loc, $baseToUse) = @_;
+    if (!defined $baseToUse) {
+        $baseToUse = $args{addressRadix};
+    }
+    my $p;
+    if (!$baseToUse) { # blank space of same width
+        $p = " " x $args{addressWidth};
+    }
+    elsif ($baseToUse == 8) {
+        $p = sprintf("o%0$args{addressWidth}lo: ",$loc);
+    }
+    elsif ($baseToUse == 10) {
+        $p = sprintf("d%0$args{addressWidth}ld: ",$loc);
+    }
+    elsif ($baseToUse == 16) {
+        $p = sprintf("x%0$args{addressWidth}lx: ",$loc);
+    }
+    else {
+        ($args{quiet}) || warn "Unknown base for file offsets: $baseToUse.\n";
+        $p = sprintf("x%0$args{addressWidth}lx: ", $loc);
+    }
+    # Shorten if needed (if it didn't fit, sprintf forced it)
+    if (length($p) > $args{addressWidth}) {
+        $p = substr($p,length($p)-$args{addressWidth});
+    }
+    return($p);
+} # showOffset
+
+
+###############################################################################
+# Add spaces on left of string, or truncate, to ensure width = $cwidth option.
+# WARNING: Do not call this *after* inserting color escapes.
+#
+sub _lpad {
+    my ($s, $width, $padchar) = @_;
+    if (!defined $width) { $width = $args{cwidth}; }
+    if (!defined $padchar) { $padchar = " "; }
+    my $needed = $width - length($s);
+    if    ($needed > 0) { $s = ($padchar x $needed) . $s; }
+    elsif ($needed < 0) { $s = substr($s,0,$width); }  # TRUNCATE
+    return($s);
+}
+
+
+###############################################################################
+# Return od-like abbreviation for given character value.
+# 3 chars wide, to print under the character number.
+# If the name is too wide, return a footnote marker and push a footnote.
+#
+sub getName {
+    my ($c) = @_;
+    my $n = ord($c);
+    my $charName = "";
+    #warn sprintf("In getName for x%04x, d%5d (%s)\n", $n, $n, $c);
+
+    # Next try by category
+    my $cat = getCategory($n);
+
+    if ($cat eq "---") {                              # Bad number
+        $charName = "---";
+    }
+    elsif ($cat eq "C0") {                            # C0 CONTROLS
+        if ($args{useControlSymbols}) { $charName = chr($n+0x2400); } ### @@@
+        else { $charName = $C0names[$n]; }
+    }
+    elsif ($cat eq "SP")  {                           # SPACE
+        $charName = "SP";
+    }
+    elsif ($cat eq "G0") {                             # G0 ASCII
+        $charName = chr($n);
+    }
+    elsif ($cat eq "DEL") {                           # DEL
+        if ($args{useControlSymbols}) { $charName = chr(0x2421); } ### @@@
+        else { $charName = "DEL"; }
+    }
+    elsif ($cat eq "C1") {                             #  C1 CONTROL
+        if ($args{iencoding} eq "cp1252") {       #  (Windows pseudo-Latin-1)
+            $charName = chr($n);
+        }
+        else { $charName = $C1names[$n-128]; }
+    }
+    elsif ($cat eq "NBS") {                           # NBS
+        $charName = $C1names[$n-128];
+    }
+    elsif ($cat eq "G1") {                             # G1 LATIN-1
+        if ($args{html}) { $charName = HTML::Entities::encode($c); }
+        else { $charName = getUnicodeName($n); }
+    }
+    elsif ($cat eq "BMP") {                            # UNICODE BMP
+        $charName = getUnicodeName($n);
+    }
+    elsif ($cat eq "BIG") {                            # Rest of Unicode
+        $charName = getUnicodeName($n);
+    }
+    elsif ($cat eq "+++") {                            # Rest of Unicode
+        $charName = "+++";
+    }
+    else {                                             # Too high
+        die "Bad category '$cat' for char $n\n";
+    }
+
+    if (length($charName) > 3) {
+        if ($args{notes}) {
+            my $num = scalar(@notes);
+            push @notes, sprintf("NOTE #%d: U+%04x: %s",
+                                 $num, $n, $charName);
+            $charName = "#" . $num;
+        }
+        else {
+            $charName = "??";
+        }
+    }
+    return($charName);
+} #  sub getName
+
+
+###############################################################################
+# Return a single character to print for any code point, to go in right column.
+# For printables it's the character itself; for others '.'.
+#
+sub getPrintChar {
+    my ($n) = @_;
+    my $disp = $args{"subst"};
+    my $forceRed = 0;
+
+
+    ### @@@
+    my $cat = getCategory($n);
+    if    ($cat eq "---") {                           # Out of range
+        $forceRed = 1;
+    }
+    elsif ($cat eq "NUL") {                           # C0 CONTROLS
+        if  ($args{useControlSymbols}) { $disp = chr($n+0x2400); }
+        $forceRed = 1;
+    }
+    elsif ($cat eq "C0") {                            # C0 CONTROLS
+        if  ($args{useControlSymbols}) { $disp = chr($n+0x2400); }
+        elsif ($n==10 || $n==13) {
+            $disp = $args{newlineDisplayChar};
+        }
+        elsif ($n== 9) {
+            $disp = " ";
+        }
+    }
+    elsif ($cat eq "SP")  {                           # SPACE
+        $disp = $args{charForSpace};
+    }
+    elsif ($cat eq "G0")  { $disp = chr($n); }         # GO ASCII
+    elsif ($cat eq "DEL") {                           # DEL
+    }
+    elsif ($cat eq "C1")  { }                          # C1 CONTROLS
+    elsif ($cat eq "NBS") {                           # NBS
+    }
+    elsif ($cat eq "G1")  {                            # G1 LATIN-1
+        if ($args{G1ok}) { $disp = chr($n); }
+    }
+    elsif ($cat eq "BMP") {                            # Unicode BMP
+        if ($args{oencoding} eq "utf8") { $disp = chr($n); }
+    }
+    elsif ($cat eq "BIG") {                            # Rest of Unicode
+        # Leave it at -subst value.
+    }
+    elsif ($cat eq "+++") {                            # Out of range
+        # Leave it at -subst value.
+        $forceRed = 1;
+    }
+    else {                                             #
+        die "getPrintChar: bad category '$cat' for d'$n.\n";
+    }
+
+    if (!defined $disp) {
+        warn "\n******* disp undef. subst is '$args{subst}'.\n";
+    }
+    ($args{"verbose"}>1) && warn sprintf(
+        "getPrintChar for U+%04x d%06d (cat %-3s) gives '%s' (U+%04x d%06d).\n",
+        $n, $n, $cat, $disp, ord($disp), ord($disp));
+    return($COL->colorChars($n,$disp,"getPrintChar"));
+} # getPrintChar
+
+# Retrieve a Unicode character name, and shorten for printing.
+#
+sub getUnicodeName {
+    my $name = charnames::viacode($_[0]);
+    if (0) {
+        $name =~ s/ WITH /+/;
+        $name =~ s/(ACCENT)//g;
+        #$name =~ s/(COMBINING)//g;
+        $name =~ s/(QUOTATION MARK) /QUO /gi;
+        $name =~ s/(MODIFIER) /MOD /gi;
+        $name =~ s/(EXTENSION|EXTENDED)/EX/g;
+        for my $k (keys %lgMap) {
+            $name =~ s/$k/$lgMap{$k}/gi;
+        }
+        $name =~ s/  +/ /g;
+        if ($name =~ m/\bSMALL\b.*LETTER/) {
+            $name =~ s/(SMALL) //;
+            $name = lc($name);
+        }
+        $name =~ s/(SMALL|CAPITAL|LETTER) //gi;
+    }
+    return($name);
+} # getUnicodeName
+
+
+###############################################################################
+# Return the C-style representation for a character value.
+# Pad to print under the character number.
+# *** multi-byte characters are not yet supported.
+#
+sub getCName {
+   my $n = ord($_[0]);
+   my $charName = "";
+
+   if ($n<0) {                      # Bad number
+       $charName = "---";
+   }
+   elsif ($n>255) {                 # Too high
+       $charName = "+++";
+   }
+   elsif ($args{useCarat} && $n>0 && $n<26) {     # Control chars
+       $charName = "^" . substr(" ABCDEFGHIJKLMNOPQRSTUVWXYZ",$n,1);
+   }
+   elsif ($n==0)    {  $charName = " \\0";   } # NULL
+   elsif ($n==7)    {  $charName = " \\a";   } # BELL?
+   elsif ($n==8)    {  $charName = " \\b";   } # BSP
+   elsif ($n==10)   {  $charName = " \\n";   } # NL
+   elsif ($n==12)   {  $charName = " \\f";   } # FF
+   elsif ($n==13)   {  $charName = " \\r";   } # CR
+   elsif ($n==9)    {  $charName = " \\t";   } # TAB
+   elsif ($n==11)   {  $charName = " \\v";   } # VTAB
+
+   elsif ($n>= 32 && $n<=126) {
+       $charName = "  " . chr($n);
+   }
+   else {                           #  C0
+       $charName = sprintf("%o",$n);
+   }
+   return($charName);
+} # getCName
+
+sub getPlane {
+    my ($n) = @_;
+    my $pnum = $n >> 16;
+    my $pname = "";
+    if    ($pnum == 16) { $pname = "Supplementary Private Use Area B"; }
+    elsif ($pnum == 15) { $pname = "Supplementary Private Use Area A"; }
+    elsif ($pnum == 14) { $pname = "Supplementary Special-purpose"; }
+    elsif ($pnum >=  3) { $pname = "Unassigned"; }
+    elsif ($pnum ==  2) { $pname = "Supplementary Ideographic"; }
+    elsif ($pnum ==  1) { $pname = "Supplementary Multilingual"; }
+    elsif ($pnum ==  0) { $pname = "Basic Multilingual"; }
+    else                { $pname = "-UNKNOWN-"; }
+}
+
+sub getCategory {
+    my ($n) = @_;
+    if    ($n <       0) { return("---"); }
+    elsif ($n <       1) { return("NUL"); }
+    elsif ($n <      32) { return("C0" ); }
+    elsif ($n <      33) { return("SP" ); }
+    elsif ($n <     127) { return("G0" ); }
+    elsif ($n <     128) { return("DEL"); }
+    elsif ($n <     160) { return("C1" ); }
+    elsif ($n <     161) { return("NBS"); }
+    elsif ($n <     256) { return("G1" ); }
+    elsif ($n <   65536) { return("BMP"); }
+    elsif ($n < 0x10000) { return("BIG"); }
+    else                 { return("+++"); }
+} # getCategory
+
+
+
+###############################################################################
+###############################################################################
+#
+# Interactive/User mode
+# (should integrate code from lessData, which does this better)
+#
+###############################################################################
+#
+BEGIN {
+    my $startLoc       = 0;
+    my $MAXTOKENLENGTH = 32;
+    my $MAXMACRODEPTH  = 10;
+    my @mstack         = ();
+    my $lastTarget     = "";
+    my $suppress       = 0;       #  Set to avoid redisplaying block
+
+    my $prevLoc        = 0;       #  Previous offset
+    my $tgtLoc         = 0;
+    my $done           = 0;
+
+    my %bindings       = setBindings();
+
+    sub setBindings {
+        %bindings = (
+            # Move among available files
+            ':d' => "filelist-delete",
+            ':n' => "filelist-next",
+            ':p' => "filelist-prev",
+            ':x' => "filelist-goto",
+
+            # Move by record
+            ' '  => "forward ### go down N records (default 1)",
+            'f'  => "forward ### go down N records (default 1)",
+            'b'  => "backward ### go up N records (default 1)",
+            '<'  => "start ### go to top (first record)",
+            '>'  => "end ### go to bottom (last record)",
+            'g'  => "goto ### skip to record N",
+#           'G'  => "end ### go to bottom (last record)",
+#           'p'  => "end ### go to pcercentage point",
+#           'P'  => "end ### go to offset N",
+
+            # Search
+            '/'  => "find-forward ### search forward for regex. May prefix 'field:'",
+            '?'  => "find-backward (takes arg)",
+            'n'  => "find-next (takes arg)",
+            'N'  => "find-previous",
+            'm'  => "mark ### set a mark at current record (takes arg)",
+            '\'' => "goto-mark (takes arg)",
+
+            # Options
+            '-'  => "option-off",
+            '_'  => "option-display",
+            '+'  => "option-on",
+
+            # Misc
+            'c'  => "identify-character",
+            '='  => "show-filename",
+            ':f' => "show-filename",
+            'v'  => "edit ### edit current file",
+            'V'  => "version",
+            ':e' => "edit-other ### edit another file (takes arg)",
+            'E' => "edit-other ### edit another file (takes arg)",
+            'q'  => "quit",
+            ':q' => "quit",
+            'Q'  => "quit",
+            ':Q' => "quit",
+            'h'  => "help",
+            'H'  => "help",
+            'r'  => "repaint ### re-display current record",
+            '!'  => "shell ### run a shell command (takes arg)",
+            '|'  => "shell-region ### cat region from current record to mark X " .
+            "(named by first letter of following arg), to shell (takes arg).",
+            );
+    }
+
+    sub interact {
+        while (!$done) {
+            if ($tgtLoc < 0) { $tgtLoc = 0; }
+            $prevLoc = $tgtLoc; #  Save for going back
+            $theReader->seek($tgtLoc);
+            if ($suppress) { $suppress = 0; }
+            else {
+                my $bytes = $theReader->readBytes(
+                    $args{nlines}*$args{width}, $args{break});
+                if (!dumpPage($bytes)) {
+                    print "*EOF* (loc = " . $theReader->tell() . ")\n";
+                }
+            }
+
+            #  Get next user command
+            printf("\n(offset 0x%x) Command (or '?')? ",$theReader->tell());
+            my $ucmd;
+            if (!($ucmd = readline(*STDIN))) {
+                exit;
+            }
+            my @tokens = split(" ",$ucmd);
+            if (defined $tokens[0] && $tokens[0] eq "") { shift(@tokens); }
+            my $nparms = scalar @tokens;
+
+            if (!$tokens[0]) {
+                $tgtLoc += $args{width}*$args{nlines};
+                next;
+            }
+
+            my $cmdChar = uc(substr($tokens[0],0,1));
+            my $cdr = (length($tokens[0])>1) ? substr($tokens[0],1):"";
+            my $cmdName = $bindings{$cmdChar};
+
+            # Movement commands
+            if ($cmdName eq 'forward') {               # Scroll forward
+                my $msg = "Forward from $tgtLoc";
+                if (!$cdr) { $tgtLoc += $args{width} * $args{nlines}; }
+                else { $tgtLoc += getNum($cdr); }
+                ($args{quiet}) || warn "$msg to $tgtLoc.\n";
+            }
+            elsif ($cmdName eq 'backward') {           # Scroll bkwd
+                if (!$cdr) { $tgtLoc -= $args{width}*$args{nlines}*2; }
+                else { $tgtLoc -= getNum($cdr); }
+            }
+            elsif ($cmdName eq 'goto') {               # Go to offset
+                $tgtLoc = getNum($cdr);
+                print "*** arg was $cdr\n";
+                #printf("*** Moved to 0x%x = d%d = o%o.\n",$tgtLoc,$tgtLoc,$tgtLoc);
+            }
+            elsif ($cmdName eq 'back') {               # Back to prior loc
+                $tgtLoc = $prevLoc;
+            }
+            elsif ($cmdName eq 'diff') {               # Show difference
+                my $i = getNum($tokens[1]);
+                my $j = getNum($tokens[2]);
+                print("x%lx (d%ld) - x%lx (d%ld) = x%lx (d%ld, o%lo)\n",
+                      $i,$i,$j,$j,$i-$j,$i-$j, $i-$j);
+                $suppress = 1;
+            }
+
+            # Search commands
+            elsif ($cmdName eq 'find-forward') {       # Find
+                my $tgt = strcvt($tokens[1]);
+                my $foundLoc = findString($tgt);
+                if ($foundLoc<0) {
+                    print("Unable to find string '$tgt'\n");
+                }
+                else {
+                    my $line = sprintf("Found '%s' at offset 0x%lx (d%ld)\n",
+                                       $tgt,$foundLoc,$foundLoc);
+                    print "$line";
+                    $tgtLoc = $foundLoc;
+                    $lastTarget = $tgt;
+                }
+            }
+            elsif ($cmdName eq 'find-next') {          # Find next
+                my $reps = getNum($tokens[1]);
+                if ($reps>0) { $suppress = 1; }
+                my $lastLoc = $startLoc = $tgtLoc;
+                for (my $i=1; $i<=$reps; $i++) {
+                    my $foundLoc = findString($lastTarget);
+                    if ($foundLoc<0) {
+                        print("Unable to find string '$lastTarget'\n");
+                    }
+                    elsif ($reps>0) {
+                        my $fmt =
+                            "#%04ld: \@x%06lx, start+x%06lx, last+x%06lx\n";
+                        print($fmt,$i,$foundLoc,$foundLoc-$startLoc
+                              ,$foundLoc-$lastLoc);
+                        ($args{LOG}) &&
+                            fprint($args{LOG},$fmt,$i,$foundLoc,
+                                   $foundLoc-$startLoc,$foundLoc-$lastLoc);
+                    }
+                    else {
+                        print("Found '%s' at offset 0x%lx (d%ld)\n",
+                              $lastTarget,$foundLoc,$foundLoc);
+                        $tgtLoc = $lastLoc = $foundLoc;
+                    }
+                } # for
+            }
+
+            # Option-related commands
+            elsif ($cmdName eq 'option-display') {     # Query
+                queryOption($tokens[1]);
+                $suppress = 1;
+            }
+
+            elsif ($cmdName eq 'options-set') {        # Set option
+                setOption($tokens[1], $tokens[2]);
+                $suppress = 1;
+            }
+
+            # Miscellaneous commands
+            elsif ($cmdName eq 'identify-character') { # identify-character
+                my $c = "A";
+                identifyCharacter($c);
+            }
+            elsif ($cmdName eq 'show-filename') {      # show-filename
+                print("Current file is '" . $theReader->{fileName} . "'");
+            }
+            elsif ($cmdName eq 'log-open') {           # Open log file
+                if (!$args{LOG}) {
+                    $ofn = "outfile";
+                    if (open $args{LOG}, ">$ofn") {
+                        print("'Log' commands will save to file '%s'\n",$ofn);
+                    }
+                    else {
+                        print "Unable to open log file.\n";
+                    }
+                }
+                my $lines = getNum($tokens[1]);
+                if ($lines<1) { $lines = $args{nlines}; }
+                dumpPage() || last;
+                print("$lines lines appended to log file.\n");
+            }
+            elsif ($cmdName eq 'macro') {              # Macro invocation
+                if (scalar(@mstack)>=$MAXMACRODEPTH-1) {
+                    print("Maximum macro depth exceeded ($MAXMACRODEPTH).\n");
+                }
+                else {
+                    if (!$tokens[1][0]) {
+                        getFN($tokens[1],'r');
+                    }
+                    if (my $newFile=fopen($tokens[1],"r")) {
+                        push @mstack, $newFile;
+                        ($args{verbose}) && warn
+                            "Opened macro file '$tokens[1]'.\n";
+                    }
+                    else {
+                        print("Unable to open macro file '$tokens[1]'.\n");
+                    }
+                }
+            }
+            elsif ($cmdName eq 'quit') {               # Quit
+                last;
+            }
+            elsif ($cmdName eq 'help') {               # Help
+                system ":perldoc dumpx";
+            }
+
+            else {
+                print("\nHuh? ('?' for help) \n");
+                $suppress = 1;
+            }
+        } #  while not done
+
+        #  Clean up
+        $theReader->close();
+        ($args{LOG}) && close($args{LOG});
+        while (my $toClose = pop @mstack) {
+            close $toClose;
+        }
+    } # interact
+
+
+    # strcvt resolves '\' codes while copying string (used for 'find' command)
+    #
+    sub strcvt {
+        my ($s) = @_;
+        $s =~ s/\\([nrt\\]|x[0-9a-f][0-9a-f])/{ strcvt_rhs($1); }/ge;
+        return($s);
+    } # strcvt
+    sub strcvt_rhs {
+        if    ($_[0] eq "n")  { return("\n"); }
+        elsif ($_[0] eq "r")  { return("\r"); }
+        elsif ($_[0] eq "t")  { return("\t"); }
+        elsif ($_[0] eq "\\") { return("\\"); }
+        return(char(hex("0$_[0]")));
+    }
+
+    sub identifyCharacter {
+        my ($c) = @_;
+        my $n = ord($c);
+        printf("Decimal %8d  hexadecimal %06x  octal %08o\n", $n,$n,$n);
+        my $key = sprintf("U+%04x", $n);
+        print "    Unicode Script: " . Unicode::UCD::charscript($key) . "\n";
+        print "    Unicode Block:  " . Unicode::UCD::charblock($key) . "\n";
+        print "    Unicode Name:   " . charnames::viacode($key) . "\n";
+    }
+
+
+    ###########################################################################
+    # Scan the input for a string, starting at offset specified.
+    # No provision yet for searching for hex strings.
+    # Returns the file offset where it was found, or -1 on failure.
+    #
+    sub findString {
+        my $token = $_[0];
+        my $len = length($token);
+        my $testbuf = "";
+
+        if ($len<1) { return(-1); }
+        if ($len>=$MAXTOKENLENGTH) {
+            $len = $MAXTOKENLENGTH-1;
+        }
+        $theReader->seek($startLoc);
+
+        while ((my $i=$theReader->readBytes(1))) {
+            if ($i eq $token) {
+                if ($len==1) {
+                    return($theReader->tell() - 1);
+                }
+                $testbuf = $theReader->readBytes($len-1);
+                #seek $fh,-($len-1),1; #  Backspace to not miss next match
+                $testbuf = substr($testbuf,0,$len-1);
+                (substr($token,1) eq $testbuf) &&
+                    return($theReader->tell() - 1);
+            }
+        } # while
+        return(-1); #  not found
+    } # findString
+
+
+    # Convert number in various formats to actual quantity.
+    #
+    sub getNum {
+        my ($val) = @_;
+        if ($val !~ m/^(0x[0-9a-f]|0[0-7]+|\d+)$/i) {
+            warn "Number not recognized: '$val'.\n";
+            return(0);
+        }
+        $val = oct($val) if ($val =~ m/^0/);
+        return($val);
+    } #  End getNum
+
+
+    # Set some named user option.
+    #
+    sub queryOption {
+        my ($name) = @_;
+        if ($name && $name ne "*") {
+            my $value = ($args{$name}) ? $args{$name} : "[not defined]";
+            print "Option $name: $value.\n";
+            return;
+        }
+        printOptions();
+    }
+
+    sub setOption {
+        my ($opt, $val) = @_;
+        if (defined $args{$opt}) {
+            $args{$opt} = $val;
+        }
+        else {
+            warn "Unknown option '$opt'.\n";
+        }
+    } # setOption
+
+} # END
+
+
+###############################################################################
+###############################################################################
+# Handle alternate character encodings
+#
+# This will translate a string to ASCII, which should then be printed in
+# the right column or a following -a or similar line.
+#
+sub recodeEBCDIC {
+    my ($s, $charset) = @_;
+    my $rc = "";
+    my @lookup;
+
+    if ($charset eq "ebcdic") {
+        die "EBCDIC is not fully supported yet.\n";
+        my $xtab =
+            "nul soh stx etx pof  ht  lc del " .     # 00
+            "  . sup man  vt  ff  cr  so  si " .     # 08
+            "dle dc1 dc2  tm res  nl  bs idl " .     # 10
+            "can  em cur cu1 ifs igs irs ius " .     # 18
+            "dse sig  fs   . byp  lf etb esc " .     # 20
+            "  .   . smd cu2   . enq ack bel " .     # 28
+            "  .   . syn   . pon rst  uc eot " .     # 30
+            "  .   .   .   .   . nak   . sub " .     # 38
+            " \    .   .   .   .   .   .   . " .     # 40
+            "  .   .  \[   .  \<  \(   +   | " .     # 48 (or 4a cent sign
+            " \&   .   .   .   .   .   .   . " .     # 50
+            "  .   .  \]  \$   *  \)  \;  \^ " .     # 58 (or 5a !, 5f not
+            "  -  \/   .   .   .   .   .   . " .     # 60
+            "  .   .  \|  \,  \%   _   >   ? " .     # 68
+            "  .   .   .   .   .   .   .   . " .     # 70
+            "  .  \`  \:  \#  \@   \'  =  \" " .     # 78
+            "  .   a   b   c   d   e   f   g " .     # 80
+            "  h   i   .   .   .   .   .   . " .     # 88
+            "  .   j   k   l   m   n   o   p " .     # 90
+            "  q   r   .   .   .   .   .   . " .     # 98
+            "  .   ~   s   t   u   v   w   x " .     # A0
+            "  y   z   .   .   .   .   .   . " .     # A8
+            "  .   .   .   .   .   .   .   . " .     # B0
+            "  .  \`   .   .   .   .   .   . " .     # B8
+            " \{   A   B   C   D   E   F   G " .     # C0
+            "  H   I   .   .   .   .   .   . " .     # C8
+            " \}   J   K   L   M   N   O   P " .     # D0
+            "  Q   R   .   .   .   .   .   . " .     # D8
+            "  .   .   S   T   U   V   W   X " .     # E0
+            "  Y   Z   .   .   .   .   .   . " .     # E8
+            "  0   1   2   3   4   5   6   7 " .     # F0
+            "  8   9   .   .   .   .   .   . " .     # F8
+            "";
+        (length($charset)==256) || warn "EBCDIC table wrong size (" .
+            length($charset) . ").\n";
+        (substr($charset,0xA2,1) eq "s") || warn
+            "EBCDIC 's' misplaced.\n";
+        my @ebcdic = split(/\s+/,$xtab);
+        $rc = "";
+        for (my $i=0; $i<length($s); $i++) {
+            $rc .= $ebcdic[ord(substr($s,$i,1))];
+        }
+        return($rc);
+    }
+
+    for (my $i=0; $i<256; $i++) {
+        $lookup[$i] = chr($i);
+    }
+    return($rc);
+} # recodeEBCDIC
+
+
+###############################################################################
+# List of character classes Perl knows about from Unicode.
+#
+sub getUnicodeClassExpr {
+    # See ~/boilerplate/
+    my $unicodeClassExpr = ""
+        . "ASCII Alnum Alpha Cntrl Digit Graph Lower Print"
+        . " Punct Space Upper Word XDigit"
+        . " C L M N P S Z"
+        . " Cc Cf Cn Co Cs Ll Lm Lo Lt Lu Mc Me Mn Nd Nl No"
+        . " Pc Pd Pe Pf Pi Po Ps Sc Sk Sm So Zl Zp Zs";
+    $unicodeClassExpr =~ s/ /|Is/g;
+    $unicodeClassExpr =  "Is" . $unicodeClassExpr;
+    return($unicodeClassExpr);
+} # getUnicodeClassExpr
+
+
+
+###############################################################################
+###############################################################################
+# Getopt::Long also has a way to put options into a hash, but it's cumbersome,
+# especially for the linesToShow options.
+#
+# May need to separate out part of this to do only at startup, and part to do
+# whenever the user changes options.
+#
+sub printOptions {
+    my @opts = sort(keys %args);
+    my $msg = "    ";
+    for my $i (0..(scalar(@opts)-1)) {
+        $msg .= sprintf("%-16s  %16s    " ,$opts[$i], $args{$opts[$i]});
+        if ($i % 2) { $msg .= "\n    "; }
+    }
+    warn "Option settings:\n$msg\n";
+}
+
+sub checkOptionValues {
+    my $unicodeClassExpr = getUnicodeClassExpr();
+
+    # Option defaulting
+    #
+    if (!$args{linesToShow}) {
+        $args{linesToShow} = "h a ";
+    }
+
+    # Option validity checks
+    #
+    if    ($args{ilineends} eq "m") { $args{recordSep} = chr(13); }
+    elsif ($args{ilineends} eq "u") { $args{recordSep} = chr(10); }
+    elsif ($args{ilineends} eq "d") { $args{recordSep} = chr(13) . char(10); }
+    else { die "Unknown -lineend type, must be m or u or d.\n"; }
+
+    if ($args{iencoding} ne "" &&
+        !defined $encodings{$args{iencoding}}) {
+        die "Unknown -iencoding '$args{iencoding}'. Known:\n" .
+            join(" \t", sort(keys(%encodings))) . ".\n";
+    }
+
+    if ($args{oencoding} ne "" &&
+        !defined $encodings{$args{oencoding}}) {
+        die "Unknown -oencoding '$args{oencoding}'. Known:\n" .
+            join(" \t", sort(keys(%encodings))) . ".\n";
+    }
+
+    if ($args{addressRadix}!=0  && $args{addressRadix}!=8 &&
+        $args{addressRadix}!=10 && $args{addressRadix}!=16) {
+        die "Unsupported -A value '$args{addressRadix}' (use 0/8/10/16).\n";
+    }
+
+    if ($args{readBytes} < 0) {
+        die "-N value too small ($args{readBytes}.\n";
+    }
+
+    if ($args{newlineDisplayChar} eq "?" && # Unify with useControlSymbols?
+        ($args{iencoding} eq "utf8" || $args{useControlSymbols})) {
+        $args{newlineDisplayChar} = chr(0x2424);
+    }
+
+    # Colorizing
+    #
+    $COL->setupColorRulesFromArg($args{carg});
+
+    # Geometry
+    #
+    if ($args{cwidth}<2) { # option was set a tad low
+        warn "-cwidth to display per character must be >= 2.\n";
+        $args{cwidth} = 3;
+    }
+    if ($args{width}<1) {
+        my $availableColumns = $args{dcolumns} - $args{addressWidth};
+        my $totPerChar = $args{cwidth};
+        if ($args{showAlphaSide}) {
+            $availableColumns -= 3; # a space and two "|"s
+            $totPerChar++;
+        }
+        $args{width} = int($availableColumns/$totPerChar);
+        if ($args{width}<1) { $args{width} = 1; }
+    }
+    if ($args{nlines}<1) {
+        $args{nlines} = $args{dlines} / length($args{linesToShow}) / 2;
+        if ($args{nlines}<1) { $args{nlines} = 1; }
+    }
+} # checkOptionValues
+
+
+
+###############################################################################
+###############################################################################
+# Handle colorizing
+#
+package colorizer;
+
+sub new {
+    my ($class) = @_;
+    warn "colorizer constructor.\n";
+    my $self = {
+        rules            => {},
+        currentColorName => "",
+
+        # Color terminal escapes (cf colorstring or sjdUtils)
+        colorEscapes => {
+            "End"         => "\e\[0;39m",  # CLEAR @@@ ???
+            "Black"       => "\e\[1;30m",
+            "Red"         => "\e\[1;31m",
+            "Green"       => "\e\[1;32m",
+            "Yellow"      => "\e\[1;33m",
+            "Blue"        => "\e\[1;34m",
+            "Magenta"     => "\e\[1;35m",
+            "Cyan"        => "\e\[1;36m",
+            "White"       => "\e\[1;37m",
+            "Bg_Black"    => "\e\[1;40m",
+            "Bg_Red"      => "\e\[1;41m",
+            "Bg_Green"    => "\e\[1;42m",
+            "Bg_Yellow"   => "\e\[1;43m",
+            "Bg_Blue"     => "\e\[1;44m",
+            "Bg_Magenta"  => "\e\[1;45m",
+            "Bg_Cyan"     => "\e\[1;46m",
+            "Bg_White"    => "\e\[1;47m",
+        },
+
+        categories => { # cf getCategory(), below.
+            "---"  => 1,
+            "NUL"  => 1,
+            "C0"   => 1,
+            "SP"   => 1,
+            "G0"   => 1,
+            "DEL"  => 1,
+            "C1"   => 1,
+            "NBS"  => 1,
+            "G1"   => 1,
+            "BMP"  => 1,
+            "BIG"  => 1,
+            "+++"  => 1,
+        },
+
+    # Properties are different -- char can fulfill multiple.
+        properties => {
+            "alpha"   => 1,      # \p{XPosixAlpha}
+            "alnum"   => 1,      # \p{XPosixAlnum}
+            "ascii"   => 1,      # \p{ASCII}
+            "blank"   => 1,      # \p{XPosixBlank}
+            "cntrl"   => 1,      # \p{XPosixCntrl}
+            "digit"   => 1,      # \p{XPosixDigit}
+            "graph"   => 1,      # \p{XPosixGraph}
+            "lower"   => 1,      # \p{XPosixLower}
+            "print"   => 1,      # \p{XPosixPrint}
+            "punct"   => 1,      # \p{XPosixPunct}
+            "space"   => 1,      # \p{XPosixSpace} # lacks U+200b?
+            "upper"   => 1,      # \p{XPosixUpper}
+            "word"    => 1,      # \p{XPosixWord}
+            "xdigit"  => 1,      # \p{XPosixXDigit}
+        }
+    }; # self
+
+    my $u = ""; # Might want a prefix to names later...
+    $self->{ucc} = {
+        #    Unicode catagory name     Unify   Abbrev   NumberOfChars
+        # LETTERS
+        $u . "Letter"                => "A",   # "L",
+        $u . "Cased_Letter"          => "A",   # "LC",
+        $u . "Uppercase_Letter"      => "A",   # "Lu",  01441
+        $u . "Lowercase_Letter"      => "a",   # "Ll",  01751
+        $u . "Titlecase_Letter"      => "Fi",  # "Lt",  00031
+        $u . "Modifier_Letter"       => "A",   # "Lm",  00037
+        $u . "Other_Letter"          => "A",   # "Lo",  11788
+
+        # MARKS
+        $u . "Mark"                  => " ",   # "M",
+        $u . "Nonspacing_Mark"       => " ",   # "Mn",  01280
+        $u . "Spacing_Mark"          => " ",   # "Mc",  00353
+        $u . "Enclosing_Mark"        => " ",   # "Me",  00012
+
+        # NUMBERS
+        $u . "Number"                => "9",   # "N",
+        $u . "Decimal_Number"        => "9",   # "Nd",  00460
+        $u . "Letter_Number"         => "9",   # "Nl",  00224
+        $u . "Other_Number"          => "9",   # "No",  00464
+
+        # PUNCTUATION
+        $u . "Punctuation"           => ".",   # "P",
+        $u . "Connector_Punctuation" => "_",   # "Pc",  00010 _ etc.
+        $u . "Dash_Punctuation"      => "-",   # "Pd",  00023 Not incl. shy
+        $u . "Open_Punctuation"      => "(",   # "Ps",  00072 Parentheses, etc.
+        $u . "Close_Punctuation"     => ")",   # "Pe",  00071
+        $u . "Initial_Punctuation"   => "`",   # "Pi",  00012 Sided quotes, etc.
+        $u . "Final_Punctuation"     => "'",   # "Pf",  00012
+        $u . "Other_Punctuation"     => "*",   # "Po",  00434 !"#%&'*,./:;?@\\
+
+        # SYMBOLS
+        $u . "Symbol"                => "#",   # "S",
+        $u . "Math_Symbol"           => "=",   # "Sm",  00952
+        $u . "Currency_Symbol"       => "\$",  # "Sc",  00049
+        $u . "Modifier_Symbol"       => "#",   # "Sk",  00115
+        $u . "Other_Symbol"          => "#",   # "So",  04404
+
+        # SEPARATORS
+        $u . "Separator"             => " ",   # "Z",
+        $u . "Space_Separator"       => " ",   # "Zs",  00018
+        $u . "Line_Separator"        => " ",   # "Zl",  00001
+        $u . "Paragraph_Separator"   => " ",   # "Zp",  00001
+
+        # OTHER CATEGORIES
+        $u . "Other"                 => "?",   # "C",
+        $u . "Control"               => "?",   # "Cc",  00065
+        $u . "Format"                => "?",   # "Cf",  00139 shy,invis,joiner,
+        $u . "Surrogate"             => "?",   # "Cs",  00006
+        $u . "Private_Use"           => "?",   # "Co",  00006
+        $u . "Unassigned"            => "?",   # "Cn",
+    };
+
+    $self->{types} = {
+        "combining"     => 1,
+        "uri"           => 1,
+        "nonXML"        => 1,
+        "ligature"      => 1,
+        "fullwidth"     => 1,
+        "dashes"        => 1,
+    };
+
+    bless $self, $class;
+    $self->setDefaultColors();
+    return $self;
+} # new colorizer
+
+sub colorize {
+    my ($self, $msg, $colorName) = @_;
+    my $start = $self->{colorEscapes}->{$colorName} || "";
+    my $end = ($start) ? $self->{colorEscapes}->{"End"} : "";
+    return($start . $msg . $end);
+}
+
+# Apply escape string to colorize the field if it represents a character to
+# be colorized. Parameters:
+#     0:   Numeric code point for the character in question
+#     1:   String to colorize depending on the code point
+# Don't apply an end for every char; only changes when needed.
+#
+sub colorChars {
+    my ($self,
+        $theCode,            # The code point involved
+        $theField,           # The displayable representation to colorize
+        $theCaller,          # Name of caller, for debugging
+        ) = @_;
+
+    if (!defined $theCode || !defined $theField) {
+        warn("Eh? $theCaller->colorChars.\n");
+    }
+    ($args{carg} eq "off") && return($theField);
+    my $newColorName = $self->getColorForCodePoint($theCode);
+
+    # Do the right transition from old color to new.
+    if ($newColorName eq $self->{currentColorName}) {
+    }
+    elsif ($newColorName ne "") {
+        $theField = $self->{colorStrings}->{$newColorName} . $theField;
+    }
+    else {
+        $theField = $self->clearColor() . $theField;
+    }
+    $self->{currentColorName} = $newColorName;
+    return($theField);
+} # colorChars
+
+sub getColorForCodePoint {
+    my ($self, $n) = @_;
+
+    if (!sjdUtils::isUnicodeCodePoint($n)) {
+        return("Red");
+    }
+
+    my $u = sprintf("U+%04x",$n);
+    my $colorName =
+        ($self->{rules}->{"CHAR\t"     . "$u"}) ||
+        ($self->{rules}->{"PLANE\t"    . main::getPlane($n)}) ||
+        ($self->{rules}->{"CATEGORY\t" . main::getCategory($n)}) ||
+        ($self->{rules}->{"SCRIPT\t"   . Unicode::UCD::charscript($u)}) ||
+        ($self->{rules}->{"BLOCK\t"    . Unicode::UCD::charblock($u)}) ||
+        # ($self->{rules}->{"PROPERTY"}) ||
+        # ($self->{rules}->{"UCC"}) ||
+        # ($self->{rules}->{"NAME"}) ||
+        "";
+    return($colorName);
+}
+
+# Change to no-color state, and return the escape to get there, if any.
+#
+sub clearColor {
+    my ($self) = @_;
+    return("") unless ($self->{currentColorName});
+    $self->{currentColorName} = "";
+    return($self->{colorStrings}->{"End"});
+}
+
+sub setupColorRulesFromArg {  ### @@@ rewrite fullwise
+    my ($self, $carg) = @_;
+    if ($carg eq "off" || $carg eq "none") {
+        $args{colorSpace} = 0;
+        $args{colorXML} = 0;
+        $args{colorCONTROLS} = 0;
+    }
+    elsif ($carg eq "auto")     {
+        $args{colorSpace} = 1; $args{colorCONTROLS} = 1;
+    }
+    elsif ($carg eq "nl")       { $args{colorSpace} = 1; }
+    elsif ($carg eq "xml")      { $args{colorXML} = 1; }
+    elsif ($carg eq "controls") { $args{colorCONTROLS} = 1; }
+    elsif ($carg eq "nonascii") { $args{colorNonASCII} = 1; }
+    elsif ($carg eq "all")      {
+        $args{colorSpace} = $args{colorXML} = $args{colorCONTROLS} = 1;
+    }
+    elsif ($carg =~ m/^($args{unicodeClassExpr})/) {
+        $args{colorClass} = $carg;
+    }
+    elsif ($carg =~ m/^!($args{unicodeClassExpr})/) {
+        $args{colorClassNegated} = $carg;
+    }
+    elsif ($carg ne "") {
+        warn "Unknown -color argument '$carg'. Known ones:\n";
+        my $msg = $args{unicodeClassExpr} =~ s/\|/, /g;
+        die "off, auto, xml, controls, all, and any of these with or"
+            . " without '!' on the front:\n$msg.\n";
+
+        ($args{verbose}) && warn
+            "Color stuff: carg '$carg', " .
+            "-colorSpace '$args{colorSpace}', " .
+            "-colorXML '$args{colorXML}', " .
+            "-colorCONTROLS '$args{colorCONTROLS}', " .
+            "-colorNonASCII '$args{colorNonASCII}', " .
+            "-colorClass '$args{colorClass}', " .
+            "-colorClassNegated '$args{colorClassNegated}', " .
+            "-cc [$args{cc}], " .
+            ".\n";
+    }
+} # setupColorRulesFromArg
+
+sub setDefaultColors {
+    my ($self, $condition, $color) = @_;
+    my $color1 = 'Magenta';
+    my $color2 = 'Red';
+
+    $self->setRule("CHAR",  "U+000A",   $color1);  # LF
+    $self->setRule("CHAR",  "U+000D",   $color1);  # CR
+    $self->setRule("CHAR",  "U+0009",   $color1);  # TAB
+
+    # Spaces (use "PROP" rule once implemented)
+    $self->setRule("CHAR",  "U+0020",   $color1);  # SP
+    $self->setRule("CHAR",  "U+2002",   $color1);  # EN SPACE
+    $self->setRule("CHAR",  "U+2003",   $color1);  # EM SPACE
+    $self->setRule("CHAR",  "U+2009",   $color1);  # THIN SPACE
+    $self->setRule("CHAR",  "U+00A0",   $color1);  # NO-BREAK SPACE
+    $self->setRule("CHAR",  "U+1680",   $color1);  # OGHAM SPACE MARK
+    $self->setRule("CHAR",  "U+2004",   $color1);  # THREE-PER-EM SPACE
+    $self->setRule("CHAR",  "U+2005",   $color1);  # FOUR-PER-EM SPACE
+    $self->setRule("CHAR",  "U+2006",   $color1);  # SIX-PER-EM SPACE
+    $self->setRule("CHAR",  "U+2007",   $color1);  # FIGURE SPACE
+    $self->setRule("CHAR",  "U+2008",   $color1);  # PUNCTUATION SPACE
+    $self->setRule("CHAR",  "U+200A",   $color1);  # HAIR SPACE
+    $self->setRule("CHAR",  "U+200B",   $color1);  # ZERO WIDTH SPACE
+    $self->setRule("CHAR",  "U+202F",   $color1);  # NARROW NO-BREAK SPACE
+    $self->setRule("CHAR",  "U+205F",   $color1);  # MEDIUM MATHEMATICAL SPACE
+    $self->setRule("CHAR",  "U+2420",   $color1);  # SYMBOL FOR SPACE ### @@@
+    $self->setRule("CHAR",  "U+3000",   $color1);  # IDEOGRAPHIC SPACE
+    $self->setRule("CHAR",  "U+303F",   $color1);  # IDEOGRAPHIC HALF FILL SPACE
+
+    $self->setRule("CHAR",  "U+0000",   $color2);      # NUL
+    $self->setRule("CHAR",  "U+007F",   $color2);      # DEL
+
+    $self->setRule("CATEGORY", "C1",    $color2);
+
+    $self->setRule("PLANE", "16",       $color2);      # Supplementary Private Use Area B
+    $self->setRule("PLANE", "15",       $color2);      # Supplementary Private Use Area A
+    $self->setRule("PLANE", "14",       $color2);      # Supplementary Special-purpose
+    $self->setRule("PLANE", "13",       $color2);      # Unassigned
+    $self->setRule("PLANE", "12",       $color2);      # Unassigned
+    $self->setRule("PLANE", "11",       $color2);      # Unassigned
+    $self->setRule("PLANE", "10",       $color2);      # Unassigned
+    $self->setRule("PLANE", "9",        $color2);      # Unassigned
+    $self->setRule("PLANE", "8",        $color2);      # Unassigned
+    $self->setRule("PLANE", "7",        $color2);      # Unassigned
+    $self->setRule("PLANE", "6",        $color2);      # Unassigned
+    $self->setRule("PLANE", "5",        $color2);      # Unassigned
+    $self->setRule("PLANE", "4",        $color2);      # Unassigned
+    $self->setRule("PLANE", "3",        $color2);      # Unassigned
+    $self->setRule("PLANE", "2",        $color2);      # Supplementary Ideographic
+    $self->setRule("PLANE", "1",        $color2);      # Supplementary Multilingual
+} # setDefaultColors
+
+# Add negations too?
+#
+sub setRule {
+    my ($self,
+        $test,          # CHAR or PLANE or CAT(egory)
+        $value,         # codepoint or planenumber or known value from getCategory().
+        $colorName) = @_;
+
+    #warn "setRule(" . join(",", @_) . "\n";
+    if (!defined $self->{colorEscapes}->{$colorName}) {
+        my @names = keys(%{$self->{colorEscapes}});
+        die "Unknown color '$colorName'. Known: " .
+            join(", ", sort(@names)) . ".\n";
+    }
+
+    if ($test eq "CHAR") {
+        $value = uc($value);
+        ($value =~ m/^U\+[0-9A-F]{4,5}$/) || die
+             "Bad CHAR value '$value' (Must be U+xxxx).\n";
+    }
+    elsif ($test eq "PLANE") {
+        ($value =~ m/^1?\d$/) || die
+            "Bad PLANE '$value' (Must be 0..16).\n";
+    }
+    elsif ($test eq "CATEGORY") {
+        (defined $self->{categories}->{$value}) || die
+            "Bad CAT '$value' (Must be 0..16).\n";
+    }
+
+    # elsif ($test eq "SCRIPT") {
+    # }
+    # elsif ($test eq "BLOCK") {
+    # }
+    # elsif ($test eq "PROPERTY") {
+    # }
+    # elsif ($test eq "UCC") {
+    # }
+    # elsif ($test eq "NAME") {
+    # }
+
+    else {
+        die "Unknown test type '$test' = '$value'.\n";
+    }
+
+    $self->{rules}->{"$test=$value"} => $colorName;
+} # setRule
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+# Handle input from either a file or STDIN.
+#
+package reader;
+
+sub new {
+    my ($class, $fn, $enc) = @_;
+    my $fh = undef;
+    if ($fn) {
+        if (!open($fh, "<$fn")) {
+            die "Could not open '$fn'.\n";
+        }
+        binmode($fh, ":raw");
+    }
+
+    my $self = {
+        fileName         => $fn,
+        fileRef          => $fh,
+        encoding         => $enc || "",
+        offset           => 0,
+        lineNumber       => 1,
+        endOfCurrentLine => 0,
+        endOfLastLine    => 0,
+        pending          => "",
+        pendingBytes     => [],
+        hasHitEOF        => 0,
+    };
+    ($args{verbose}>1) && warn
+        "new reader, file at " . $self->{fileRef} . ".\n";
+    bless $self, $class;
+    return $self;
+}
+
+sub bytesAvailable {
+    my ($self) = @_;
+    my $avail = scalar(@{$self->{pendingBytes}});
+    return($avail);
+}
+
+sub addText {
+    my ($self, $str) = @_;
+    $self->{pending} .= $str;
+    push @{$self->{pendingBytes}}, unpack('C*',$str);
+}
+
+sub binmode {
+    my ($self, $enc) = @_;
+    ($self->{fileRef}) || die
+        "Can't use binmode($enc) on STDIN.\n";
+    (binmode($self->{fileRef},":$enc")) || die
+        "binmode() failed.\n";
+}
+
+sub readBytes {
+    my ($self, $needed, $breakAtNL) = @_;
+    my $avail = $self->bytesAvailable();
+    if (!defined $breakAtNL) { $breakAtNL = 0; }
+    ($args{verbose}>2) && warn
+        "readBytes wants $needed chars, break = $breakAtNL.\n";
+
+    if ($avail<$needed) { # need to top up the buffer
+        ($args{verbose}>2) && warn "Topping up, going for $needed.\n";
+        my $newData = "";
+        if ($self->{fileRef}) {
+            if (read($self->{fileRef}, $newData, $needed)) {
+                ($args{verbose}>2) && warn
+                    "Read: ***" . sjdUtils::vis($newData) . "***\n";
+                my @newBytes = unpack('C*',$newData);
+                $self->{pending} .= $newData;
+                push @{$self->{pendingBytes}}, @newBytes;
+                $avail = $self->bytesAvailable();
+                ($args{verbose}>2) && warn "Available now: $avail\n";
+            }
+        }
+        ($args{verbose}>2) && warn "Read data (buffer length now " .
+            $avail . "):\n  ---\n$newData\n---\n";
+    }
+    if ($avail==0) { # out of data
+        ($args{verbose}>2) && warn "Hit EOF\n";
+        $self->{hasHitEOF} = 1;
+        return(undef);
+    }
+
+    # Figure out how much to copy.
+    my $n = ($avail<$needed) ? $avail:$needed;
+    for (my $i=0; $i<$n; $i++) {
+        if ($self->{pendingBytes}->[$i] == 10) {
+            $self->{lineNumber}++;
+            $self->{endOfLastLine} = $self->{endOfCurrentLine};
+            $self->{endOfCurrentLine} = $self->{offset};
+            if ($breakAtNL) { last; }
+        }
+    }
+
+    # Actually move it out
+    my @byteBuf = splice(@{$self->{pendingBytes}},0,$n);
+    $self->{pending} = substr($self->{pending}, $n);
+    $self->{offset} += $n;
+    return(\@byteBuf);
+} # readBytes
+
+sub seek {
+    my ($self, $n) = @_;
+    ($self->{fileRef}) || return(-1); # Won't work on stdin
+    $self->{pending} = "";
+    $self->{pendingBytes} = [];
+    seek($self->{fileRef}, $n, 0);
+    $self->{offset} = $n;
+    $self->{lineNumber} = 0;
+    $self->{hasHitOEF} = 0;
+}
+
+sub seekRecord {
+    my ($self, $n) = @_;
+    ($self && $self->fileRef) || return(-1);
+    ($self->{verbose}>2) && warn "seekRecord for line $n.\n";
+    if ($n <= $self->{lineNumber}) {
+        $self->seek(0);
+    }
+    my $fh = $self->{fileRef};
+    while ($self && $self->{lineNumber} < $n) {
+        my $bytes = <$fh>;
+        ($bytes) || return(-1);
+        $self->{lineNumber}++;
+        $self->{offset} += scalar(@{$bytes});
+    }
+    return($n);
+}
+
+sub tell {
+    my ($self) = @_;
+    return($self->{offset});
+}
+
+sub tellRecord {
+    my ($self) = @_;
+    return($self->{lineNumber},
+           $self->{offset} - $self->{endOfLastLine});
+}
+
+sub close {
+    my ($self) = @_;
+    $self->{pending} = "";
+    $self->{pendingBytes} = [];
+    $self->{offset} = $self->{lineNumber} = 0;
+    if ($self->{fileRef}) {
+        close($self->{fileRef});
+        $self->{fileRef} = undef;
+    }
+}
+
+# End of reader package.
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+dumpx [options] [file]
+
+Dumps a file or portion, converting characters to other forms;
+also provides an interactive mode (see I<--user>).
+
+This is very much like the *nix C<od> utility. However, the input is treated
+entirely as characters (not bytes or numeric types), so this is much more
+useful for 'text'-ish files, including Unicode.
+
+The input is divided into I<chunks> that fill display lines.
+If available the script uses environment variables C<$COLUMNS> to
+set the chunk length (typically 16), and C<$LINES> to calculate how many
+chunks to show before pausing (like C<more>).
+See also I<-w>, I<--cwidth>, and especially I<--break> (which cause
+a new chunk to be started after every I<newline>, making text files much
+more readable).
+
+Each chunk can be displayed in multiple I<forms> on separate lines.
+By default, the first line has the relevant offset on the left (see I<-j>,
+I<--jl>, I<-A>, and several other options),
+and the literal string text of the chunk on the right (see I<--as>).
+By default, the characters are shown in two formats:
+hexadecimal B<byte> values (I<-h>)
+and then literal characters (I<-a>), and the numeric display has some
+extra I<--showGutter> space in the middle. Thus:
+
+x000049:  31 32 33 34 35 36   61 62 63 64 65 66  |12345678abcdefgh|
+           1  2  3  4  5  6    a  b  c  d  e  f
+
+Unlike C<od>, the representations in all the lines of a group
+are aligned, and you shouldn't get big/little-endian issues.
+Offsets are shown in the same base as the line they precede. Each such
+I<group> of lines, can be followed by a blank line (see I<--blank>).
+With I<--break>, a newline character will also start a new "chunk".
+
+In I<--user> (interactive) mode, a screen's-worth of such groups will be printed
+and then a user command will be accepted.
+
+=head3 'Literal' display
+
+The 'literal' forms I<-a> (below) and I<--as> (as a right sidebar),
+display printable characters as themselves.
+By default, control characters are replaced by
+the Unicode 'control pictures' (U+2400 and following).
+Other unprintable characters will be "?" on the right, but will
+be replaced by "#" and a footnote number in the I<-a> (below) display.
+After each display chunk, each character so replaced will be
+listed on a separate line, with its footnote number and full Unicode name.
+This can be turned off via I<--nonotes>, in which case the characters
+will merely be displayed as "??".
+To display characters from d160-d255 (sometimes called Latin-1 or G1)
+literally, use I<--g1ok> (that's a one, not an el).
+See also I<--substitute> and I<--notes>.
+
+B<Note>: Unlike most of my scripts, options for C<dumpx> B<regard> case.
+This is for compatibility with C<od>: most options are exactly the same.
+However, I<-s>, I<-t>, I<--traditional>, and all options relating
+to byte order and word size are not supported.
+
+
+
+=head1 Options I<not> like C<od>
+
+(prefix 'no' to negate where applicable)
+
+B<Note>: The C<od>-like options are described in a later section.
+
+=over
+
+=item * B<--addressWidth> I<n>
+
+How many columns to allow for displaying the offset of each chunk.
+Default 8; specify 0 to suppress offset display.
+See also B<--addressRadix>, aka I<--address-radix> and I<-A>.
+
+=item * B<--blankLine>
+
+Put a blank line after the group of lines displayed for each chunk.
+
+=item * B<--break>
+
+Start a new output line at each input newline character (not finished).
+
+=item * B<--cc> I<char>
+
+Colorize the character specified (repeatable).
+Allows notations such as \\0777, 0xFFFF, etc.
+
+=item * B<--charForSpace> I<spec>
+
+Set what code point will be displayed as the printable form of space (regular space, not
+hard space, en/em/thin space, etc.). The number may be specified in decimal, octal,
+or hex. Some useful values include:
+     0x20    -- a literal space
+     0x2423  -- an underscore with the ends turned up (the default)
+     0x2420  -- a little "SP"
+     0x2422  -- "b" with a slash
+
+=item * B<--color> I<arg>
+
+Colorize certain characters in the output, as determined by I<arg>:
+    I<auto> (newlines, controls, spaces, non-Latin1);
+    I<xml> (<>&;);
+    I<controls>;
+    I<nonascii>;
+    I<all> (auto, xml, and controls); or
+    I<none> or I<off>.
+
+You can also give a Unicode character-class name (experimental) to colorize all
+characters that are members of that class (such as Bopomofo);
+or I<!> plus a character-class name to colorize all characters that are
+I<not> of that class. See I<man perlunicode> for more details.
+If environment variable I<USE_COLOR> is set and STDOUT is going to
+a terminal, defaults to coloring newlines and control characters
+(unfortunately, "| more" is not a terminal).
+
+B<Note>: In transition, may not completely work.
+
+=item * B<--cwidth> I<n>
+
+Display columns to allow per character. For example, 8-bit characters take 2
+hexadecimal digits, so I<--cwidth 3> is nice (and is the default).
+
+=item * B<--dcolumns> I<n>
+
+Number of character spaces in the display. Default: $COLUMNS or 80.
+
+=item * B<--dlines> I<n>
+
+Number of lines in the display. Default: $LINES or 40.
+
+=item * B<--G1ok>
+
+Allows output of G1 characters (d160-d255).
+(should be subsumed under I<--oencoding>)
+
+=item * B<--iencoding> I<c>
+
+Use a non-Latin-1 character set for display (see also I<--listEncodings>).
+Among the likely candidates: ascii, cp1252, cp500, iso-8859-1 (through -16),
+MacRoman, UCS-2BE, UCS-2LE, UTF-16, utf8 (note case and hyphenation).
+
+=item * B<--ilineends> I<t>
+
+Are input line-ends m(ac), d(os), or default u(nix)?
+(only really matters if using I<--jl>)
+
+=item * B<--jl> I<n> or B<--skip-lines>
+
+Start at line I<n> (see also I<--ilineends>, I<-j>).
+
+=item * B<--listchars>
+
+Just show a table of Latin-1 characters.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>.
+
+=item * B<--nocolor>
+
+Synonym for I<--color none>.
+
+=item * B<--nog1>
+
+Do not try to display Latin1/G1 characters (d161-255, xA1-FF).
+
+=item * B<--noteColor> I<colorName>
+
+Show notes (added for characters which lack mnemonics or very short names),
+with the specified color.
+
+=item * B<--notes>
+
+Enable notes (added for characters which lack mnemonics or very short names).
+Default: on (use I<--nonotes> to turn off).
+
+=item * B<oencoding> I<e>
+
+Assume the output can handle enocding I<e> (see also I<--listEncodings>).
+
+B<Note>: Terminal programs will be confused if you request a character set they
+don't support.
+
+=item * I<--showAlphaSide> or B<--sas>
+
+Show literal chars more readably
+in column on right (default; use I<--noas> to turn off).
+
+=item * B<--showGutter> or B<--sg>
+
+Split the alphabetic display on the right in the middle for legibility.
+
+=item * B<--showHeader> or B<--sh>
+
+Display a relative-offset header aligned over each character-column.
+B<Note>: it is not possible to make this show the low-order byte or nibble
+or the precise offset; just a column number. It is also only printed before
+the first block of each screenful (which may be fine with I<--user>, but
+not in general).
+
+=item * B<--lineNumber> or B<--sln>
+
+Display the current line number (in which the start of each block falls).
+
+=item * B<--substitute> I<s>
+
+Print I<s> for unprintable characters. Default: U+00A4 (Currency Sign).
+See also I<--useControlSymbols>, I<--html>, and I<--oencoding>.
+
+=item * B<-u>
+
+Show a line with the UCS2 numeric equivalent of any UTF-8 sequences.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8>.
+
+=item * B<--useCarat> or B<--uc>
+
+Show control characters as 0x01 through 0x1A as "^A" through "^Z".
+
+=item * B<--useControlSymbols> or I<--pix>
+
+Display control characters (C0) as Unicode control pictures (U'24xx).
+
+=item * B<--user> or B<--interactive>
+
+Use interactive mode (unfinished). See below for details.
+
+=item * B<--verbose>
+
+Add debugging messages (repeatable).
+
+=back
+
+
+
+=head1 Options like C<od>
+
+Many of C<od>'s options are supported, as listed below. However,
+those that parse input data by number of I<bytes>
+rather than characters are not
+(-b -c -d[SIZE] -f[SIZE] -i -l -o[SIZE] -s -u[SIZE] -x[SIZE]
+and their I<-t[TYPE]> equivalents).
+
+The supported C<od>-like options are:
+
+=over
+
+=item * B<-A> I<radix> or (B<--address-radix>)
+
+Base for displaying file offsets (0, 8, 10, or 16)
+(if not specified, of specified as 0,
+the displayed offset matches the base of following data on line.
+Thus, you can get multiple bases in a reasonably mnemonic way.
+See also I<--addressWidth> (set that to 0 to suppress offset display entirely).
+
+=item * B<-a> or B<-t a>
+
+Show literal characters below numeric(s).
+Unlike C<od>, the high-order bit is I<not> automatically cleared, and
+multi-byte encodings are supported (see also I<--iencoding>).
+Latin-1 characters will be shown as themselves; others will display
+a footnote number, and after the display line is printed, the
+footnotes will be shown. Each footnotes includes its number, the
+hex value for the code point (this will not be the same as the
+individual utf8 bytes shown by I<-h>!), and the full Unicode name for
+the character.
+
+The footnote number in the I<-a> lines, is allowed as much space
+as the number of bytes in the UTF-8 form
+(numeric display options will show the values of the UTF-8 bytes).
+
+=item * B<-c>
+
+Show C-style escaped characters.
+Unlike C<od>, backslash-codes are not decoded.
+
+=item * B<-d>
+
+Show bytes in decimal.
+
+=item * B<-h>
+
+Show bytes in hexadecimal ('-x' also works).
+
+=item * B<--help>
+
+Show this help and exit.
+For compatibility with C<od>, the I<-h> option display hex bytes,
+rather than invoking help.
+
+=item * B<-j> I<n> or B<--skip-bytes>
+
+Offset in file to start at (but see also I<--jl>, above).
+
+=item * B<--linenum>
+
+Display the line number above each block, in which that blocks begins.
+
+=item * B<-N> I<n> or B<--read-bytes> or B<--readBytes>
+
+Max number of bytes to dump.
+
+=item * B<-o>
+
+Show bytes in octal.
+
+=item * B<-S> or <--strings>
+
+Not supported.
+
+=item * B<-t> or <--format-type>
+
+Not supported.
+
+=item * B<--traditional>
+
+Not supported.
+
+=item * B<-v> or B<--output-duplicates>
+
+Don't skip duplicate lines.
+
+=item * B<--version>
+
+Show version information and exit.
+
+=item * B<-w> I<n> or B<--width>
+
+Bytes per output line (default 16, multiples of 8 are nice).
+
+=back
+
+
+
+=for nobody ===================================================================
+
+=head1 Interactive mode (not finished)
+
+To invoke interactive mode, specify the I<--user> option.
+
+=head2 Interactive Commands
+
+These are largely modeled on C<more> and its kin.
+
+=over
+
+=item * quit        Exit this program
+
+=item * <Return>    Move forward one block (i.e., one screenful, see 'lines')
+
+=item * + n         Move forward n blocks
+
+=item * B<- n>         Move backward n blocks (default one block)
+
+=item * @ n         Move to file offset n
+
+=item * find s      Find string (which may include nonzero \\xx byte codes)
+
+=item * next n      Find next (with n, finds next n offsets & diffs)
+
+=item * back        Return to previous place
+
+=item * diff n m    Subtract m from n, display result in hex/decimal/octal
+
+=item * log         Append current block to logfile
+
+=item * c           Identify the current character's code point and name.
+
+=back
+
+=head3 Also
+
+=over
+
+B<Move among available files>
+  ':d' -- filelist-delete
+  ':n' -- filelist-next
+  ':p' -- filelist-prev
+  ':x' -- filelist-goto
+
+B<Move by record>
+  ' '  -- forward: go down N records (default 1)
+  'f'  -- forward: go down N records (default 1)
+  'b'  -- backward: go up N records (default 1)
+  '<'  -- start: go to top (first record)
+  '>'  -- end: go to bottom (last record)
+  'g'  -- goto: skip to record N
+
+B<Search>
+  '/'  -- find-forward: search forward for regex.
+  '?'  -- find-backward (takes arg)
+  'n'  -- find-next (takes arg)
+  'N'  -- find-previous
+  'm'  -- mark: set a mark at current record (takes arg)
+  '\'' -- goto-mark (takes arg)
+
+B<Options>
+  '-'  -- option-off
+  '_'  -- option-display
+  '+'  -- option-on
+
+B<Miscellaneous>
+  'c'  -- identify-character
+  '='  -- show-filename
+  ':f' -- show-filename
+  'v'  -- edit: edit current file
+  'V'  -- version
+  ':e' -- edit-other: edit another file (takes arg)
+  'E'  -- edit-other: edit another file (takes arg)
+  'q'  -- quit
+  ':q' -- quit
+  'Q'  -- quit
+  ':Q' -- quit
+  'h'  -- help
+  'H'  -- help
+  'r'  -- repaint: re-display current record
+  '!'  -- shell: run a shell command (takes arg)
+  '|'  -- shell-region: cat region from current record to mark X
+(named by first letter of following arg), to shell (takes arg).
+
+=back
+
+
+=for nobody ===================================================================
+
+=head2 Setting Interactive-only Options
+
+=over
+
+=item * chunk n      Number of bytes per display line (default 16)
+
+=item * header n     0 to hide, 1 to show header line
+
+=item * lines n      Number of display lines to show at once
+
+=item * logfile name Set name of log file to write
+
+=item * macro m      Start taking commands from specified file
+
+=item * next n       Go forward by n blocks
+
+=back
+
+
+
+=for nobody ===================================================================
+
+=head1 Related commands
+
+C<od> -- the *nix command most similar to this script.
+
+C<chr> and C<ord> -- utilities to convert between code point numbers (in
+various bases) and actual characters and names.
+
+L<http://search.cpan.org/~jhi/perl-5.7.3/ext/Encode/Encode.pm> -- Perl
+package for dealing with character encodings.
+
+C<RecordFile.pm> -- should replace the internal 'reader' package.
+
+C<hilite> -- can colorize all kinds of this, such as ranges of character codes,
+similar to some features of C<dumpx>.
+
+
+
+=head1 Known bugs and limitations
+
+Bash may wrap lines too soon if color is used, apparently because it counts
+the length of the color escapes into the line length (?).
+
+No type-checking is done for the interactive I<set option value> command.
+
+Can't count line-numbers when using I<-j> (start at offset).
+
+I<--showHeader> is kind of lame so far.
+
+EBCDIC recoding is unfinished.
+
+
+
+=head1 Ownership
+
+dumpx: This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version,
+see L<http://www.derose.net/steve/utilities/>.
+
+=cut

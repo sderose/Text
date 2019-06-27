@@ -1,0 +1,115 @@
+#!/usr/bin/perl -w
+#
+# Delete all lines consisting only of whitespace.
+#
+# 2006~02: Written by Steven J. DeRose.
+# 2007-05-18 sjd: Add option handler, -h, -v.
+# 2007-12-17 sjd: Getopt, -n.
+# 2010-09-10 sjd: perldoc, -w.
+# 2012-10-18 sjd: Clean up. Add -empty.
+#
+# To do:
+#     Add -ilineends?
+#
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2012-10-18";
+
+my $empty     = 0;
+my $normalize = 0;
+my $quiet     = 0;
+my $verbose   = 0;
+
+
+# Process options
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "empty|0!"          => \$empty,
+	"h|help|?"          => sub { system "perldoc $0"; exit; },
+	"n!"                => \$normalize,
+	"q|quiet!"          => \$quiet,
+	"v|verbose+"        => \$verbose,
+    "version"           => sub {
+		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+	},
+	);
+
+($result) || die "Bad options.\n";
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $recnum = 0;
+my $nblanks = 0;
+while (my $rec = <>) {
+	$recnum++;
+	chomp($rec);
+    if (($empty && $rec eq "") || $rec !~ m/\S/) {
+		$nblanks++;
+	}
+	else {
+		if ($normalize) {
+			$rec =~ s/\s+/ /g;
+			$rec =~ s/^\s+//;
+			$rec =~ s/\s+$//;
+		}
+		print "$rec\n";
+	}
+}
+
+($verbose) && warn "Dropped $nblanks blank lines out of $recnum.\n";
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage:
+
+dropBlankLines [options]
+
+Delete all lines consisting only of whitespace.
+
+
+=head1 Options
+
+=over
+
+=item * B<-0> or B<--empty>
+
+Only drop truly empty lines (not even whitespace).
+
+=item * B<-n>
+
+Normalize whitespace in remaining lines.
+
+=item * B<--verbose> OR B<-v>
+Report total lines and lines dropped.
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons 
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

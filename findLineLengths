@@ -1,0 +1,361 @@
+#!/usr/bin/perl -w
+#
+# findLineLengths
+#
+# Written 2006-01-12, 06-28 by Steven J. DeRose.
+# 2006-11-28 sjd: Sync to template, add --where, --min, -q, --version.
+# 2007-11-09 sjd: strict. Add --nl. Print % and cumulative %.
+# 2008-01-24 sjd: Getopt.
+# 2008-03-27 sjd: Fix names.
+# 2010-03-27 sjd: Adjust for fact that BSD's 'wc' lacks -L. Perldoc.
+#     Make handle multiple input files. Unicode.
+# 2011-07-14 sjd: Cleanup.
+# 2011-10-19 sjd: Suppress output for lengths that have no lines.
+# 2011-10-28 sjd: Report line # of longest line(s). Add --show.
+# 2011-11-30 sjd: Add --stats, --max, --listEncodings, --iles.
+#     Show total # of lines over --min length.
+# 2014-12-11: Add ---longest. Fix --min/--max bugs.
+# 2017-04-14: Fix STDIN.
+# 2018-09-28: Make --count the default.
+#
+# Todo:
+#
+use strict;
+use Getopt::Long;
+use Encode;
+
+our $VERSION_DATE = "2018-09-28";
+
+my $iEncoding = "";
+my $iles      = 0;
+my $longest   = 0;
+my $max       = 80;
+my $min       = 0;        # <=0 means report any length.
+my $nl        = 1;        # Include the newlines?
+my $quiet     = 0;
+my $show      = 1;        # Display first rec of longest length.
+my $stats     = 0;
+my $table     = 1;        # Display # lines of each length seen.
+my $verbose   = 0;
+my $where     = 0;        # Save locations of lines of each length.
+
+
+###############################################################################
+# Process options
+#
+my %getoptHash = (
+    # "count", see "table".
+    "h|help|?"         => sub { system "perldoc $0"; exit; },
+    "iEncoding=s"      => \$iEncoding,
+    "iles=i"           => \$iles,
+    "listEncodings"    => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "longest!"         => \$longest,
+    "max=o"            => \$max,
+    "min=o"            => \$min,
+    "nl|newline!"      => \$nl,
+    "q|quiet!"         => \$quiet,
+    "show!"            => \$show,
+    "stats!"           => \$stats,
+    "table|count!"     => \$table,
+    "unicode"          => sub { $iEncoding = "utf8"; },
+    "v|verbose+"       => \$verbose,
+    "version"          => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    "n|where!"         => \$where,
+    );
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+
+my @lnums       = ();         # Line numbers of lines of each length
+my @byLength    = ();         # How many lines of each length
+
+# Keep some basic statistics:
+my $minLength   = -1;
+my $maxLength   = 0;
+my $minLoc      = 0;
+my $maxLoc      = 0;
+my $minText     = "";
+my $maxText     = "";
+my $nLinesOver  = 0;
+my $nLinesUnder = 0;
+
+if (scalar @ARGV == 0) {
+    push @ARGV, "-";
+    (-t STDIN) && warn "Waiting for STDIN...\n";
+}
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $totalFiles   = 0;
+my $totalRecords = 0;
+my $fh           = undef;
+
+while (my $file = shift) {
+    $totalFiles++;
+    ($verbose) && warn "\n*** Starting file '$file'\n";
+    if (!open($fh, "<$file")) {
+        warn "Couldn't open '$file'.\n";
+        return(0);
+    }
+    if ($iEncoding ne "") { binmode($fh, ":encoding($iEncoding)"); }
+    $totalRecords += doOneFile($file, $fh);
+    close $fh;
+}
+
+if (!$quiet) {
+    print "Lines under min length $min: $nLinesUnder.\n";
+    print "Lines over max length $max: $nLinesOver.\n";
+    print "\nDone, $totalFiles files, $totalRecords records.\n";
+}
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+sub doOneFile {
+    my ($file, $fh) = @_;
+    my $recnum      = 0;
+    my $totalLength = 0;
+    while (my $rec = <$fh>) {
+        $recnum++;
+        $totalLength += length($rec);
+        if (!$nl) {
+            $rec =~ s/\r?\n?^//;
+        }
+        my $len = length($rec);
+        if ($len > $max) { $nLinesOver++; }
+        if ($len < $min) { $nLinesUnder++; }
+
+        if ($len > $maxLength) {
+            $maxLength = $len; $maxLoc = $recnum; $maxText = $rec;
+        }
+        if ($minLength<0 || $len < $minLength) {
+            $minLength = $len; $minLoc = $recnum; $minText = $rec;
+        }
+        $byLength[$len]++;
+        if ($where) {
+            $lnums[$len] .= "$recnum ";
+        }
+    } # EOF
+
+    reportOneFile($file, $recnum, $totalLength);
+    return($recnum);
+} # doOneFile
+
+
+###############################################################################
+###############################################################################
+#
+sub reportOneFile {
+    my ($file, $recnum, $totalLength) = @_;
+
+    ($quiet) || warn "\n*** Report for file '$file'.\n";
+
+    if ($longest) {
+        print "Longest line is $maxLength, at line $maxLoc:\n    $maxText\n";
+    }
+
+    if ($table) {
+        if (!$quiet) {
+            print "Length  Number  Cumul. Num      Pct  Cumul. Pct";
+            ($where) && print "\tAt lines: ";
+            print "\n";
+        }
+        my $prevPct = 0;
+        my $totNLines = 0;
+        for (my $i=0; $i<scalar(@byLength); $i++) {
+            my $cur = $byLength[$i] || 0;
+            $totNLines += $cur;
+            my $pct = ($cur * 100.0) / $recnum;
+            my $totPct = ($totNLines * 100.0) / $recnum;
+
+            my $showIt = 0;
+            if ($iles>0) {
+                $showIt = (int($totPct/$iles)>int($prevPct/$iles)) ? 1:0;
+            }
+            else {
+                $showIt =($cur && $i >= $min) ? 1:0;
+            }
+            if ($showIt) {
+                print sprintf("%6d  %6d      %6d %7.3f%%    %7.3f%%",
+                              $i, $cur, $totNLines, $pct, $totPct);
+                ($where) && print "\tAt lines: $lnums[$i]";
+                print "\n";
+            }
+            $prevPct = $totPct;
+        } # for
+    } # table
+
+    if ($stats) {
+        reportStatPart("Shortest line", $minLength, $minLoc, $minText);
+        reportStatPart("Longest line",  $maxLength, $maxLoc, $maxText);
+        my $avgLength = int(0.5 + ($totalLength / $recnum));
+        my $avgFirstLoc = (defined $lnums[$avgLength]) ?
+            $lnums[$avgLength] : 0;
+        #$avgFirstLoc =~ s/\s.*//;
+        reportStatPart("Average line",  $avgLength, $avgFirstLoc, "");
+        return;
+    } # stats
+} # report
+
+
+sub reportStatPart {
+    my ($label, $len, $loc, $text) = @_;
+    print("$label:\n");
+    my $dfmt = "  %-30s %8d\n";
+    my $sfmt = "  %-30s %s\n";
+    printf($dfmt, "Length of line", $len);
+    printf($dfmt, "First instance at", $loc);
+    printf($sfmt, "That line's content", $text) if ($show);
+    printf($sfmt, "At lines", $lnums[$len]) if ($where);
+}
+
+
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+findLineLengths [files]
+
+Displays the length and position of lines of each file whose lengths are
+under I<--min> characters long (default 0, so there won't be any),
+or over I<--max> (default 80).
+
+Can also produce:
+
+=over
+
+=item a I<--table> of lines by their lengths,
+
+=item * cumulative percentage of lines by length,
+
+=item * average line length,
+
+=item * the line lengths for quartiles, deciles, etc (I<--iles n>)
+
+=back
+
+B<Note>: Use the I<--where> option to get a list of
+all the particular lines of chosen lengths.
+
+
+=head1 Options
+
+=over
+
+=item B<--count>
+
+Synonym for I<--table>.
+
+=item B<--iencoding> I<s>
+
+Set character encoding for input.
+
+=item * B<--iles> I<n>
+
+Display a partial table showing the number of lines at each quartile,
+decile, etc. (for I<n> = 4, 10, etc.).
+
+=item * B<--longest>
+
+Just report the longest line found and its length.
+
+=item * B<--listencodings>
+
+Show all the encodings supported by I<--iencoding>, and exit.
+
+=item B<--max> I<n>
+
+Report results for lines over I<n> characters long.
+
+=item B<--min> I<n>
+
+Only report results for lines less then I<n> characters long.
+
+=item B<-n>
+
+Synonym for I<--where>.
+
+=item B<--newline> (or B<--nl>)
+
+Count CR, LF, or CRLF at the end?
+(default on; use I<--nonewline> to turn off).
+
+=item B<--quiet>
+
+Suppress most messages.
+
+=item B<--show>
+
+Include the text of the first line of the longest length found (default).
+
+=item * B<--stats>
+
+Report some extra statistics about line lenghts.
+
+=item B<--table> or B<--count>
+
+Print how many lines of each length, and the percent
+of all lines that are not longer than that.
+
+=item B<--unicode>
+
+Synonym for I<--iencoding utf8>.
+
+=item B<--version>
+
+Display version info and exit (sjd).
+
+=item B<--where> (or B<-n>)
+
+Report line numbers for all lines of each length.
+
+=back
+
+
+
+=head1 Known bugs and limitations
+
+=over
+
+=item BSD (and hence Mac OS X) C<wc> does not have the I<-L> option,
+so it is not used by this script.
+However, this script does provide I<--longest> to do the same thing.
+
+=back
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

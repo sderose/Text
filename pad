@@ -1,0 +1,132 @@
+#!/usr/bin/perl -w
+#
+# pad: pad lines to a given length
+#
+# 2006-10-03: Written by Steven J. DeRose.
+# 2007-12-07 sjd: -l, -c, Getopt.
+# 2010-09-10 sjd: perldoc, cleanup.
+#
+# To do:
+#    Add --column n to say where to insert padding
+#    Integrate into 'align'.
+#
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2012-09-12";
+
+my $column  = 0;
+my $left    = 0;
+my $padchar = " ";
+my $quiet   = 0;
+my $width   = 80;
+my $verbose = 0;
+
+
+# Process options
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+	"c=s"               => \$padchar,
+	"col|column=i"      => \$column,
+	"h|help|?"          => sub { system "perldoc $0"; exit; },
+	"l|left!"           => \$left,
+	"q|quiet!"          => \$quiet,
+	"v|verbose+"        => \$verbose,
+    "version"           => sub {
+		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+	},
+	"w|width=i"         => \$width
+	);
+
+($result) || die "pad: Bad options.\n";
+
+
+# Validate and default options
+#
+(length($padchar)==1) ||
+	die "-c (pad character) must specify a single character.\n";
+($column >= 0) ||
+	die "-col (column to insert padding at) must be >= 0.\n";
+
+
+###############################################################################
+# Main
+#
+while (my $line = <>) {
+	chomp($line);
+	my $needed = $width - length($line);
+	my $pad = ($needed > 0) ? ($padchar x $needed) : "";
+	if ($left) {
+		print "$pad$line\n";
+	}
+	elsif ($column > 0 && $column < length($line)) {
+		print substr($line,0,$column) . $pad . substr($line,$column) . "\n";
+	}
+	else {
+		print "$line$pad\n";
+	}
+}
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+pad [options]
+
+Adds padding characters to the end of each line, to make a certain length.
+
+
+
+=head1 Options
+
+=over
+
+=item * B<-c> I<char>
+
+Set pad character to use (default: space).
+
+=item * B<--column> I<n>
+
+Insert padding at column I<n>.
+
+=item * B<-l>
+
+Pad on left instead of right.
+
+=item * B<--version>
+
+Display version info and exit.
+
+=item * B<-w> I<num>
+
+Set width to pads lines to (default: 80)
+
+=back
+
+
+
+=head1 Related commands
+
+C<align>
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons 
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

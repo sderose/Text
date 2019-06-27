@@ -1,0 +1,241 @@
+#!/usr/bin/perl -w
+#
+# shiftLinesDown
+#
+# 2009-06-13: Written by Steven J. DeRose.
+# 2010-08-25 sjd: perldoc, conventional option names.
+# 
+# To do:
+#     Allow shifting up, too.
+#     Allow shifting until before/after another regex.
+#     Allow shifting a regex...regex block.
+#
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2012-09-12";
+
+my $expr             = "";
+my $iencoding        = "";
+my $ignoreCase       = 0;
+my $ilineends        = "U";
+my $nlines           = 1;
+my $oencoding        = "";
+my $olineends        = "U";
+my $overlap          = 1;
+my $quiet            = 0;
+my $verbose          = 0;
+
+
+###############################################################################
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "expr=s"                  => \$expr,
+    "h|help"                  => sub { system "perldoc $0"; exit; },
+    "iencoding=s"             => \$iencoding,
+    "ignorecase!"             => \$ignoreCase,
+    "ilineends=s"             => \$ilineends,
+    "n|nlines=i"              => \$nlines,  
+    "oencoding=s"             => \$oencoding,
+    "olineends=s"             => \$olineends,
+    "overlap!"                => \$overlap,
+    "q!"                      => \$quiet,
+    "unicode!"                => sub { $iencoding = "utf8"; },    
+    "v+"                      => \$verbose,
+    "version"                 => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    }
+    );
+
+($result) || die "Bad options.\n";
+
+
+###############################################################################
+# Set implied options, validate option values...
+#
+my $fh;
+my $file = shift;
+if ($file) {
+    open($fh, "<$file") || die "Can't find input file '$file'.\n";
+}
+else {
+    $fh = \*STDIN;
+}
+
+if ($iencoding ne "") {
+    binmode($fh, ":$iencoding");
+}
+if ($oencoding ne "") {
+    print "";
+    binmode(STDOUT, ":$oencoding");
+}
+
+$ilineends = uc(substr($ilineends."U",0,1));
+if    ($ilineends eq "M") { $/ = chr(13); }
+elsif ($ilineends eq "D") { $/ = chr(13).chr(10); }
+else {                      $/ = chr(10); }
+
+$olineends = uc(substr($olineends."U",0,1));
+if    ($olineends eq "M") { $\ = chr(13); }
+elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+else {                      $\ = chr(10); }
+
+($expr eq "") &&
+    die "No -expr value specified.\n";
+($nlines<1) &&
+    die "-nlines option (number of lines to shift) must be positive.\n";
+
+
+###############################################################################
+# Main
+#
+# Make an queue to keep pending lines. Insert matched lines at the top, and
+# every time we 'write' an output line, write and pop the bottom.
+#
+my @pending = ();
+for (my $i=0; $i<=$nlines; $i++) {
+    $pending[$i] = "";
+}
+
+my $delayed = 0;
+my $lnum = 0;
+
+while (my $rec = <$fh>) {
+    $lnum++;
+    chomp $rec;
+
+    my $matches = 0;
+    if ($ignoreCase) {
+       $matches = ($rec =~ m/$expr/io) ? 1:0;
+    }
+    else {
+       $matches = ($rec =~ m/$expr/o) ? 1:0;
+    }
+
+    if ($matches) {
+        $delayed++;
+        if (!$overlap && join("",@pending) ne "") {
+            warn "A previous matched line was still queued when "
+                . "line $lnum also matched.\n";
+        }
+        $pending[$nlines] .= $rec;
+    }
+    else {
+        print $rec;
+        my $toprint = shift @pending;
+        if ($toprint ne "") { print $toprint; }
+        push @pending, "";
+    }
+    
+} # EOF
+
+# Print any leftovers
+#
+for (my $i=0; $i<=$nlines; $i++) {
+    print shift @pending;
+}
+
+($quiet) || warn "Done, $lnum records processed, $delayed shifted down.\n";
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+shiftLinesDown [options] 
+
+For each line that matches some (Perl-style) regex, shift that line later
+in the file by some number of lines.
+
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<-e> I<regex>
+
+Shift lines that match this regex.
+
+=item * B<-i>
+
+Ignore case for matching.
+
+=item * B<--nlines> I<n>
+
+How many lines to shift down by (default: 1).
+
+=item * B<--iencoding> I<t>
+
+Charset to use for output.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--oencoding> I<t>
+
+Charset to use for output.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--overlap>
+
+Allow more than one line to be pending at once (see
+below). Default, use I<--nooverlap> to turn off.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version information and exit.
+
+=back
+
+
+
+=head1 Known Bugs/Limitations
+
+The semantics when adjacent or close lines match (that is, when two
+matching lines are within -nlines of each other), may not be obvious.
+Each matching line is queued when found; and the position in the queue
+to print from is shifted every time a non-matching line is printed. In
+other words, if line B matches while line A is still pending, line B
+does *not* count toward fulfilling the number of lines that line A will
+be shifted by. Use -nooverlap to be warned about each overlapping shift.
+
+
+
+=head1 Related commands
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons 
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

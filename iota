@@ -1,0 +1,672 @@
+#!/usr/bin/perl -w
+####!/opt/local/bin/perl5.22
+#
+# iota
+#
+# 2005-12-27: Written by Steven J. DeRose.
+# 2006-03-14: Fix --format option.
+# 2006-06-13: Add --nobreak. Fix padding. Allow multi-base options.
+# 2006-10-10 sjd: Add '-padchar', '-base alpha' to get character output.
+# 2007-03-14 sjd: Add chr, Alpha.
+# 2007-12-10 sjd: Add --repstring, change dft to {}. Input number fmts. Getopt.
+# 2008-01-02 sjd: Add --right.
+# 2009-09-09 sjd: Support utf8 output, --repstring.
+# 2011-03-06 sjd: Add {args}, --escape. Fix 0 handling.
+# 2012-01-09 sjd: Cleanup. Switch pad() and unescape() to use sjdUtils.pm.
+# 2012-01-27 sjd: Fix to use lpad/rpad correctly with --right and --padchar.
+#     Add --base roman and --base Roman.
+# 2015-08-27: --.
+# 2016-07-26: Add --base date, --dateFormat.
+# 2017-01-09: Fix --base date.
+# 2017-02-21: Fix --base date some more. Much better --format. Add isOkBase().
+#
+# To do:
+#    Allow \ for $repString.
+#    Permit --increment month.
+#    Add support for times, not just dates?
+#    Allow 1, 2, or 3 args for end, (start,end), (start,end,incr)?
+#    Support --base of !... to run shell command and insert result?
+#    Add --base 'uname'.
+#
+use strict;
+use Getopt::Long;
+use DateTime;
+use sjdUtils;
+use alogging;
+
+our $VERSION_DATE = "2017-02-21";
+my $ISO8601strftime = '%Y-%m-%d';
+my $dateFormatDft = '%a %Y-%m-%d';
+
+#print "Perl version number: " . $^V;
+
+# Option defaults
+#
+my $base             = 10;
+my $break            = 1;        # Line breaks between output items?
+my $dateFormat       = $dateFormatDft;  # *Output* format
+my $dateIncrement    = 'days';
+my $digits           = 0;        # No padding
+my $escape           = 1;
+my $format           = "";       # Just dump the number
+my $ignoreCase       = 0;
+my $increment        = 1;
+my $oencoding        = "";
+my $olineends        = "U";
+my $padchar          = "0";      # What character to pad with
+my $quiet            = 0;
+my $repstring        = "{}";     # String to replace in --format
+my $right            = 0;        # Pad on right side instead of left.
+my $start            = 1;
+my $verbose          = 0;
+
+
+# Process options
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "base=s"            => \$base,
+    "break!"            => \$break,
+    "dateFormat=s"      => \$dateFormat,
+    "dateIncrement=s"   => \$dateIncrement,
+    "digits|width=i"    => \$digits,
+    "escape!"           => \$escape,
+    "format=s"          => \$format,
+    "h|help|?"          => sub { system "perldoc $0"; exit; },
+    "increment=s"       => \$increment,
+    "oencoding=s"       => \$oencoding,
+    "olineends=s"       => \$olineends,
+    "padchar=s"         => \$padchar,
+    "q|quiet!"          => \$quiet,
+	"r|right!"          => \$right,
+    "repstring=s"       => \$repstring,
+    "start=s"           => \$start,
+    "unicode!"          => sub { $oencoding = "utf8"; },
+    "v|verbose+"        => \$verbose,
+    "version"           => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    );
+
+($result) || die "Bad options.\n";
+
+if ($oencoding ne "") {
+    print "";
+    binmode(STDOUT, ":$oencoding");
+}
+
+$olineends = uc(substr($olineends."U",0,1));
+if    ($olineends eq "M") { $\ = chr(13); }
+elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+else { }
+
+
+###############################################################################
+# Validate and default options
+#
+my $theDateTime = undef;  # Running date as ISO8601
+my $timeZone  = "GMT";
+my $theDateDuration = DateTime::Duration->new($dateIncrement=>1);
+
+sjdUtils::setVerbose($verbose);
+
+(isOkBase($base)) ||
+    die "Base " . $base . " not supported.\n";
+
+if ($base ne 'date') {
+    $start = int(getAnyNumber($start));
+}
+
+if ($base =~ m/^(roman)$/i) {
+    (sjdUtils::try_module("Roman::Roman")) || die
+        "Can't find CPAN module 'Roman' to support --base [Rr]oman.\n";
+}
+elsif ($base =~ m/^(alpha|chr)$/i) {
+    # Maybe should allow Greek and Hebrew, too?
+}
+elsif ($base eq 'date') {
+    if ($start eq 1) {  # Default to today
+        $theDateTime = DateTime->now('time_zone'  => "GMT");
+    }
+    elsif ($start =~ m/^(\d\d\d\d)-(\d\d)-(\d\d)$/) {
+        $theDateTime = DateTime->new(year => $1, month => $2, day => $3);
+        $start = 1; # Counts # days....
+    }
+    else {
+        die "Unrecognized --start '$start' for --date, must be yyyy-mm-dd.\n";
+    }
+    alogging::vMsg(1, "Starting date: '" .
+        $theDateTime->strftime($dateFormat) . "'");
+}
+
+$increment = int(getAnyNumber($increment));
+
+if ($digits < 0) {
+    warn "Kinda pointless to pad to " . $digits . " digits.\n";
+    $digits = 0;
+}
+
+if ($format ne "") {
+    (index($format,"$repstring")<0 && $format !~ m/\{.*?\}/) &&
+        die "No $repstring in the --format string.\n";
+    if ($escape) {
+        $format = sjdUtils::unbackslash($format);
+    }
+}
+
+(length($padchar) > 1) &&
+	die "-padchar cannot be more than one character.\n";
+if ($right && $padchar ne " ") {
+	warn "Are you sure you want --right with --padchar '$padchar'?\n";
+}
+
+# See if we have just a number left, as we ought
+if (scalar(@ARGV) != 1) {
+    die "Should have exactly one post-option argument.\n";
+}
+my $end = getAnyNumber($ARGV[0]);
+if ($end < 1) {
+    warn "May have options, then exactly one numeric argument, not '"
+        . join(" ",@ARGV) . "'.\n";
+    system "perldoc $0";
+   exit;
+}
+
+# Avoid infinite loops
+#
+if ($base ne "date") {
+    if (($end > $start && $increment <= 0) ||
+        ($end < $start && $increment >= 0)) {
+        die "$start to $end would take too long with increment $increment.\n";
+    }
+}
+
+
+###############################################################################
+###############################################################################
+sub isOkBase {
+    my ($base) = @_;
+    if (sjdUtils::isInteger($base) &&
+        $base >= 2 &&
+        ($base <= 32 || $base == 64)) { return 1; }
+    return $base =~ m/^(chr|roman|alpha|date)$/i;
+}
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+for (my $i=$start; $i<=$end; $i+=$increment) {
+    my $cur = $i;
+    if ($base !~ m/^\d+$/ || $base != 10) {
+        $cur = baseConvert($i, $base);
+    }
+    if ($right) {
+        $cur = sjdUtils::rpad($cur,$digits,$padchar);
+    }
+    else {
+        $cur = sjdUtils::lpad($cur,$digits,$padchar);
+    }
+
+    if ($format ne "") {
+        $cur = fillInFormat($i, $cur);
+    }
+
+    print "$cur";
+    ($break) && print "\n";
+} # EOF
+
+exit;
+
+
+
+###############################################################################
+# Turn a time struct into a printable date in yyyy-mm-dd form.
+#
+sub time2ISO8601 {
+    my ($t) = @_;
+    my $p = sprintf("%04d-%02d-%02d", 1900+$t->[5], 1+$t->[4], $t->[3]);
+    return($p);
+}
+
+###############################################################################
+# Replace the format string with the number in some form.
+#
+# Instances of {} may also include a few arguments:
+#       {base,digits,right,padChar}
+# The arguments have the same meaning as like-named options, and override them.
+#
+sub fillInFormat {
+    my ($n, $formattedN) = @_;
+    my $result = $format;
+    $result =~ s/\{(\w+)?(,\d+)?(,\d+)?(,.)?\}/{
+        my $bs = defined $1 ? $1 : $base;
+        (isOkBase($bs)) || die "Unknown base '$bs' in template '$format'.\n";
+        my $dg = defined $2 ? substr($2,1) : $digits;
+        my $rt = defined $3 ? substr($3,1) : $right;
+        my $pd = defined $4 ? substr($4,1) : $padchar;
+        #warn "fillInFormat: $bs, $dg, $rt, $pd.\n";
+        if ($3) {
+            sjdUtils::rpad(baseConvert($n, $bs), $dg, $pd);
+         }
+         else {
+            sjdUtils::lpad(baseConvert($n, $bs), $dg, $pd);
+         }
+         }/ge;
+    $result =~ s/$repstring/$n/g;
+    $n = $result;
+} #  fillInFormat
+
+
+###############################################################################
+# Convert to different bases (including various named --base values such as
+# 'roman', 'alpha', 'date',.... Doesn't work for negative numbers.
+#
+sub baseConvert {
+    my ($n, $nbase) = @_;
+
+    if (!defined $nbase) {
+        die "No base passed for baseConvert of $n.\n";
+    }
+
+    if ($n<0 && $nbase != 10) {
+        die "Sorry, can't do negative numbers except in decimal.\n";
+    }
+
+    my $result = "";
+    my $value = 1;
+
+    if ($nbase eq "chr") {
+        #warn "chr for $n, which is " . chr($n) ".\n";
+        ($n>255 && $oencoding ne "utf8") && die
+            "out of range unless you use --unicode/-oencoding utf8.\n";
+        return(chr($n));
+    }
+    if ($nbase =~ m/^alpha$/i) {
+        my $list = (substr($nbase,0,1) eq 'A')
+            ? "?ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            : "?abcdefghijklmnopqrstuvwxyz";
+        return(($n<1 || $n>26) ? "?":substr($list,$n,1));
+    }
+    if ($nbase =~ m/^roman$/i) {
+        if (substr($nbase,0,1) eq 'r') {
+            return(Roman::roman($n));
+        }
+        else {
+            return(Roman::Roman($n));
+        }
+    }
+    if ($nbase =~ m/^date$/i) {
+        my $printable = $theDateTime->strftime($dateFormat);
+        $theDateTime->add($theDateDuration);
+        return($printable);
+    }
+    if ($nbase eq "64") {
+        return(base64($n));
+    }
+
+    # Find biggest power that fits
+    while ($value*$nbase <= $n) {
+        $value *= $nbase;
+    }
+    while ($value > 0) {
+        my $digNum = int($n / $value);
+        my $digChar = substr("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",$digNum,1);
+        $result = $result . $digChar;
+        $n -= $digNum * $value;
+        $value = int ($value/$nbase);
+    }
+    return $result;
+} # baseConvert
+
+
+sub getAnyNumber {
+    my $n = $_[0];
+    $n = oct($n) if ($n =~ m/^0/);
+    return($n);
+} # getAnyNumber
+
+
+
+###############################################################################
+###############################################################################
+#
+
+=encoding utf-8
+
+=pod
+
+=head1 Usage
+
+iota [options] limit
+
+Prints a series of numbers, characters, or times.
+either as-is or filled in to a place(s) in a template.
+This can be useful for making lists to use in code or documents.
+
+By default, prints decimal numbers, in ASCII, starting at 1 and
+going up to I<limit>. Use I<--start> to change the starting point. For example,
+
+    iota --base decimal --start 20 22
+
+produces:
+
+    20
+    21
+    22
+
+Output can be in many forms, chosen with the I<--base> option.
+Numeric bases from 2 to 36, and 64, are available.
+So are Roman numerals, characters chosen by Unicode code point,
+the Latin alphabet (a special case of characters), and dates.
+
+For example, you can output code to initialize a hash that maps
+literal lower-case Greek letters to their Unicode code points with
+(the code shown is for Perl, but you can generate whatever you want):
+
+    iota --unicode --base chr
+      --format '    "{}" => 0x{16,4},' --start 0x3b1 0x3c9
+
+The current value is filled in wherever you put "{}".
+Any instance of {} may also set its own values to override the
+I<--base>, I<--digits>, I<--right>, and I<--padChar> options.
+See the I<--format> option (below) for more information.
+
+
+=head1 Options
+
+(prefix 'no' to negate when applicable)
+
+=over
+
+=item * B<--base> I<b>
+
+Output the values in base I<b>, chosen from the following list.
+When using I<--format>, you can control the base separately for each
+place the value is inserted (see I<--format>, below, for details).
+
+=over
+
+=item * I<2> through I<36> (the digits are from C<0-9A-Z>),
+
+=item * I<64> (the digits are C<A-Za-z0-9+/>),
+
+=item * I<chr> the values are treated as ASCII/Latin-1 code points
+(or full-fledged Unicode if I<--unicode> is specified),
+and converted to characters. For example, 65-90 => A-Z, 97 => a, 48 => 0,....
+
+=item * I<alpha> uses C<a-z>,
+
+=item * I<Alpha> uses C<A-Z>.
+
+=item * I<roman> uses lower-case Roman numerals.
+
+=item * I<Roman> uses upper-case Roman numerals.
+
+=item * I<date> counts by date/time units.
+Day 1 is the local today by default, but can be changed with I<--start> (q.v.).
+The I<end> argument and the I<--increment> option must still be integers,
+representing numbers of days (however, you can change that to other units
+with I<--dateIncrement>).
+
+The B<output> date format can be anything provided by I<strftime>(),
+as specified using the I<--dateFormat> option (q.v.).
+The %-codes available are listed below (in a later section).
+
+=back
+
+
+=item * B<--break>
+
+Put a line-break between items (the default).
+
+=item * B<--dateFormat> I<f>
+
+Only applicable when I<--base date> is also specified. I<f> must be a format
+string as defined for the I<strftime> function.
+Default: "%a %Y-%m-%d", which produces dates like
+C<Mon 2016-07-25>.
+
+See Section L<--dateFormat codes> (below), or C<man strftime>,
+for a list of the %-codes available.
+
+=item * B<--dateIncrement>
+
+One of:
+"years", "months", "weeks", "days", "hours", "minutes", "seconds", "nanoseconds".
+This is passed to the Perl I<DateTime::Duration> constructor, and used to
+increment the time when using I<--base date>. Default: C<days>.
+
+See also I<--base> and I<--start>.
+
+=item * B<--digits> I<d>
+
+Pad the values to a minimum of I<d> digits (default: 0 (no padding)).
+See also I<--padchar> and I<--right>).
+
+=item * B<--escape>
+
+Allow C-style backslash escapes in I<--format> text
+(default; use I<--noescape> to turn off).
+
+=item * B<--format> I<s>
+
+Print string I<s>, with the current value inserted in place of any occurrences
+of '{}' (like C<find> and some other *nix commands; you can change I<{}>
+to some other string using I<repstring>).
+
+You can also use the following arguments between the braces,
+to override formatting options
+for a particular instance (you can't omit arguments in the middle, though):
+
+=over
+
+'{base}' to insert the value as a number in a given base (see I<--base>),
+
+'{base,width}' to specify the base and padding width (see I<--digits>), or
+
+'{base,width,side}' to specify the base, padding width,
+and which side to pad (I<1> to right-pad; 0 or omitted to left-pad
+(see I<--right>).
+
+'{base,digits,side,c}' to specify the base, padding width,
+side, and pad character (see I<--padchar>). Unusual pad characters
+(particularly "}") might not work.
+
+=back
+
+=item * B<-h>
+
+Print this help and exit.
+
+=item * B<--increment> I<i>
+
+Increment by I<i> instead of 1 (can be negative).
+
+=item * B<--oencoding> I<t> Charset to use for output.
+
+=item * B<--olineends> I<t> Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--padchar> I<p>
+
+Character or string to pad with (default '0').
+See I<--digits> to control the width to pad to, I<--right> to pad on
+the right instead of the left, and I<--format> to use this capability
+inside templates.
+
+=item * B<--right>
+
+Pad on the right instead of the left
+(see also I<--padchar>, I<--digits>, and I<--format>).
+
+=item * B<--repstring> I<s>
+
+When used with I<--format>, lets you use I<s> to specify where to insert values,
+rather than the default ("{}").
+However, this does not (yet) affect "{args}" forms.
+
+=item * B<--start> I<n>
+
+Start counting from I<n> instead of the default 1.
+
+With the I<--base date> option, I<n> must be set to a date of the form
+yyyy-mm-dd, or to 1 (the default, which means the current local day).
+There is not yet any way to set the starting I<time>.
+
+With any I<--base> other than I<date>, the value
+must be an integer (which can be specified in octal, decimal, or hex).
+See also I<--base>, I<--dateFormat>, I<--dateIncrement>.
+
+=item * B<--unicode>
+
+Synonym for I<--oencoding utf8>.
+This differs from most of my scripts, where I<--unicode>
+affects input, not output. This is because there is no input to this script.
+
+=item * B<--version>
+
+Display version information and exit.
+
+=item * B<--width> I<n>
+
+Synonym for I<--digits>.
+
+=back
+
+
+
+=head1 --dateFormat codes
+
+These are same as for C<strftime>.
+
+=over
+
+=item '%a' The abbreviated weekday name according to the current locale.
+
+=item '%A' The full weekday name according to the current locale.
+
+=item '%b' The abbreviated month name according to the current locale.
+
+=item '%B' The full month name according to the current locale.
+
+=item '%c' The preferred date and time representation for the current locale.
+
+=item '%C' The century number (year/100) as a 2-digit integer.
+
+=item '%d' The day of the month as a decimal number (range 01 to 31).
+
+=item '%D' Equivalent to %m/%d/%y. Not recommended, because ambiguous.
+
+=item '%e' Like %d, the day of the month as a decimal number, but a leading zero is replaced by a space.
+
+=item '%E' Modifier: use alternative format, see below.
+
+=item '%F' Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)
+
+=item '%G' The ISO 8601 week-based year (see NOTES) with century as a decimal number. The 4-digit year corresponding to the ISO week number (see %V). This has the same format and value as %Y, except that if the ISO week number belongs to the previous or next year, that year is used instead. (TZ)
+
+=item '%g' Like %G, but without century, that is, with a 2-digit year (00-99). (TZ)
+
+=item '%h' Equivalent to %b.
+
+=item '%H' The hour as a decimal number using a 24-hour clock (range 00 to 23).
+
+=item '%I' The hour as a decimal number using a 12-hour clock (range 01 to 12).
+
+=item '%j' The day of the year as a decimal number (range 001 to 366).
+
+=item '%k' The hour (24-hour clock) as a decimal number (range 0 to 23); single digits are preceded by a blank. (See also %H.) (TZ)
+
+=item '%l' The hour (12-hour clock) as a decimal number (range 1 to 12); single digits are preceded by a blank. (See also %I.) (TZ)
+
+=item '%m' The month as a decimal number (range 01 to 12).
+
+=item '%M' The minute as a decimal number (range 00 to 59).
+
+=item '%n' A newline character.
+
+=item '%N' Nanoseconds (range 000000000 to 999999999). It is a non-POSIX extension and outputs a nanoseconds if there is floating seconds argument.
+
+=item '%O' Modifier: use alternative format, see below.
+
+=item '%p' Either "AM" or "PM" according to the given time value, or the corresponding strings for the current locale. Noon is treated as "PM" and midnight as "AM".
+
+=item '%P' Like %p but in lowercase: "am" or "pm" or a corresponding string for the current locale. (GNU)
+
+=item '%r' The time in a.m. or p.m. notation. In the POSIX locale this is equivalent to %I:%M:%S %p.
+
+=item '%R' The time in 24-hour notation (%H:%M). For a version including the seconds, see %T below.
+
+=item '%s' The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ)
+
+=item '%S' The second as a decimal number (range 00 to 60). (The range is up to 60 to allow for occasional leap seconds.)
+
+=item '%t' A tab character.
+
+=item '%T' The time in 24-hour notation (%H:%M:%S).
+
+=item '%u' The day of the week as a decimal, range 1 to 7, Monday being 1. See also %w.
+
+=item '%U' The week number of the current year as a decimal number, range 00 to 53, starting with the first Sunday as the first day of week 01. See also %V and %W.
+
+=item '%V' The ISO 8601 week number of the current year, range 01 to 53, where week 1 is the first week that has at least 4 days in the new year. See also %U and %W.
+
+=item '%w' The day of the week as a decimal, range 0 to 6, Sunday being 0. See also %u.
+
+=item '%W' The week number of the current year as a decimal number, range 00 to 53, starting with the first Monday as the first day of week 01.
+
+=item '%x' The preferred date representation for the current locale without the time.
+
+=item '%X' The preferred time representation for the current locale without the date.
+
+=item '%y' The year as a decimal number without a century (range 00 to 99).
+
+=item '%Y' The year as a decimal number including the century.
+
+=item '%z' The +hhmm or -hhmm numeric timezone (that is, the hour and minute offset from UTC).
+
+=item '%Z' The timezone or name or abbreviation.
+
+=item '%%' A literal % character.
+
+=back
+
+
+=head1 Known bugs and limitations
+
+Although you can change the "{}" string (see I<--format>), that doesn't
+work for the "{args...}" form.
+
+I<--base date> does not account for leap seconds.
+
+I<--start> with I<--base date> only allows yyyy-mm-dd dates (although you can
+use I<--dateFormat> to get the full I<strftime> range of I<output> formats.
+
+
+=head1 Related commands
+
+C<Roman> -- CPAN package to do Roman-numeral conversion.
+
+C<Time::Piece> -- CPAN package to manage dates and times.
+
+C<strftime> -- Perl, C, and POSIX function to formats dates.
+
+
+=head1 Notes
+
+The numbers for I<--start>, I<--increment>, and I<limit> can be given in
+decimal, octal (0777), hex (0xfff), or binary (0b1111).
+
+Extra points if you know where the name comes from.
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

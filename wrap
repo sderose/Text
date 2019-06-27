@@ -1,0 +1,466 @@
+#!/usr/bin/perl -w
+#
+# wrap: wrap STDIN to a given column, with padding (opposite of 'fold')
+#
+# Written by Steven J. DeRose, 2006-08-29.
+# 2007-05-31 sjd: Add $VERSION_DATE.
+# 2007-12-14 sjd: -t, Getopt, --free.
+# 2009-06-28 sjd: Protect from padWidth == 0.
+# 2011-10-25 sjd: Clean up. Default --width to $COLUMNS if defined. Add --delim.
+#     Don't put gutter string after last item on line
+# 2013-01-25 sjd: Add --truncate.
+# 2013-04-15 sjd: Add --iencoding, --oencoding, --listEncodings, --stripItems,
+#     --vertical/--ls. Add $recnum. Rename --delim to --fieldSep.
+#     Don't limit nCols due to gutter following last col.
+# 2013-10-24: Actually print the gutters. Duh.
+# 2015-03-19: Hyphens.
+# 2016-01-21: Avoid div0 for nCols.
+#
+# Todo:
+#     Expand tabs.
+#     Pad wide items to *multiple* of pad+gutter?
+#
+use strict;
+use Getopt::Long;
+use Encode;
+
+use sjdUtils;
+use alogging;
+
+our $VERSION_DATE = "2016-01-21";
+
+my $blank         = 0;
+my $fieldSep      = "\\s+";
+my $free          = 0;
+my $gutterChar    = " ";
+my $gutterWidth   = 1;
+my $iencoding     = "utf8";
+my $lpadWidth     = 0;
+my $oencoding     = "utf8";
+my $olineends     = "";
+my $padChar       = " ";
+my $quiet         = 0;
+my $rpadWidth     = 0;
+my $stripItems    = 1;
+my $tabstops      = 8;
+my $truncate      = 0;
+my $width         = $ENV{COLUMNS} || 79;
+my $verbose       = 0;
+my $vertical      = 0;
+
+
+###############################################################################
+# Process options
+#
+my %getoptHash = (
+    "blank!"           => \$blank,
+    "fieldSep=s"        => \$fieldSep,
+    "free!"             => \$free,
+    "gutterwidth=n"     => \$gutterWidth,
+    "gutterchar=s"      => \$gutterChar,
+    "h|help|?"          => sub { system "perldoc $0"; exit; },
+    "iencoding=s"       => \$iencoding,
+    "listEncodings"     => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "lpad=i"            => \$lpadWidth,
+    "oencoding=s"       => \$oencoding,
+    "olinends=s"        => \$olineends,
+    "padchar=s"         => \$padChar,
+    "q|quiet!"          => \$quiet,
+    "rpad=n"            => \$rpadWidth,
+    "stripItems!"       => \$stripItems,
+    "tabstops=n"        => \$tabstops,
+    "truncate!"         => \$truncate,
+    "v|verbose+"        => \$verbose,
+    "version"            => sub {
+      die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    "ls|vertical!"       => \$vertical,
+    "w|width=n"          => \$width,
+    );
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+
+###############################################################################
+# Validate and default options
+#
+sjdUtils::setVerbose($verbose);
+
+($width>10) || die
+    "-w too small.\n";
+(length($padChar)==1) || die
+    "--padchar can only be one character.\n";
+(length($gutterChar)==1) || die
+    "--gutterchar can only be one character.\n";
+
+if ($iencoding) {
+    binmode(STDIN, ":encoding($oencoding)");
+}
+
+if ($oencoding) {
+    print "";
+    binmode(STDOUT, ":encoding($oencoding)");
+}
+
+if ($olineends) {
+    $olineends = uc(substr($olineends."U",0,1));
+    (index("MDU",$olineends) >= 0) || die
+        "Unknown --olineends type $olineends.\n";
+    if ($olineends eq "M") { $\ = chr(13); }
+    elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+}
+
+($rpadWidth>0 && $lpadWidth>0) && die
+    "Can't have both --lpadWidth and --rpadWidth.\n";
+
+my $padWidth = $rpadWidth + $lpadWidth;
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $out     = "";
+my $recnum  = 0;
+my $nBlanks = 0;
+my $gs      = substr(($gutterChar x $gutterWidth),0,$gutterWidth);
+my $nCols   = 0;
+
+if ($vertical) {
+    doVerticalLayout();
+}
+else {
+    doHorizontalLayout();
+}
+
+print("$out\n"); $out = ""; # show any residual buffer
+
+($quiet) || warn
+    "Done, $recnum records, $nBlanks blank, col width $padWidth (plus " .
+    "$gutterWidth gutter), $nCols columns.\n";
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+sub doVerticalLayout {
+    # Load all the data, to find longest item and number of items.
+    my $longest = 0;
+    my $longEG = "";
+    my @items = ();
+    while (<>) {
+        $recnum++;
+        chomp $_;
+        #warn "$recnum: $_\n";
+        my @curItems = ();
+        if ($fieldSep ne "") { @curItems = split(/$fieldSep/,$_); }
+        else { $curItems[0] = $_; }
+        for my $item (@curItems) {
+            #warn "  item: '$item'\n";
+            if ($item =~ m/^\s*$/) {         # blank line
+                $nBlanks++;
+                next;
+            }
+            if ($stripItems) {
+                $item = sjdUtils::normalizeXmlSpace($item);
+            }
+            if ($longest < length($item)) {  # new longest item
+                $longest = length($item);
+                $longEG = $item;
+            }
+            push @items, $item;
+        } # for
+    }
+
+    # Figure out what column width we really want
+    if ($padWidth == 0) {                    # User didn't specify padding
+        $padWidth = $longest;
+    }
+    elsif ($padWidth < $longest) {           # User padding not enough
+        if (!$truncate) {
+            alogging::vMsg(0, "Widest item is [$longest], but pad width is " .
+                           $padWidth . ", and --truncate is off.");
+            $padWidth = $longest;
+        }
+    }
+
+    if ($lpadWidth && $padWidth > $lpadWidth) {
+        $lpadWidth = $padWidth;
+    }
+    elsif ($padWidth > $rpadWidth) { # default to rpad
+        $rpadWidth = $padWidth;
+    }
+
+    # Calculate layout parameters
+    my $nItems = scalar(@items);
+    $nCols = int(($width+$gutterWidth-1) / ($padWidth+$gutterWidth));
+    if ($nCols<1) { $nCols = 1; }
+    my $nRows = int($nItems/$nCols);
+    if ($nItems % $nCols) { $nRows++; }
+    alogging::vMsg(1, "Vertical layout:\n" .
+                   "  items $nItems, longest $longest (e.g. '$longEG'),\n" .
+                   "  lpad $lpadWidth, rpad $rpadWidth, gutter $gutterWidth," .
+                   " display width $width, columns $nCols, rows $nRows.");
+
+    # Lay it out and print
+    for (my $row=0; $row<$nRows; $row++) {
+        my $lineBuf = "";
+        for (my $col=0; $col<$nCols; $col++) {
+            my $itemNumber = ($col*$nRows) + $row;
+            my $item = $items[$itemNumber] || "";
+            $item = padIt($item);
+            $lineBuf .= $item;
+        }
+        $lineBuf =~ s/\s+$//;
+        print "$lineBuf\n";
+    }
+} # doVerticalLayout
+
+
+###############################################################################
+#
+sub doHorizontalLayout {
+    while (<>) {
+        $recnum++;
+        if ($_ =~ m/^\s*$/) { # blank line
+            $nBlanks++;
+            if ($blank == 0) {
+                print("$out\n\n"); $out = "";
+            }
+            next;
+        }
+
+        my @items = ($fieldSep ne "") ? split(/$fieldSep/,$_) : ($_);
+        #warn "#items: " . scalar @items . ": $_\n";
+        foreach my $item (@items) {
+            #warn "Item: '$item'\n";
+            if ($stripItems) {
+                $item = sjdUtils::normalizeXmlSpace($item);
+            }
+            $item = padIt($item);
+            if (length($out)+length($item)+length($gs) >= $width+$gutterWidth) {
+                print("$out\n");
+                $out = "";
+            }
+            $out .= ($item . $gs);
+        }
+    } # EOF
+} # doHorizontalLayout
+
+
+###############################################################################
+###############################################################################
+#
+sub padIt {
+    my ($s) = @_;
+    my $needed = $padWidth-length($s);
+    if ($needed < 0) {
+        if ($truncate) {
+            $s = substr($s,0,$needed);
+        }
+        elsif ($free) { # even out to later column
+            $s .= $gutterWidth;
+            $needed = $padWidth - (length($s) % $padWidth) + 1;
+        }
+    }
+    if ($lpadWidth) {
+        $s = sjdUtils::lpad($s, $lpadWidth+$gutterWidth, $padChar);
+    }
+    elsif ($rpadWidth) {
+        $s = sjdUtils::rpad($s, $rpadWidth+$gutterWidth, $padChar);
+    }
+    return($s);
+} # padIt
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+wrap [options]
+
+Accumulate fields from input lines,
+and re-wrap to make full lines, optionally padding for nice columns.
+
+By default:
+
+    Fields are separated by /\s+/ (see I<--fieldSep>)
+    Wraps to $COLUMNS-1 (or 79) columns (see I<--width>)
+    Doesn't wrap across blank lines (see I<--blank>)
+    Normalizes white-space runs to a single blank
+
+For multi-column layouts use I<--rpadWidth> or I<--lpadWidth>.
+
+For column-major layouts (similar to C<ls>) use I<--vertical>.
+
+
+
+=head1 Options
+
+=over
+
+=item * B<--blank>
+
+Ignore blank lines (instead of stopping wrap at each).
+Only applies when I<--vertical> is off.
+
+=item * B<--fieldSep> I<regex>
+
+Use I<regex> (default I<\\s+>) as the separator to split lines into items.
+If set to "", lines will not be split (thus, they should probably be
+short already, such as having one word per line).
+
+=item * B<--free>
+
+If an item is too wide, do I<not> bump over to the next
+multiple of I<--lpadWidth> or I<--rpadWidth>. Instead, just put in a gutter
+and go on (leaving later items in the line, if any, unaligned).
+See also I<--truncate>.
+
+=item * B<--gutterWidth> I<n>
+
+Set how much space between columns (default: 1).
+
+=item * B<--gutterChar> I<c>
+
+Set what char to use between columns (default: space).
+
+=item * B<--iencoding> I<e>
+
+Assume this character set for input.
+
+=item * B<--lpadWidth> I<n>
+
+Pad on the left to width I<n> (default: no pad),
+See also I<--rpadWidth> and I<--padChar>.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
+
+=item * B<--ls> or B<--vertical>
+
+Arrange items in columns like C<ls>, instead of rows.
+When this is done, the whole input is loaded at once, to measure things.
+Most useful along with I<--lpadWidth> or I<--rpadWidth>. For example:
+
+    apple           elderberry          ice_cream_beans  melon
+    banana          fig                 jujube           nectarine
+    cherry          grapefruit          key_lime         orange
+    date            honeydew            lingenberry      pear
+
+=item * B<--oencoding> I<e>
+
+Use this character set for output.
+
+=item * B<--olinends> I<t>
+
+Output M (mac), D (dos), or U (*nix, default) line-ends.
+
+=item * B<--padChar> I<c>
+
+Set the pad character (default: space; strings ok).
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--rpadWidth> I<n>
+
+Pad on the right to width I<n> (default: no pad).
+Use to make multi-column layouts line up.
+See also I<--lpadWidth> and I<--padChar>.
+
+=item * B<--stripItems>
+
+Normalize white-space in each item (following XML rules)
+before any padding. Default: on.
+
+=item * B<--truncate>
+
+If an item is too wide, discard characters from the end to make it fit
+the I<--lpadWidth> and I<--rpadWidth> constraints. See also I<--free>.
+
+=item * B<--version>
+
+Display version info and exit.
+
+=item *  B<--vertical>
+
+Synonym for I<--ls>.
+
+=item * B<--width> I<w>
+
+Wrap to fill a maximum display width of I<w>-1 characters.
+Default: environment variable $COLUMNS if set, otherwise 80.
+
+=back
+
+
+
+=head1 Known bugs and limitations
+
+Does not expand tabs before counting (can pipe through C<expand> first).
+
+Does not support the full range of tabular file formats available
+from C<TabularFormats.pm>; just I<--fieldSep>.
+
+I<--vertical> can set column width automatically, but horizontal can't.
+
+
+
+=head1 Related commands
+
+=over
+
+=item C<fold> -- insert line-breaks to keep lines down to a certain
+maximum width.
+
+=item C<cut> and C<paste> -- extract certain field/items
+from each line of a file,cor join two files side-by-side.
+
+=item C<align> -- adjust fields/items of each line to the same width, so they
+display in nice columns. Similar to this script, but never moves things
+across line boundaries, just adjusts them within the same line.
+
+=item C<tab2xml> -- convert CSV and similar files to XHTML or similar tables.
+
+=item C<makeHTMLtable> -- similar to C<tab2xml>, but combines corresponding
+lines of multiple files.
+
+=item C<ls> -- C<wrap> can get you similar wrapping to what I<ls> does by
+default.
+
+=back
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

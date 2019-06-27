@@ -1,0 +1,547 @@
+#!/usr/bin/perl -w
+#
+# Make a table comparing several sorted files, record by record.
+#
+# Written 2007-?? by Steven J. DeRose.
+# 2007-08-29 sjd: Hack from maketagtable.
+# 2007-12-17 sjd: strict, -d, -b, get closer to working.
+# 2009-08-16 sjd: Debug.
+# 2009-08-20 sjd: Finish -fieldNum, -show. Better headings.
+# 2012-10-05, 2013-12-16: Clean up.
+#
+# To do:
+#     Only show words that occur in one key version.
+#
+use strict;
+use Getopt::Long;
+
+use sjdUtils;
+use alogging;
+
+our $VERSION_DATE     = "2013-12-16";
+
+my $break       = 0;
+my $color       = 1;
+my $correlate   = 0;
+my $delim       = "\\s+";
+my $fieldNum    = 0;
+my $ignoreCase  = 0;
+my $listonly    = 0;
+my $max         = 0;
+my $min         = 0;
+my $normws      = 0;
+my $quiet       = 0;
+my $shorten     = 1;
+my $show        = "x";
+my $sort        = 0;
+my $sortOptions = "";
+my $split       = 0;
+my $table       = 1;
+my $tickInterval= 1000;
+my $verbose     = 0;
+
+
+# Process options
+#
+my %getoptHash = (
+    "break!"          => \$break,
+    "color!"          => \$color,
+    "correlate!"      => \$correlate,
+	"delim=s"         => \$delim,
+    "fieldnum=i"      => \$fieldNum,
+    "h|help|?"        => sub { system "perldoc $0"; exit; },
+    "i"               => \$ignoreCase,
+    "b|normws!"       => \$normws,
+    "listonly"        => \$listonly,
+    "max=i"           => \$max,
+    "min=i"           => \$min,
+    "q|quiet!"        => \$quiet,
+    "shorten!"        => \$shorten,
+    "show=s"          => \$show,
+    "sort!"           => \$sort,
+    "split!"          => \$split,
+    "table!"          => \$table,
+    "tick=i"          => \$tickInterval,
+    "v|verbose+"      => \$verbose,
+    "version"         => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    );
+
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die("Bad options.\n");
+
+
+###############################################################################
+# Validate and default options, set up files
+#
+my $newline = ($break) ? "\n":"";
+
+my $showIsNumeric = 0;
+if ($show =~ m/^\s*\d+\s*$/) {
+    $showIsNumeric = $show - 0;
+    ($showIsNumeric > 0) || die "-show value invalid.\n";
+}
+else {
+    $show = lc(substr("$show ",0,1));
+    ($show =~ m/[xr]/) || die "-show must be r, x, or a field number.\n";
+}
+
+(scalar(@ARGV) > 1) ||
+	die "Must specify at least 2 files.\n";
+
+my @fhlist = ();
+foreach my $f (@ARGV) {
+	($verbose) && warn "Setting up file number ".(scalar @fhlist) . ": '$f'\n";
+	my $ff = $f;
+	if ($sort) {
+		(my $fesc = $f) =~ s/(['" \\])/\\$1/g; # Protect shell
+		my $fout = $f;
+		$fout =~ s/^.*\///;
+		$fout =~ s/['"\\ ]/_/g;
+		$fout = "/tmp/$fout.sorted";
+		my $cmd = "sort $sortOptions <$fesc >$fout";
+		($verbose) && warn "Running: $cmd\n";
+		system "$cmd" || die "Sort failed.\n";
+		$ff = $fout;
+	}
+	local *F;
+    open(F, "<$ff") || die "Unable to open file '$ff'.\n";
+    my $t = *F;
+    push @fhlist, $t;
+}
+my $nfiles = scalar @fhlist;
+($verbose) && warn "Opened $nfiles files.\n";
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+# Load up the first record from each file
+#
+my @pendingRecords = ();
+my @recnum = ();
+my @hasHitEOF = ();
+my $buf;
+for (my $i=0; $i<scalar @fhlist; $i++) {
+	my $curfh = $fhlist[$i];
+    if ($buf = <$curfh>) {
+		chomp $buf;
+        ($verbose>1) && warn "First record of file $i is '$buf'.\n";
+        $pendingRecords[$i] = $buf;
+		$recnum[$i] = 1;
+    }
+    else {
+        ($verbose>1) && warn "Hit EOF on file $i.\n";
+        $pendingRecords[$i] = "";
+        $hasHitEOF[$i]++;
+    }
+}
+
+# Run an n-way merge: Find the file with the smallest next item,
+# then print a row showing that for all the files that have it.
+
+writeHeader();
+
+print "<tbody>\n";
+
+my @corr = (); # index by $nfiles*f1 + f2.
+my @uncorr = (); # index by $nfiles*f1 + f2.
+my $rownum = 1;
+my $prev = "";
+my $small = smallest();
+
+while ($small ne "") { # Watch out for "0" which might show up....
+	if ($tickInterval>0 && ($rownum%$tickInterval) == 0) {
+	    warn "At word number $rownum\n";
+	}
+    ($verbose>1) && warn "\nSmallest found to be '$small'\n";
+	if ($split && $prev ne "" && substr($prev,0,1) ne substr($small,0,1)) {
+		my $initial = substr($small,0,1);
+		print "</tbody></table>\n" .
+		"<h2 id=\"$initial\">$initial</h2>\n" .
+		"<table>\n<tbody>\n";
+	}
+    issueSmallest($small, $rownum);
+    $rownum++;
+	$prev = $small;
+    $small = smallest();
+}
+
+print "</tbody>\n</table>";
+
+reportCorr();
+($quiet) || warn "Done, $rownum rows.\n";
+
+exit;
+
+
+###############################################################################
+###############################################################################
+# Print the accumulated correlation table.
+#
+sub reportCorr {
+    if ($correlate) {
+        print "\n\n<h1>Pairwise vocabulary correlation:</h1>\n";
+        print "<table>\n";
+
+        print "<thead>\n";
+        print "<tr>\n";
+        print "<th>-</th>\n";
+        doFileNameHeaders();
+        print "</tr>\n";
+        print "</thead>\n\n";
+
+        print "<tbody>\n";
+        my $m = "";
+        for (my $i=0; $i<$nfiles; $i++) {
+            $m = sprintf("<tr><td>File %3d</td>  ",$i);
+            for (my $j=0; $j<$nfiles; $j++) {
+                my $index = $i*$nfiles + $j;
+                my $tot = $corr[$index]+$uncorr[$index];
+                my $c = ($tot) ? ($corr[$index]*100.0/$tot) : 0.0;
+                my $attrs = ($color) ? colorAttr($c):"";
+                $m .= sprintf("<td$attrs>%6.3f</td>", $c);
+            } # j
+            print "$m</tr>\n";
+        } # i
+        print "</tbody>\n</table>\n";
+    } # corr
+
+    print "</body>\n</html>";
+} # reportCorr
+
+
+# Parameter comes in as a percentage; map to color value.
+#
+sub colorAttr {
+	my $c;
+    if ($_[0] < 33) {
+		 my $n = 155 + 3 * int($_[0]);
+		 $c = sprintf(" style=\"color:#%02x0000\"", 255);
+	}
+	elsif ($_[0] < 67) {
+		 my $n = 155 + 3 * (int($_[0]-0.33));
+		 $c = sprintf(" style=\"color:#%02x%02x00\"", 255, 255);
+	}
+    else {
+		 my $n = 155 + 3 * int($_[0]-0.67);
+		 $c = sprintf(" style=\"color:#00%02x00\"", 255);
+	}
+
+	return($c);
+}
+
+
+###############################################################################
+# Write a full table row, with the record included for files for which it
+# matches the smallest key, and nbsp elsewhere. Delete the issued records.
+#
+sub issueSmallest {
+    my $s = $_[0];
+	my $rownum = $_[1];
+
+    # For each file, show/advance the record if it matches $smallest.
+	my @appearsIn = ();
+    my $appearCount = 0;
+	my $buf = "";
+    for (my $i=0; $i<scalar @fhlist; $i++) {
+        if ($hasHitEOF[$i]) {
+			$buf .= "<td class=\"EOF\">&nbsp;</td>$newline";
+		}
+		elsif (getKey($pendingRecords[$i],$i) eq $small) {
+			$appearsIn[$i]++; $appearCount++;
+            if ($showIsNumeric) {
+				my @tokens = split($delim,$pendingRecords[$i]);
+				$buf .= ((defined $tokens[$showIsNumeric])
+					? "<td>$tokens[$showIsNumeric]</td>"
+					: "<td>+++</td>") . $newline;
+			}
+			elsif ($show eq "x") {
+				$buf .= "<td>X</td>$newline";
+			}
+			else {
+				$buf .= "<td>$pendingRecords[$i]</td>$newline";
+			}
+			advanceRecord($i);
+		}
+		else {
+			$buf .= "<td>&nbsp;</td>$newline";
+		}
+    } # for
+
+	if ($max>0 && $appearCount>$max) { $buf=""; return; }
+	if ($min>0 && $appearCount<$min) { $buf=""; return; }
+
+	if ($correlate) {
+		for (my $i=0; $i<$nfiles; $i++) {
+			for (my $j=0; $j<$nfiles; $j++) {
+				my $index = $i*$nfiles + $j;
+				if ($appearsIn[$i]) {
+					if ($appearsIn[$j]) { $corr[$index]++; }
+					else { $uncorr[$index]++; }
+				}
+				else {
+					if ($appearsIn[$j]) { $uncorr[$index]++; }
+					else { } # neither -- irrelevant
+				}
+			} # j
+		} # i
+	} # corr
+
+	if ($table) {
+	    print "<tr>$newline";
+		# print "<td>$rownum</td>$newline";
+		print "<td>'$small'</td>$newline";
+		print "<td>($appearCount)</td>$newline";
+		print $buf;
+	    print "</tr>\n$newline";
+	}
+} # issueSmallest
+
+
+###############################################################################
+# Find the smallest key in any of the files. We're always buffering in the
+# pending line of each file.
+#
+sub smallest {
+    my $s = "~~~~~~~~~~~~";
+    for (my $i=0; $i<scalar @fhlist; $i++) {
+		my $key = getKey($pendingRecords[$i],$i);
+		($verbose>1) &&
+		    warn "File $i has: '$pendingRecords[$i]', key '$key'\n";
+		if ($key lt $s) { $s = $key; }
+    }
+    return ($s);
+} # smallest
+
+
+###############################################################################
+# Move file #n forward to next record.
+#
+sub advanceRecord {
+	my $i = $_[0];
+	my $buf;
+	my $curfh = $fhlist[$i];
+    if ($buf = <$curfh>) {
+		chomp $buf;
+        $pendingRecords[$i] = $buf;
+		$recnum[$i]++;
+    }
+    else {
+        ($verbose>1) && warn "Hit EOF on file $i.\n";
+        $pendingRecords[$i] = "";
+        $hasHitEOF[$i]++;
+    }
+} # advanceRecord
+
+
+###############################################################################
+# Extract the key from a string (generally a record)
+#
+sub getKey {
+	my $rec = $_[0];
+	my $filenum = $_[1];
+	my $rc = $rec;
+	if ($rc eq "") { return(""); }
+	$rc =~ s/^\s+//; # Prevent spurious 1st 'field'.
+    if ($fieldNum>0) {
+		my @fields = split($delim,$rc);
+		if (scalar @fields >= $fieldNum) {
+			$rc = $fields[$fieldNum-1];
+		}
+		else {
+			warn "Not enough fields in record $recnum[$filenum] "
+				. " of file $filenum ($ARGV[$filenum]). Need $fieldNum, got "
+				. scalar(@fields) . "):\n    '$rec'\n";
+			for my $f (@fields) { warn "    $fields[$f]\n"; }
+			die "Exit.\n";
+			return("");
+		}
+	}
+	if ($ignoreCase) {
+		$rc = lc($rc);
+	}
+	if ($normws) {
+		$rc =~ s/\s+/ /g;
+		$rc =~ s/^\s+//;
+		$rc =~ s/\s+$//;
+	}
+	return($rc);
+} # getKey
+
+
+###############################################################################
+#
+sub writeHeader {
+	print "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\"
+    \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">
+<html xmlns=\"http://www.w3.org/1999/xhtml\">
+<head>
+	<title>Comprison</title>
+	<meta name=\"generator\" content=\"makeComparisonFromLists\" />
+	<style type=\"text/css\">
+        table    { border:thin black solid; font-size:smallest;
+				   border-collapse:collapse; }
+		tr       { border:thin black solid; }
+		td       { border:thin black solid; width:0.9in; }
+		th       { border:thin black solid; width:0.9in; }
+	</style>
+</head>
+
+<body>
+<table>
+";
+
+($table) || return;
+
+print "
+<thead>
+<tr>
+<th>Word</th>
+<th>Occ. in</th>
+";
+	doFileNameHeaders();
+	print "</tr>\n";
+	print "</thead>\n\n";
+} # writeHeader
+
+
+sub doFileNameHeaders {
+	my $i = 0;
+	foreach my $f (@ARGV) {
+		$i++;
+		my $short = $f;
+		if ($shorten) {
+			$short =~ s/\..*$//;
+			$short =~ s/ ?Translat(ion|ed)//;
+			$short =~ s/New Testament/NT/;
+			$short =~ s/Old Testament/OT/;
+			$short =~ s/ ?Version//;
+			$short =~ s/The //;
+		}
+	    print "<th>$short<br />($i)</th>\n";
+	}
+}
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+makeComparisonFromLists [options] [files]
+
+Merges all the files, so each becomes a column in an HTML table.
+The files must be sorted already. Matching entries go in same row.
+You can merge only on a certain field, so for example, you can use
+files with frequency counts, such as produced by 'uniq -c'.
+
+
+=head1 Options
+
+(negate option with 'no' prefix when applicable):
+
+=over
+
+=item * B<--break>
+
+Put each C<tr> and C<td> on a separate line.
+
+=item * B<--color>
+
+Colorize the correlation table (default).
+
+=item * B<--correlate>
+
+Calculate pairwise vocabulary correlations (slow).
+
+=item * B<--delim> I<expr>
+
+Field-delimiter regex (default '$dft_delim').
+
+=item * B<-i>
+
+Ignore case (must sort that way first).
+
+=item * B<-b>
+
+Normalize whitespace before comparing.
+
+=item * B<-f> I<n>
+
+Use field number I<n>.
+
+=item * B<--max> I<n>
+
+Only show words that appear in at least this many sources.
+
+=item * B<--min> I<n>
+
+Only show words that appear in at most this many sources.
+
+=item * B<--quiet> OR B<-q>
+Suppresses most messages.
+
+=item * B<--shorten>
+
+Try to abbreviate column headers.
+
+=item * B<--show> I<s>
+
+What to put in each cell:
+  x (default): just a check for version that have it.
+  n (number): the specified field from the input record,
+as for 'uniq -c' files: '-f 2 -show 1'
+  r: The whole record.
+
+=item * B<--sort>
+
+Sort each file before merge (only for Latin-1 charset).
+
+=item * B<--split>
+
+Make each initial letter a separate table.
+
+=item * B<--tick> I<n>
+
+Issue progress message after every I<n> words.
+
+=item * B<--verbose> OR B<-v>
+Add extra messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+
+=head1 Known bugs and limitations
+
+Comparison is always string, not numeric.
+
+
+
+=head1 Related commands
+
+C<maketagtable> -- does similar job, but on element lists in DTDs.
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

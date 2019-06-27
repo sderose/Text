@@ -1,0 +1,2561 @@
+#!/usr/bin/perl -w
+#
+# globalChange
+#
+# 2010-08-25: Written by Steven J. DeRose.
+# 2010-09-12 sjd: Cleanup. Use cp's backup options.
+# 2011-03-11 sjd: Improve doc.
+# 2011-10-04 sjd: Add package ChangeInfo, unify all the change-spec options.
+# 2011-11-07 sjd: Debugging last set of changes.... Implement --optPersistent.
+# 2012-01-04 sjd: Improve --test and --verbose. sjdUtils. Drop --color.
+# 2012-03-14ff sjd: Add --color back, I miss it. vMsg.
+#     Add --interactive. Ditch optX args in favor of usual regex syntax.
+#     Drop --from/-to. Start --fieldChoice. Add makeDiffLine(). Use eval() to
+#     support regex modifiers and RHS backrefs.
+# 2012-03-22 sjd: Ditch --bdir, --bext, just use 'cp -b'. Do changes outbound
+#     instead of copy out and change back. Don't touch unchanged files at all.
+#     Add ReadKey for --interactive. Add --zero.
+# 2012-04-04 sjd: Copy and truncate the temp file, so permissions copy.
+# 2012-05-30 sjd: Add --recursive, report more detailed stats.
+# 2012-07-09 sjd: Sync with TabularFormats.
+# 2012-10-01 sjd: Support STDIN. Simplify ChangeInfo use and discard several
+#     functions. Clean up regex apply, pre-compile, add --compileRegex option.
+#     Add --global. Finish hooking up TabularFormats. Rest of modifiers.
+# 2012-10-08 sjd: Better problem reporting. Off-by-one in makeDiffLine.
+#     Make /g work (not compilable with qr//). \n in RHS. Add --perfile.
+#     Fix/clean stats logic and names.
+# 2012-12-03 sjd: Update color handling for sjdUtils changes. Add --iString.
+# 2013-02-06 sjd: Group persistent options into %exprOptions.
+#     Let -f files set options via lines starting with "-". Rest of messages
+#     to STDERR where they belong. Add output buffering via outputALine().
+# 2013-05-13ff: Fix various bugs in -r. Support backslashed delims in -e.
+# 2013-06-27f: Add finalize() to write buffered output lines at EOF.
+#     Get rid of spurious output. Fix $ofh. Make apply() take \@fields.
+#     Ditch $istr in favor of MsgPush/MsgPop. Work on --pre.
+# 2013-12-15ff: Clean up, @fields bug, avoid truncating temp file, fix
+#     --fieldChoice. Fix bug that wrote "ARRAY(...)" at top of output file.
+#     Add --showMatchCounts. Change cp to avoid ---preserve and -b for BSD.
+# 2015-02-05: Hyphens. Dont' show every change with --test unless also -v.
+#     Better tracing/reporting. Cleaner interaction logic. Add --max.
+#     Drop getARecord(). Add --backupExtension, --backupDirectory.
+#     File handling. Set up apply's eval() strings in constructor, not loop.
+# 2015-02-25ff: Work on backreferences. Spit out setupRegex. Handle escaping
+#     for more cases of weirdness in requested regex changes. Add --multiDest.
+#     Avoid copying to dest at start, by switching to "cp --attributes -p".
+# 2015-08-15: Add --maxLinesChanged. Start 'contig' command.
+# 2016-07-11: Add --firstPerFile, --lastPerFile, --prepend.
+# 2016-08-26: Much better --dry-run and --showChanges reporting.
+# 2017-04-19f: Add --showResults, --hiliteResults.
+# 2017-06-01: Add --sideBySide option to makeDiffLine to do side-by-side.
+# 2018-04-18: Allow for non-/ regex delims.
+#
+# To fix:
+#     Escaping in cases like:
+#     "s/::\\$options\\['\(\w+\)'\\]/::x('\1')/" *
+#     Treat arg as -e if it has slashes.
+#     Test and sync back-references with eval() code in renameFiles cmd.
+#     Fix "number of changes" in line to count /g instances right.
+#     Test features: --multidest, --dropEmptiedLines, --interactive changes.
+#     Test piping in and out.
+#     Test named capture groups.
+#
+# To do:
+#     Add "exchange with next line"?
+#     Add multidest command to show line changed each way.
+#     multidest with /g needs to iterate or something....
+#     Maybe suppress final line-check with multiDest?
+#     Report # files each change affected (not just total changes).
+#     Finish --pre, --post, --span (span x fields)?
+#     Add option to keep but comment out original form of lines.
+#
+# Extensions:
+#     Document how to do special chars in input exprs (-d, -e, --fileOfExprs)
+#     Document how to refer to filename/path, and ser number, in exprs?
+#     Make --fieldChoice accept field *names*.
+#     Separate RHS for successive instances of match (per line, overall)
+#     --multidest but applying to successive matches (in line or overall)
+#     RHS access to match-number in line and total and of this change
+#     Option to restrict changes to XML gi/aname/avalue/markup/content?
+#     Handle compressed files transparently.
+#     Option to catch variants of character in regex (&#65;, \x...)?
+#     Use Perl (?adlupimsc)... to turn modifiers on/off in mid-pattern?
+#     Feature to re-align replacement text somehow?
+#     Finish range of occurrence numbers, --firstPerFile, --lastPerFile.
+#
+# Possible regex extensions:
+#     (\w+)**(\s+)   -->  (\w+)(\s+\w+)*  (maybe also '++')
+#     ['"]^^  -->  (['"])[^\1]*\1
+#     \h for hyphens/dashes
+#     \q for quote character (and \l and \r)
+#     \Q for balanced quoted string?
+#     \p{Po} etc.
+#
+use strict;
+use warnings;
+use Getopt::Long;
+use Encode;
+use Term::ReadKey;
+use File::Path;
+
+use sjdUtils;
+use alogging;
+use alogging;
+use TabularFormats;
+
+our $VERSION_DATE = "2018-04-18";
+
+
+###############################################################################
+# Options
+#
+my $backup           = 1;
+my $backupDirectory  = '';
+my $backupExtension  = "bak";
+my $color            = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
+my $compileRegex     = 1;
+my $delim            = "/";
+my $dropEmptiedLines = 0;
+my @exprs            = ();
+my $fileOfExprs      = '';
+my $fileStart        = 1;
+my $firstPerFile     = 0;
+my $force            = 0;
+my $hiliteResults    = 0;
+my $iencoding        = '';
+my $ilineends        = '';
+my $instanceBegin    = 0;
+my $instanceEnd      = 0;
+
+my $interactive      = 0;
+my $iString          = "  ";
+my $lastPerFile      = 0;
+my $list             = 0;
+my $maxChanges       = 0;
+my $maxLinesChanged  = 0;
+my $oencoding        = '';
+my $olineends        = '';
+my $perFile          = 0;
+my $prepend          = "";
+my $quiet            = 0;
+my $recursive        = 0;
+my $showChanges      = 0;
+my $showAllMatches   = 0;
+my $showMatchCounts  = 0;
+my $showResults      = 0;
+my $sideBySide       = 0;
+my $super            = 1; # Try to make changeInfo::apply faster.
+my $test             = 0;
+my $tickInterval     = 10000;
+my $verbose          = 0;
+my $vSep             = '|';
+my $zero             = 0;
+
+my $sourceColor      = 'bold';
+my $matchColor       = 'yellow';
+my $askColor         = 'green';
+my $errorColor       = 'red';
+my $resultColor      = 'red';
+
+sub ask { print(sjdUtils::colorize($askColor, $_[0]) . "\n"); }
+sub err { print(sjdUtils::colorize($errorColor, $_[0]) . "\n"); }
+
+my %exprOptions = ( # Options copied into each changeExpr
+    "fieldChoice"    => 0,          # Which field to look in?
+    "global"         => 0,          # Change all occurrences in field?
+    "ignoreCase"     => 0,
+    "multiDest"      => 0,          # Can RHS have multiple choices?
+    "multiSep"       => '|',
+    "instanceBegin"  => 0,
+    "instanceEnd"    => 0,
+    "pre"            => "",         # Regex that must be in preceding context
+    "preLines"       => 1,          # How many lines in that context
+    "post"           => '',         # Regex that must be in following context
+    "postLines"      => 1,          # How many lines in that context
+    "span"           => 1,          # How many lines the 'from' regex may span
+);
+
+my $tmpFile = "/tmp/globalChange_" . int(rand(100000)) . ".out";
+
+(my $tfmt = new TabularFormats()) ||
+    dieCleanly("Could not construct TabularFormats instance.");
+
+
+###############################################################################
+#
+my %getoptHash = (
+    "backup!"               => \$backup,
+    "backupDirectory=s"     => \$backupDirectory,
+    "backupExtension=s"     => \$backupExtension,
+    "color!"                => \$color,
+    "sourceColor=s"         => \$sourceColor,
+    "matchColor=s"          => \$matchColor,
+    "askColor=s"            => \$askColor,
+    "errorColor=s"          => \$errorColor,
+    "resultColor=s"         => \$resultColor,
+
+    "compileRegex!"         => \$compileRegex,
+    "dropEmptiedLines!"     => \$dropEmptiedLines,
+    "fileStart!"            => \$fileStart,
+    "firstPerFile=i"        => \$firstPerFile,
+    "lastPerFile=i"         => \$lastPerFile,
+
+    "force!"                => \$force,
+    "h|help"                => sub { system "perldoc $0"; exit; },
+    "hiliteResults!"        => \$hiliteResults,
+    "iencoding=s"           => \$iencoding,
+    "ilineends=s"           => \$ilineends,
+    "interactive!"          => \$interactive,
+    "iString=s"             => \$iString,
+    "list!"                 => \$list,
+    "listEncodings"         => sub {
+        warn "\nEncodings available:\n";
+        my $last = ''; my $buf = '';
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = '';
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "maxChanges=i"          => \$maxChanges,
+    "maxLinesChanged=i"     => \$maxLinesChanged,
+    "oencoding=s"           => \$oencoding,
+    "olineends=s"           => \$olineends,
+    "perFile!"              => \$perFile,
+    "prepend=s"             => \$prepend,
+    "q|quiet!"              => \$quiet,
+    "r|recursive!"          => \$recursive,
+    "reset"                 => sub {
+        Term::ReadKey::ReadMode 1;
+    },
+    "showChanges!"          => \$showChanges,
+    "showAllMatches!"       => \$showAllMatches,
+    "showMatchCounts!"      => \$showMatchCounts,
+    "showResults!"          => \$showResults,
+    "sideBySide=i"          => \$sideBySide,
+    "test|dry-run|dryrun!"  => \$test,
+    "tickInterval=i"        => \$tickInterval,
+    "unicode!"              => sub { $iencoding = $oencoding = "utf8"; },
+    "v|verbose"             => sub {
+        $verbose++;
+        sjdUtils::setVerbose($verbose);
+    },
+    "version"               => sub {
+        dieCleanly("Version of $VERSION_DATE, by Steven J. DeRose\n");
+    },
+    "vSep=s"                => \$vSep,
+    "zero!"                 => \$zero,
+
+    # Options that are stored with individual change exprs ("sticky"):
+    "fieldChoice=i"         => \$exprOptions{'fieldChoice'},
+    "global!"               => \$exprOptions{'global'},
+    "i|ignoreCase!"         => \$exprOptions{'ignoreCase'},
+    "instance=i"            => sub {
+        $exprOptions{"instanceBegin"} = $exprOptions{"instanceEnd"} = $_[0];
+    },
+    "instanceBegin=i"       => \$exprOptions{'instanceBegin'},
+    "instanceEnd=i"         => \$exprOptions{'instanceEnd'},
+    "multiDest!"            => \$exprOptions{'multiDest'},
+    "multiSep=s"            => \$exprOptions{'multiSep'},
+    "pre=s"                 => \$exprOptions{'pre'},
+    "preLines=i"            => \$exprOptions{'preLines'},
+    "post=s"                => \$exprOptions{'post'},
+    "postLines=i"           => \$exprOptions{'postLines'},
+    "span=i"                => \$exprOptions{'span'},
+
+    # Options for specifying individual changes
+    "d=s"                   => sub {      # delete matches
+        saveChangeSpec($_[1], '', '');
+    },
+    "e=s"                   => sub {      # sed-like -e
+        saveChangeSpecFromExpr($_[1]);
+    },
+    "f|fileOfExprs=s"       => sub {      # file of changes
+        $fileOfExprs = $_[1];
+        open(F, $fileOfExprs) ||
+            dieCleanly("-f file '$fileOfExprs' could not be opened.\n");
+        if ($iencoding) { binmode(F, ":encoding($iencoding)"); }
+        my $fcount = 0;
+        while (my $x=<F>) {
+            ($verbose) && warn "Read: $x";
+            chomp $x;
+            if ($x =~ m/^\s*$/ || $x =~ m/^\s*#/) {    # blanks and comments
+                next;
+            }
+            elsif ($x =~ m/^--?(\w+)\s+(.*)/) {        # options
+                my $opt = $1; my $val = $2;
+                if (defined $exprOptions{$1}) {
+                    $exprOptions{$1} = $2;
+                }
+                else {
+                    dieCleanly("Unknown option in -f file $fileOfExprs:\n$x\n");
+                }
+            }
+            else {
+                $fcount++;
+                saveChangeSpecFromExpr($x);
+            }
+        } # EOF
+        close F;
+        vMsg(1,"Added $fcount changes from file $fileOfExprs.");
+    }, # fileOfExprs
+    );
+
+$tfmt->addOptionsToGetoptLongArg(\%getoptHash);
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || dieCleanly("Bad options.\n");
+
+binmode(STDERR, ":utf8");
+my $delta              = "\x{0394}";
+my $finitePart         = "\x{2add}";
+my $strictlyEquiv      = "\x{2263}";
+my $symmetry           = "\x{232f}";
+my $rCircled           = "\x{24c7}";
+
+
+###############################################################################
+# Set implied options, validate option values...
+#
+sjdUtils::setVerbose($verbose);
+sjdUtils::setColors($color || $hiliteResults);
+if ($color) {
+    # type, color, lvl, pre, suf, escape, indent
+    alogging::defineMsgType("none", "black");              # "No changes"
+    alogging::defineMsgType("some", "green");              # "<n> changes"
+    alogging::defineMsgType("raw",  "black",0,'','',0,0);  # no indent
+}
+alogging::defineMsgType('prompt', 'green', 0, '    ', '', '', 0, 0);
+
+# Check on the changes, and see if there's any --fieldChoice going on.
+# If so, figure the highest field-number in use.
+#
+(scalar(@exprs)>0 || $prepend) ||
+    dieCleanly("No change(s) specified. Try the '-help' option.\n");
+
+if ($prepend) {
+    $prepend = sjdUtils::unbackslash($prepend);
+    alogging::vMsg(1, "Prepend string is '$prepend'.\n");
+}
+
+my $maxFieldChoice = 0;
+my $nWithMultiDest = 0;
+for my $ex (@exprs) {
+    if ($ex->{fieldChoice} > $maxFieldChoice) {
+        $maxFieldChoice = $ex->{fieldChoice};
+    }
+    if ($ex->{isMultiDest}) {
+        $nWithMultiDest++;
+    }
+}
+if ($nWithMultiDest>0) {
+    $interactive = 1;
+}
+
+if ($verbose || $list) {
+    hMsg(0,"List of changes in effect:");
+    alogging::MsgPush();
+    my $colorSlash = sjdUtils::colorize("bold/yellow", "/");
+    for (my $i=0; $i<scalar(@exprs); $i++) {
+        vMsg(0, $exprs[$i]->toString($colorSlash));
+    }
+    alogging::MsgPop();
+}
+
+if ($backupDirectory && !-d $backupDirectory) {
+    my $datetime = sjdUtils::isoTime();
+    if (index($backupDirectory, "%d")) {
+        (my $date = $datetime) =~ s/T.*//;
+        $backupDirectory =~ s/%d/$date/g;
+    }
+    if (index($backupDirectory, "%t")) {
+        (my $time = $datetime) =~ s/.*?T//;
+        $time =~ s/:/./g;
+        $backupDirectory =~ s/%t/$time/g;
+    }
+    $backupDirectory =~ s|/*$|/|; # Make single '/' at end.
+    my $errsRef;
+    my %opts = { "error"=>\$errsRef };
+    make_path($backupDirectory, \%opts);
+    if (scalar(@{$errsRef})) {
+        vMsg(0, "Can't create backup directory at '$backupDirectory'.");
+        vMsg(-1, "Errs: " . "\n".join(@{$errsRef}));
+    }
+    vMsg(0, "Backups going to '$backupDirectory'.");
+}
+
+$ilineends = uc(substr($ilineends."U",0,1));
+if    ($ilineends eq "M") { $/ = chr(13); }
+elsif ($ilineends eq "D") { $/ = chr(13).chr(10); }
+else { }
+
+$olineends = uc(substr($olineends."U",0,1));
+if    ($olineends eq "M") { $\ = chr(13); }
+elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+else { }
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $totalItems         = 0;
+my $dirs               = 0;
+my $filesRegular       = 0;
+my $filesBackup        = 0;
+my $filesMissing       = 0;
+my $totalFilesChanged  = 0;
+my $totalLinesChanged  = 0;
+my $totalLinesChangedCF= 0;
+my $quitCF             = 0; # Set if we're done with current file
+my $totalChanges       = 0;
+my @totalChangesByExpr = ();
+my $totalRecs          = 0;
+
+my $failedOpen         = 0;
+my $failedTempOpen     = 0;
+my $failedChanges      = 0;
+my $failedCopy         = 0;
+
+# User might want to refer to these within changes....
+#
+my $recnum             = 0;
+my $curFileName        = '';
+
+# If the user locked *any* of their changes to particular fields, then
+# we operate on everything field-wise. So make a global flag that tells
+# us whether they ever specified --fieldChoice.
+my $needToParse = 0;
+for (my $i=0; $i<scalar(@exprs); $i++) {
+    if ($exprs[$i]->{fieldChoice}) { $needToParse = 1; last; }
+}
+
+if ($interactive) {
+    Term::ReadKey::ReadMode 3;
+}
+
+if (scalar(@ARGV) > 0) {
+    while (my $file = shift) {
+        doOneItem($file, 1);
+    }
+}
+else {
+    if (-t STDIN) { warn "Waiting on STDIN...\n"; }
+    if ($iencoding) {
+        binmode(*STDIN, ":encoding($iencoding)");
+    }
+    if ($oencoding) {
+        binmode(*STDOUT, ":encoding($oencoding)");
+    }
+    alogging::MsgPush();
+    my $nc = doOneFile("-", *STDIN, *STDOUT);
+    alogging::MsgPop();
+}
+
+Term::ReadKey::ReadMode 1;
+
+($quiet) || report();
+
+exit;
+
+
+###############################################################################
+###############################################################################
+# Parse a regex change into from, to, and modifiers, and save it.
+#
+sub saveChangeSpecFromExpr {
+    my ($expr) = @_;
+    ($expr =~ m/^s(\W)/) || main::dieCleanly(
+        "Expression must start with 's' and a delimiter:\n    $expr\n");
+    if ($delim ne "/") {
+        alogging::vMsg(0,
+            "(internal-use) delim '$delim' for eval() is experimental.");
+    }
+
+    # Parse and slightly validate.
+    my $exprCopy = $expr;
+    my @parts = split(/(?<![\\])$delim/, $expr);
+    if ($verbose) {
+        my $msg = "parsed to:\n";
+        for (my $i=0; $i<scalar(@parts); $i++) {
+            $msg .= sprintf("    %d: '%s'\n", $i, $parts[$i]);
+        }
+        vMsg(1, $msg);
+    }
+
+    if (0) {  # Obsolete
+        my @parts = ();
+        while ($exprCopy =~ s/^(.*?[^\\])?$delim//) {
+            push @parts, $1;
+        }
+        if ($exprCopy ne '') {
+            push @parts, $exprCopy;
+        }
+    }
+
+    my $problem = (scalar(@parts)<3 || scalar(@parts)>4) ? 1:0;
+    my ($theS, $from, $to, $mods, $bogus) = @parts;
+    if ($problem || $verbose>=2) {
+        hMsg(0,"Expression #" . scalar(@exprs) . " parse:\n" .
+            "    expr:  '$expr'\n" .
+            "    parts: #" . join("#", @parts) . "#\n" .
+            "    delim: '" . ($delim || '') . "'\n" .
+            "    s:     '" . ($theS  || '') . "'\n" .
+            "    from:  '" . ($from  || '') . "'\n" .
+            "    to:    '" . ($to    || '') . "'\n" .
+            "    mods:  '" . ($mods  || '') . "'\n" .
+            "    extra: '" . ($bogus || '') . "'\n"
+            );
+        ($problem) && dieCleanly(
+            "  Could not parse regex change, found " . (scalar(@parts)) . "parts.\n");
+    }
+    for (my $i=0; $i<5; $i++) {
+        if (!defined $parts[$i]) { $parts[$i] = ''; }
+    }
+    saveChangeSpec($from || '', $to || '', $mods || '');
+} # saveChangeSpecFromExpr
+
+# Save a new change object to the list (in @exprs).
+#
+sub saveChangeSpec {
+    my ($from, $to, $mods) = @_;
+    if (!$mods) { $mods = ''; }
+    if ($mods && $mods =~ m/([^igmsexadlu])/) {
+        eMsg(0, "Bad modifier in change: '$mods'");
+    }
+    if (!$to)   { $to   = ''; }
+    if (!$quiet && $to =~ m/\\\d/) {
+        eMsg(0, "Warning: \\+digit on right-hand side '$to'. Should be \$?");
+    }
+    my $chg = ChangeInfo::new ChangeInfo(
+        scalar(@exprs), $from, $to, $mods, scalar(@exprs));
+    push @exprs, $chg;
+}
+
+
+###############################################################################
+###############################################################################
+# Handle one node (file or directory).
+# Returns: Success flag.
+#
+sub doOneItem {
+    my ($file, $depth) = @_;
+    $totalItems++;
+
+    if (!$force && $file =~ m/(\.bak|~|#)$/) {    # Types to ignore
+        vMsg(1, "Apparent backup file skipped: '$file'");
+        $filesBackup++;
+        return(0);
+    }
+
+    if (!-e $file) {                              # Can't find
+        eMsg(0, "Can't find file '$file'.");
+        $filesMissing++;
+        return(0);
+    }
+
+    if (-d $file) {                               # Directory
+        $dirs++;
+        if (!$recursive) {
+            vMsg(1, "Directory '$file' skipped.");
+            return(0);
+        }
+        vMsg(1, "Recursing into directory '$file'");
+        my $theDir;
+        opendir($theDir, $file);
+        alogging::MsgPush();
+        while (my $subitem = readdir($theDir)) {
+            ($subitem =~ m/^\./) && next;
+            doOneItem("$file/$subitem", $depth+1);
+        }
+        alogging::MsgPop();
+        closedir($theDir);
+        return(1);
+    }
+
+    # Could check for specials (cf grep options?)
+    # -w File is writable by effective uid/gid.
+    # -l File is a symbolic link.
+    # -p File is a named pipe (FIFO), or Filehandle is a pipe.
+    # -S File is a socket.
+    # -b File is a block special file.
+    # -c File is a character special file.
+    # -u File has setuid bit set.
+    # -g File has setgid bit set.
+    # -B File is a "binary" file (opposite of -T).
+
+    my $ifh;
+    if (!open($ifh, "<$file")) {                  # Can't open
+        eMsg(0, "Can't open input file '$file'.");
+        $failedOpen++;
+        return(0);
+    }
+    if ($iencoding) {
+        binmode($ifh, ":encoding($iencoding)");
+    }
+
+    # Copy then overwrite, so the permissions get set right.
+    # Change to do this later, if we indeed made changes.
+    #my $cmd = "cp -P $file $tmpFile";
+    #vMsg(1, "Copying: '$cmd'");
+    #system $cmd || eMsg(0, "Failed to create temp file: ", $cmd);
+    #vMsg(1, "    temp file created, size " . (-s $tmpFile));
+
+    my $ofh;
+    if (!open($ofh, ">$tmpFile")) {
+        eMsg(0, "Can't open temp output file '$tmpFile'.");
+        $failedTempOpen++;
+        return(0);
+    }
+    #vMsg(1, "    temp file opened, size " . (-s $tmpFile));
+
+    if ($oencoding) {
+        binmode($ofh, ":encoding($oencoding)");
+    }
+
+    # Do the changes, putting results in the temp file
+    #
+    alogging::MsgPush();
+    my $nc = doOneFile($file, $ifh, $ofh);
+    alogging::MsgPop();
+    close $ifh;
+    close $ofh;
+
+    # Report and finalize (unless --test)
+    #
+    if ($nc < 0) {
+        vMsg(0, "  Changes failed for file '$file'");
+        $failedChanges++;
+        return(0);
+    }
+    if ($nc == 0) {
+        ($zero) && alogging::Msg(
+            "none", ">>> No change(s) in file '$file'");
+        return(1);
+
+    }
+    $totalFilesChanged++;
+    if ($test) {
+        alogging::Msg(
+            "some", ">>> $nc change(s) in file '$file'" .
+            ($test ? " (DRY RUN)" : ''));
+        return(1);
+    }
+
+    my $cmd = "cp --attributes -p '$file' '$tmpFile'";
+    system "$cmd";
+    if ($@) {
+        alogging::eMsg(0, "Failed to copy permissions/attributes: $@");
+    }
+
+    if ($backup) {
+        my $tgt = "$backupDirectory$file.$backupExtension";
+        system "mv '$file' '$tgt'";
+        if ($@) {
+            alogging::eMsg(0,
+               "Failed to mv file '$file' to backup '$tgt'");
+            return(0);
+        }
+    }
+
+    $cmd = "mv '$tmpFile' '$file'";
+    alogging::vMsg(1, "Attempting save: $cmd");
+    system "$cmd";
+    if ($@) {
+        eMsg(0, "Copy of '$tmpFile' back to '$file' failed, cmd was:");
+        vMsg(0, "    #$cmd#");
+        $failedCopy++;
+        return(0);
+    }
+    vMsg(1, "Successfully moved temp file '$tmpFile' to replace '$file'.");
+    return(1);
+} # doOneItem
+
+
+###############################################################################
+###############################################################################
+# Crank through a single file doing all the changes.
+# Return the number of actual changes done in the file.
+#
+sub doOneFile {
+    my ($file, $ifh, $ofh) = @_;
+    if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
+        hMsg(0, "Starting file '$file'");
+    }
+    $filesRegular++;
+    $recnum = 0;
+    $curFileName = $file;
+    $totalLinesChangedCF = 0;
+
+    if ($maxFieldChoice > 0) {
+        $tfmt->attach($ifh) || eMsg(0, "Couldn't access '$file'.");
+    }
+
+    my $headRec = '';
+    my @headNames = undef;
+    if ($tfmt->getOption("header")) {
+        $headRec = $tfmt->readHeader();
+        @headNames = @{$tfmt->parseHeader($headRec)};
+        vMsg(1, "Header parsed to: " . join("|",@headNames));
+    }
+
+    my $nChangesInFile = 0;               # Total changes applied to this file
+    if ($prepend ne "") {
+        print $ofh $prepend;
+        $totalFilesChanged++;
+        $totalChanges++;
+        $nChangesInFile++;
+    }
+
+
+    my $quit = 0;                   # Set if user says 'q' like in emacs
+    my $doContig = 0;               # User said to do til a line doesn't match
+    my $doAllTheRest = 0;           # Set if user says '!' like in emacs
+    my $wasLastLineChanged = 0;     # To handle 'contiguous' option.
+
+    while (1) { # Per input record
+        my $originalRec = ($maxFieldChoice > 0) ? $tfmt->readRecord() : <$ifh>;
+        if (!defined $originalRec) { last; }
+        $recnum++;
+        $totalRecs++;
+
+        chomp $originalRec;
+        if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
+            Msg("some", sprintf(
+                "At line %12s (total), total changes: %12s, now in %s.",
+                 lpadc($totalRecs), lpadc($totalChanges), $file));
+        }
+        if ($quit) {  # Quoth the user, "nevermore".
+            outputALine($ofh, $originalRec);
+            next;
+        }
+
+        # Convert line to an array of 1 or more fields
+        my @originalFields;
+        if ($needToParse) {
+            @originalFields = @{$tfmt->parseRecordToArray($originalRec)};
+            vMsg(3, "Rec $recnum: parsed '$originalRec' into " .
+                (scalar(@originalFields)-1) .
+                " fields: [\n    " . ("\n   ".join(@originalFields)) . "]");
+        }
+        else {
+            @originalFields = ( '', $originalRec );
+            vMsg(3, "Rec $recnum: '" . $originalFields[1] . "'");
+        }
+
+        if ($verbose >= 4) {
+            my $msg = '';
+            if ($needToParse) {
+                $msg .= "(" . (scalar(@originalFields)-1) . " fields)";
+            }
+            $msg .= "$originalRec";
+            alogging::vMsg(0, "Starting line $recnum: ", printable($msg));
+        }
+
+        my @newFields = @originalFields;  # REALLY COPIES
+        #print "The fields:\n    " . ("\n   ".join(@newFields));
+
+        # ====================================================================
+        # Factor out
+        #
+        my $lineStats = {
+            'nExprsMatchedInLine' => 0,
+            'nChangesInLine'      => 0,
+            'nChangesByExpr'      => [],
+            'whichApplied'        => [],
+        };
+
+        # Do all the changes, but on a copy so user can ultimately decide.
+        # Would it make any difference to do f*e instead of e*f?
+        #
+        use English;
+        for (my $e=0; $e<scalar(@exprs) && !$quit; $e++) {
+            push @{$lineStats->{'whichApplied'}}, 0;
+            my $expr = $exprs[$e];
+            vMsg(3, "Applying: ", $exprs[$e]->toString());
+            my $nfields = scalar(@newFields) - 1;
+            my $first = $expr->{'fieldChoice'} || 1;
+            my $last  = $expr->{'fieldChoice'} || $nfields;
+            for (my $f=$first; $f<=$last && !$quit; $f++) {
+                my $fr = $expr->{'cfrom'};
+                if ($newFields[$f] !~ m/$fr/) { next; }
+                my $fspec = ($first!=$last) ? "fd $f " : '';
+                if ($verbose>=2) {
+                    alogging::vMsg(0, sprintf(
+                        "%4d: %s%s%2d /%s/ match(es):\n      ",
+                        $recnum, $fspec, $delta, $e+1, $expr->{'from'}),
+                        $expr->colorizeAllMatches($newFields[$f]));
+                }
+                # --multiDest choice is handled within apply()
+                my $newField = $expr->apply($newFields[$f]);
+                if (defined $newField) {
+                    vMsg(3, "    newField [$f]: '" . $newField . "'");
+                    $newFields[$f] = $newField;
+                    $lineStats->{'whichApplied'}->[$e] += 1;
+                     $lineStats->{'nChangesInLine'}++; # See issueLine()
+                }
+             }
+            if ($lineStats->{'whichApplied'}->[$e]) {
+                $lineStats->{'nExprsMatchedInLine'}++;
+            }
+        } # exprs
+        #
+        # Factor out
+        # ====================================================================
+
+        # Were the really any changes? If not we're done.
+        if ($lineStats->{'nChangesInLine'} == 0) {
+            $doContig = 0; # Stop any "contiguous" changing
+            outputALine($ofh, $originalRec, 0);
+            next;
+        }
+
+        # Report
+        ($verbose>=2 || $showChanges || ($test && $verbose)) &&
+            vMsg(0, "  Line $recnum: " . $lineStats->{'nChangesInLine'} .
+            " total match(es). By expr: [" .
+            join(",",  @{$lineStats->{'whichApplied'}}, "]"));
+
+        if (sjdUtils::getVerbose() >= 2) {
+            my $diffLine = (scalar(@originalFields) == 1)
+                ? makeDiffLine($originalFields[0], $newFields[0])
+                : makeDiffLine($vSep . join($vSep, @originalFields) . $vSep,
+                               $vSep . join($vSep, @newFields) . $vSep);
+            vMsg(2, "    " . $lineStats->{'nChangesInLine'} .
+                " changes in line $recnum:\n", $diffLine);
+        }
+
+        # Decide whether to really execute the change
+        my $doTheChange;
+        if (!$interactive) {
+            if ($firstPerFile && $totalLinesChangedCF < $firstPerFile) {
+                $doTheChange = 0;
+                $totalLinesChangedCF++;  # FIX -- keep counts in sync
+            }
+            else {
+                $doTheChange = 1;
+            }
+        }
+        elsif ($doContig || $doAllTheRest) {  # User said go for it
+            # (doOneFile() resets $doContig in the main read loop)
+            $doTheChange = 1;
+        }
+        else {
+            $doTheChange = userApproves(
+                $originalRec, \@newFields, $lineStats, $file,
+                \$doAllTheRest, \$doContig, \$quit);
+        }
+
+        if ($doTheChange) {
+            vMsg(3, "    *** Change is applying ***");
+            $quit = issueLine($ofh, $lineStats, $originalRec, \@newFields);
+            $totalLinesChanged++;
+            $totalLinesChangedCF++;
+            $nChangesInFile += $lineStats->{'nChangesInLine'};
+        }
+        else {
+            vMsg(3, "    *** Change is NOT applying ***");
+            outputALine($ofh, $originalRec, 0);
+        }
+    } # records, to EOF
+    finalize($ofh);                                         # Buffered lines!
+    $totalChanges += $nChangesInFile;
+
+    if ($perFile || $verbose>1) {                           # File summary
+        vMsg(0, sprintf("%6d changed lines in $file", $nChangesInFile));
+    }
+    return($nChangesInFile);
+} # doOneFile
+
+
+# Having finished a line, ask the user whether to take the changes.
+# Get a command, then make a hash of the individual actions for caller to do.
+#
+# Returns: whether to do the change.
+# Affects ref parameters: $$doAllTheRest, $$contig, $$quit.
+# See also: multiDestChoice(), below.
+#
+sub userApproves {
+    my ($originalRec, $newFields, $lineStats, $file,
+        $doAllTheRest, $contig, $quit) = @_;  # 3 references
+    my $newRec = ($needToParse) ?
+        $tfmt->assembleRecord($newFields) : $newFields->[1];
+
+    my $reallyDoit = 0;
+    main::ask(sprintf("  Record %d of '%s'?\n", $recnum, $file));
+    printf("  <%s\n  >%s\n", $originalRec, $newRec);
+    main::ask("Change? [ynq!+.h=]\n");
+    while (1) {
+        my $cmd = <>;
+        $cmd = uc(substr($cmd.'Y',0,1));
+        my %actions = ();
+        if    ($cmd eq 'Y' || $cmd eq ' ') {          # Yes
+            $reallyDoit = 1; last;
+        }
+        elsif ($cmd eq 'N' || $cmd eq "\r") {         # No
+            $reallyDoit = 0; last;
+        }
+        elsif ($cmd eq 'Q' || $cmd eq "\xFF") {       # Quit
+            $$quit = 1; last;
+        }
+        elsif ($cmd eq '+') {                         # Do contig
+            $$contig = 1; $reallyDoit = 1; last;
+        }
+        elsif ($cmd eq '!') {                         # Do all
+            $$doAllTheRest = 1; $reallyDoit = 1; last;
+        }
+        elsif ($cmd eq '.') {                         # Do & stop
+            $reallyDoit = 1; $$quit = 1; last;
+        }
+        elsif ($cmd eq 'H' || $cmd eq "\x08") {       # Help
+            showHelp();
+        }
+        elsif ($cmd eq 'L' || $cmd eq "\x0C") {       # Show orig
+            print "    <$originalRec\n";
+        }
+        elsif ($cmd eq ',' || $cmd eq '=') {          # Show result
+            print "    >$newRec\n";
+        }
+        elsif ($cmd eq ',') {                         # Show info
+            print "Record $recnum of file $file:\n";
+            print "    <$originalRec\n";
+            print "    >$newRec\n";
+        }
+        elsif ($cmd eq 'F') {                         # Show flds
+            printf("    Record %8d of '%s', as %d fields:\n",
+                $recnum, $file, scalar(@{$newFields}));
+            for (my $i=1; $i<scalar(@{$newFields}); $i++) {
+                printf("    %4d '%s'\n", $i, $newFields->[$i]);
+            }
+        }
+        else {
+            main::err("    Unknown response '$cmd' ('h' for help)");
+        }
+    } # prompt
+
+    return($reallyDoit);
+}
+
+# Show what user can do at line-final confirmation prompt.
+#     e   Edit this occurrence if minibuffer (not supported)
+#     ^   Back to previous change (not supported)
+#     ^R  Edit this occurrence (not supported)
+#     ^W  Delete this occurrence then edit (not supported)
+#
+sub showHelp {
+    print qq@
+Help for query-replace in 'globalChange':
+    Y   Replace and continue asking
+    N   Don't replace, but continue asking
+    Q   Don't replace, and stop
+    .   Replace, then stop
+    !   Replace all remaining (no more asking)
+
+The following commands display more information, then ask you again:
+    ^L  Redisplay (before change) and ask again
+    ,   Display result
+    ?   Display line before vs. after
+    F   Display how line parsed into fields
+        @;
+}
+
+# Prepare and queue or print a line that *has* been changed. If unchanged
+# lines are output at all, they go straight to outputALine() instead.
+#
+sub issueLine {
+    my ($ofh, $lineStats, $originalRec, $newFields) = @_;
+    # ISSUE: what if changes introduced field-delims?
+    my $quit = 0;
+    my $outrec = ($needToParse) ?
+        $tfmt->assembleRecord($newFields) : $newFields->[1];
+    if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
+        alogging::hMsg(0,"--maxLinesChanged reached ($maxLinesChanged)".
+            ", stopping changes after record $recnum.");
+        $quit = 1;
+    }
+    if ($lastPerFile && $totalLinesChangedCF > $lastPerFile) {
+        $quitCF = 1;
+    }
+    if (($test || $showChanges || (!$interactive and $verbose>1))
+        && !$showResults) {
+        my $x = '[' . join(", ",  @{$lineStats->{'whichApplied'}}) . " ]";
+        #alogging::vMsg(0, "  Line $recnum: changed by expressions $x:");
+        alogging::vMsg(0, makeDiffLine($originalRec, $outrec));
+    }
+    if ($dropEmptiedLines && $outrec =~ m/^\s*$/) { next; }
+    outputALine($ofh, $outrec, 1);
+
+    # Update counts of changes actually done.
+    for (my $e=0; $e<scalar(@exprs) && !$quit; $e++) {
+        my $appCount = $lineStats->{'whichApplied'}->[$e];
+        if ($appCount <= 0) { next; }
+        #$lineStats->{'nChangesInLine'} += $appCount; # See main loop
+        $lineStats->{'nChangesByExpr'}->[$e] += $appCount;
+        $totalChangesByExpr[$e] += $appCount;
+        $totalChanges += $appCount;
+    }
+    if ($maxChanges && ($totalChanges > $maxChanges)) {
+        alogging::hMsg(0,"--maxChanges reached ($maxChanges), stopping.");
+        $quit = 1;
+    }
+    if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
+        alogging::hMsg(
+            0,"--maxLinesChanged reached ($maxLinesChanged), stopping.");
+        $quit = 1;
+    }
+
+    if ($verbose>2) {
+        my $nExprsEffective = 0;
+        for (my $e=0; $e<scalar(@exprs); $e++) {
+            vMsg(0, sprintf("    Expr %2d:  %3d matches in line",
+                $e, $lineStats->{'whichApplied'}->[$e]));
+        }
+    }
+    return($quit);
+} # issueLine
+
+
+# Colorize the non-matching center portion of two strings.
+# That is, everything from the first differing column to the last.
+#
+sub makeDiffLine {
+    my ($r1,       # "before" form of line (or just field)
+        $r2,       # "after" form of line (or just field)
+        $indent,   # >= 0: columns to indent. < 0: width for side-by-side
+        ) = @_;
+
+    # Choose layout
+    if (!defined $indent) { $indent = 2; }
+
+    my $r1c = my $r2c = '';
+    if (!$color || ($r1 eq $r2)) {
+        $r1c = $r1;
+        $r2c = $r2;
+    }
+    else {
+        $r1 = printable($r1);
+        $r2 = printable($r2);
+        my $r1len = length($r1);
+        my $r2len = length($r2);
+        my $minlen = ($r1len < $r2len) ? $r1len:$r2len;
+        my $firstDiff = my $lastDiff = 0;
+        while ($firstDiff<$minlen &&
+               substr($r1,$firstDiff,1) eq substr($r2,$firstDiff,1)) {
+            $firstDiff++;
+        }
+        while ($lastDiff<$minlen &&
+               substr($r1,$r1len-$lastDiff-1,1) eq
+               substr($r2,$r2len-$lastDiff-1,1)) {
+            $lastDiff++;
+        }
+        $r1c =
+            substr($r1,0,$firstDiff) .
+            colorize($matchColor,
+                substr($r1,$firstDiff,$r1len-$firstDiff-$lastDiff)) .
+            substr($r1,$r1len-$lastDiff);
+        $r2c =
+            substr($r2,0,$firstDiff) .
+            colorize($matchColor,
+                substr($r2,$firstDiff,$r2len-$firstDiff-$lastDiff)) .
+            substr($r2,$r2len-$lastDiff);
+    }
+
+    my $dl = "";
+    if ($sideBySide) {
+        my $pad = " " x $sideBySide;
+        $r1c = substr($r1c . $pad, 0, $sideBySide);
+        $r2c = substr($r2c . $pad, 0, $sideBySide);
+        $dl = $r1c . " | " . $r2c . "\n";
+    }
+    else {
+        $dl = sprintf("%s<%s\n%s>%s", ' ' x 0, $r1c, ' ' x $indent, $r2c);
+    }
+
+    return($dl);
+} # makeDiffLine
+
+# Factor out so we always do the exact same conversion.
+sub printable {
+    my ($s) = @_;
+    return(sjdUtils::showInvisibles($s, 'SYM', 'SP'));
+}
+
+###############################################################################
+# Maintain an output buffer so we can look back at preceding lines.
+# Mainly for --span and --pre.
+# NOTE: The output is going to a temp file that was copied from the source
+#       file so permissions are set the same as the original). If we
+#       are in --test mode, the file gets discarded; else moved to source.
+#
+BEGIN {
+    my @outBuf = ();
+    my $outSize = 1;
+
+    sub getPreLine {
+        my ($n) = @_;
+        return($outBuf[-$n]);
+    }
+
+    sub outputALine {
+        my ($ofh, $s, $itChanged) = @_;
+        while (scalar(@outBuf) > $outSize) {
+            my $buf = shift @outBuf;
+            print $ofh "$buf\n";
+            if ($showResults) {
+                print(($itChanged && $hiliteResults) ?
+                    sjdUtils::colorize('blue', "$buf\n") : "$buf\n");
+            }
+        }
+        push @outBuf, $s;
+    }
+
+    sub finalize {
+        my ($ofh) = @_;
+        while (scalar(@outBuf) > 0) {
+            my $buf = shift @outBuf;
+            print $ofh "$buf\n";
+        }
+    }
+} # END
+
+
+###############################################################################
+#
+sub report {
+    my $failed = $failedOpen + $failedTempOpen + $failedChanges + $failedCopy;
+
+    if (!$quiet) {
+        vMsg(0,'');
+        Msg("some", "Done" . ($test ? " (DRY RUN)":'') . '.');
+        vMsg(0, sprintf(
+            "%d items: %d files, %d directories%s, %s, %s.",
+            $totalItems, $filesRegular, $dirs,
+            ($recursive) ? "":" (skipped)",
+            colorIf($filesBackup,  "$filesBackup backups"),
+            colorIf($filesMissing, "$filesMissing not found")));
+        vMsg(0, sjdUtils::lpadc($totalRecs) . " total lines processed.");
+        vMsg(0, "$totalFilesChanged files changed, " .
+          sjdUtils::lpadc($totalLinesChanged) . " lines changed, " .
+          (sjdUtils::lpadc($totalChanges)/2) . " total changes.");
+        # Fix this -- somewhere $totalChanges is getting double-counted.
+    }
+
+    if ($failed>0) {
+        vMsg(0, "Failed: open: $failedOpen, temp open: $failedTempOpen, " .
+              "changes: $failedChanges, finalize: $failedCopy.");
+    }
+
+    if ($showMatchCounts) {
+        hMsg(0, "Number of matches to each expression:");
+        for (my $i=0; $i<scalar(@exprs); $i++) {
+            vMsg(0, sprintf("    %3d: %6d s/%s/%s/",
+                $i, $exprs[$i]->{matchCount}, $exprs[$i]->{from},
+                $exprs[$i]->{to}));
+        }
+    }
+
+    my $nc = scalar(@exprs);
+    ($nc <= 1) && return;
+    vMsg(0,"Number of applications of each change:");
+    for (my $i=0; $i<$nc; $i++) {
+        vMsg(0, sprintf("   #%2d of %2d: %6d times /%s/",
+            $i, $nc, $totalChangesByExpr[$i] || 0, $exprs[$i]->{from}));
+    }
+} # report
+
+sub colorIf {
+    my ($cond, $msg) = @_;
+    if ($color && $cond) {
+        return(sjdUtils::colorize("red", $msg));
+    }
+    return($msg);
+}
+
+sub dieCleanly {
+    my ($msg) = @_;
+    Term::ReadKey::ReadMode 1;
+    chomp $msg;
+    die "$msg\n";
+}
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+# A ChangeInfo object stores one s/// command and can apply it.
+#
+# Modifiers for regex change commands, per PERL:
+#     http://perldoc.perl.org/perlre.html#Modifiers
+#     i  ignore case
+#     g  global
+#     m  multi-line
+#     s  single-line
+#     e  eval the RHS
+#     x  allow whitespace
+# Character set modifiers:
+#     a  ascii
+#     d  platform default unless evidence to contrary
+#     l  locale
+#     u  unicode
+#
+package ChangeInfo;
+
+sub new {
+    my ($class,
+        $exprNum,        # Change number
+        $from,           # 'from' regex
+        $to,             # 'to' value
+        $mods,           # Perl-like modifiers
+        $num,            # Reference number for error messages
+        ) = @_;
+
+    my $self = {};
+
+    # Some hints (imperfect -- doesn't check for \\ preceding)
+    $self->{'hasCaptures'}   = (index($from, '(') >= 0);
+    $self->{'hasReferences'} = ($to =~ m/\$|\\[1-9]/);
+    $self->{'isExecutable'}  = (index($mods, 'e') >= 0);
+    $self->{'isGlobal'}      = (index($mods, 'g') >= 0);
+    $self->{'isMultiDest'}   = ($exprOptions{'multiDest'} &&
+                                index($to, $exprOptions{'multiDest'}) >= 0);
+    $self->{'changeNumber'}  = $num;
+
+    # Raw regex-change data
+    $self->{'exprNum'}       = $exprNum;
+    $self->{'from'}          = $from;         # Compiled below
+    $self->{'to'}            = $to;
+    $self->{'mods'}          = $mods .
+        ($exprOptions{'ignoreCase'} ? 'i':'') .
+        ($exprOptions{'global'} ? 'g':'');
+
+    # Filters and conditions
+    $self->{'fieldChoice'}   = $exprOptions{'fieldChoice'};
+    $self->{'pre'}           = $exprOptions{'pre'};
+    $self->{'preC'}          = ($exprOptions{'pre'}) ?
+        qr/$exprOptions{'pre'}/ : undef;
+    $self->{'postLines'}     = $exprOptions{'postLines'};
+    $self->{'post'}          = $exprOptions{'post'};
+    $self->{'postC'}         = ($exprOptions{'post'}) ?
+        qr/$exprOptions{'post'}/ : undef;
+    $self->{'preLines'}      = $exprOptions{'preLines'};
+    $self->{'span'}          = $exprOptions{'span'};
+
+    # Optimized/preprocessed/compiled forms of regex change,
+    # computed by setupRegex(), below:
+    $self->{'cmods'}         = undef;
+    $self->{'cfrom'}         = undef;
+    $self->{'cto'}           = undef;
+    $self->{'cdests'}        = undef;
+
+    # How many times has this expr matched?
+    $self->{'matchCount'}    = 0;
+
+    bless $self, $class;
+    $self->setupRegex();
+    my $msg = $self->{'isMultiDest'} ? 'Add multi':'Add';
+    alogging::vMsg(2, sprintf(
+        "%3d: %s /%s/%s/", $exprNum, $msg, $self->{'from'}, $self->{'to'}));
+    return($self);
+} # ChangeInfo::new
+
+# Called from constructor to arrange and compile regexes.
+# Notes:
+#     'g' and 'e' modifiers are not compilable.
+#     Must 'eval' the RHS in case user does backreferences.
+#     Assignments done in {...}/e RHS, are not saved globally (yet).
+#     Could add options for novars ($ and @), and for literal (not regex).
+#
+# apply(), below, applies this to a given record:
+#     s/$from/{ my $foo; eval('$foo = "$to"); $foo; }/ge
+# Cf: http://perldoc.perl.org/perlre.html#Creating-Custom-RE-Engines
+# http://perldoc.perl.org/perlfaq6.html#How-do-I-efficiently-match-many-regular-expressions-at-once?
+# http://perldoc.perl.org/perlfaq6.html#How-do-I-match-a-regular-expression-that%27s-in-a-variable?
+#
+sub setupRegex {
+    my ($self) = @_;
+    # Pick out just the *compilable* modifiers (not g, e)
+    ($self->{'cmods'} = $self->{'mods'}) =~ s/[^imosx]//g;
+
+    # Must eval to allow variable modifiers.
+    my $lhs = join($delim, ('qr', $self->{'from'}, $self->{'cmods'} ));
+    $self->{'cfrom'} = eval($lhs);
+    ($@) && main::dieCleanly(
+        "setupRegex(): eval failed compiling '$lhs'\n  $@");
+
+    # $x = quotemeta( $x );
+
+    # RHS must be eval'd at match-time to handle backrefs.
+    if ($self->{'isMultiDest'}) {
+        my $sep = $self->{'multiSep'};
+        my @dests = split(/$sep/, $self->{'to'});
+        $self->{'cdests'} = \@dests;
+        alogging::vMsg(3, "Multiple destinations: \n    " .
+                       join("\n    ", @dests));
+    }
+    else {
+        $self->{'cto'} = $self->{'to'};
+    }
+} # setupRegex
+
+
+# Carry out the change represented by this ChangeInfo object, on some data.
+# The data may be a field or a whole record; this doesn't care.
+#
+# Returns: The new value of the field, or undef for no change.
+#
+# Cf http://search.cpan.org/~mjd/Text-Template-1.46/lib/Text/Template.pm
+#
+sub apply {
+    my ($self, $oldField) = @_;
+    my $totChanges = 0;
+    my $first = $self->{fieldChoice} || 1;
+    #my $last  = $self->{fieldChoice} || scalar(@{$fields})-1;
+
+    #use re ((index($self->{'mods'}, 'e')>=0) ? '/e' : '';
+    my $cfr = $self->{'cfrom'};
+
+    #for (my $i=$first; $i<=$last; $i++) {
+    #    if ($showAllMatches && $fields->[$i] =~ m/$self->{cfrom}/ip) {
+    #        alogging::vMsg(0, "    Match? '${^MATCH}'");
+    #    }
+    if (!$self->preIsSatisfied() && $verbose>=3) {
+        alogging::vMsg(2, "--pre condition not satisfied.");
+        return(undef);
+    }
+    my $newField = '';
+
+    #alogging::hMsg(2, "Evaling: " . $self->toString());
+    if ($self->{'isMultiDest'}) {
+        if ($oldField !~ m/$cfr/) { next; }  # No match
+        $newField = $self->multiDestChoice($oldField, $-[0], $+[0]);
+    }
+    else {
+        # Going to eval, and it may have quotes, etc. What of 'cto'??
+        my $to = $self->{'to'};
+        if (index($to, '"')>=0) { $to =~ s/"/\\"/g; }
+        $to = '"' . $to . '"';
+        alogging::vMsg(3, "    esc RHS: '$to'");
+        if (!defined $cfr || !defined $to) {
+            alogging::eMsg(0,
+                "ChangeInfo::apply: " . $self->toString());
+        }
+        if ($self->{'isGlobal'}) {
+            ($newField = $oldField) =~ s/$cfr/{ eval($to) }/ge;
+            # FIX: need to count how many changes are done.
+        }
+        else {
+            # "Use of uninitialized value in substitution iterator"???
+            no warnings; # 'uninitialised';
+            ($newField = $oldField) =~ s/$cfr/{ eval($to) }/e;
+        }
+    }
+
+    if ($newField eq $oldField) { return(undef); }
+    return($newField);
+} # apply
+
+sub colorizeAllMatches {
+    my ($self, $data) = @_;
+    my @st = (); my @en = ();
+    while ($data =~ m/$self->{'cfrom'}/g) {
+        push @st, $-[0];
+        push @en, $+[0];
+    }
+    my $rc = '';
+    my $lastEn = 0;
+    for (my $i=0; $i<scalar(@st); $i++) {
+        $rc .= substr($data, $lastEn, $st[$i]-$lastEn) .
+            sjdUtils::colorize(
+                $matchColor, substr($data, $st[$i], $en[$i]-$st[$i]));
+        $lastEn = $en[$i];
+    }
+    $rc .= substr($data, $lastEn);
+    return($rc);
+}
+
+# Let user choose the replacement to use for --multiDest.
+# Returns: Resulting field text after change, or undef if no change.
+# See also: userApproves(), above.
+# What is the right behavior for /g changes?
+#
+sub multiDestChoice {
+    my ($self, $data, $startX, $endX) = @_;
+    my $done = 0;
+    my $cdata = $self->colorizeAllMatches($data);
+    printf("%4d <%s\n", $recnum, $cdata);
+    while(!$done) {
+        my $n = scalar(@{$self->{'cdests'}});
+        main::ask("  Which replacement [1:$n]? ");
+        my $resp = readline();
+        chomp $resp;
+        if ($resp =~ m/\d+/) {                     # Numeric choice
+            if ($resp < 1 || $resp > $n) {
+                main::err("    Choice not in range 1 to $n.");
+            }
+            else {
+                $data = $self->applyMultiDestChoice($data, $resp-1);
+                $done = 1;
+                ($verbose>1) && print("==> " . $data . "\n");
+            }
+        } # numeric
+        elsif ($resp eq '=') {                     # show all --multi results
+            print("\n");
+            my $cdata = $self->colorizeAllMatches($data);
+            printf("%4d <%s\n", $recnum, $cdata);
+            for (my $mdnum=0; $mdnum<$n; $mdnum++) {
+                my $copy = $data;
+                $copy = $self->applyMultiDestChoice($copy, $mdnum);
+                printf("   %d >%s\n", $mdnum+1, $copy);
+            }
+        }
+        elsif ($resp eq '?') {                     # show dest choices
+            print("\n");
+            my $cdata = $self->colorizeAllMatches($data);
+            printf("%4d <%s\n", $recnum, $cdata);
+            for (my $mdnum=0; $mdnum<$n; $mdnum++) {
+                printf("    %d: %s\n", $mdnum+1, $self->{'cdests'}->[$mdnum]);
+            }
+        }
+        elsif ($resp eq 'h' ) {                    # help
+            showMultiDestHelp();
+        }
+        elsif ($resp eq 's' || $resp eq 'n' ) {    # next/skip
+            $done = 1;
+        }
+        elsif ($resp eq '+' ) {                    # add new cdest
+            main::ask("Enter the new choice:");
+            my $newDest = readline();
+            chomp $newDest;
+            if ($newDest ne '') {
+                push(@{$self->{'cdests'}}, $newDest);
+                $n = scalar(@{$self->{'cdests'}});
+                print("\n    New choice '$newDest' added (#$n).\n");
+            }
+            else {
+                main::err("    No new destination choice added");
+            }
+        }
+        elsif ($resp eq 'q') {                     # quit
+            $done = 1;
+        }
+        else {
+            main::err("    Unknown choice '$resp' ('h' for help).");
+        }
+    } # while
+    return($data);
+} # multiDestChoice
+
+# Actually apply a given multiDest choice to the line or field
+#
+sub applyMultiDestChoice {
+    my ($self, $data, $respNum) = @_;
+    my $cfr = $self->{'cfrom'};
+    (my $to = $self->{'cdests'}->[$respNum]) =~ s/"/\\"/g;
+    $to = '"' . $to . '"';
+    if ($self->{'isGlobal'}) {
+        #alogging::vMsg(2, sprintf("Applying: s/%s/{ eval(%s) }/ge", $cfr, $to));
+        $data =~ s/$cfr/{ eval($to) }/ge;
+    }
+    else {
+        #alogging::vMsg(2, sprintf("Applying: s/%s/{ eval(%s) }/e", $cfr, $to));
+        $data =~ s/$cfr/{ eval($to) }/e;
+    }
+    return($data);
+}
+
+sub showMultiDestHelp {
+    my $msg = qq@
+You are in "multiple destination mode" (see the --multiDest option).
+One of your change expressions has matched, and specifies that you must choose
+just what to change it to. The alternatives were separated by '|' on the
+right-hand-side of your change expression.
+
+The possible changes are numbered (starting at 1). You may choose:
+    a replacement expression by number
+    'n' or 's' (for 'next' or 'skip') to do no change at this place
+    '+' to enter a new, additional choice for this change
+    '?' to display the destination/replacement choices available
+    '=' to display the line as each choice would affect it
+    'h' to see this help
+To quit from here, use 'n' (or 's'), and then quit from outside.
+@;
+    alogging::vMsg(0, $msg);
+}
+
+# A pre-condition is a regex that must have been matched somewhere in the
+# last N lines, in order for a -e match to apply. To support this, the
+# previous N lines are buffered in 'preLines'.
+#
+sub preIsSatisfied {
+    my ($self) = @_;
+    if (!defined $self->{'pre'} || $self->{'pre'} eq '') { # No --pre condition
+        return(1);
+    }
+    #alogging::vMsg(1, "Checking pre-condition: '" . $self->{'pre'} . "'");
+    for (my $i=1; $i<=$self->{'preLines'}; $i++) {
+        if (main::getPreLine($i) =~ m/$self->{'preC'}/) {
+            return(1);
+        }
+    }
+    return(0);
+}
+
+
+sub toString {
+    my ($self, $sep) = @_;
+    if (!$sep) { $sep = "/"; }
+    my $f = $self->{'from'}  || "???";
+    my $t = $self->{'to'}    || "???";
+    my $m = $self->{'mods'}  || '';
+    my $msg = sprintf("Expr #%2d: s$sep%s$sep%s$sep%s",
+                      $self->{'exprNum'}, $f, $t, $m);
+    return($msg);
+}
+
+# End of ChangeInfo package.
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+globalChange [options] [files]
+
+Do a global-change(s) on the named file(s). For example:
+
+    globalChange -e 's/these (\w+) is/these $1 are/g' *.txt
+
+There are a lot of features. See the next section,
+L<Why globalChange instead of sed?>, for some highlights.
+
+To be queried for each change, see I<--interactive> and I<--multiDest>
+(the latter lets you choose among several replacements for each match).
+To see what changes I<would> be made, but not actually do them, see I<--test>.
+
+You can specify the change(s) using Perl regex features (see below).
+Multipe I<-e> expressions are applied in the order specified.
+
+B<Note>: Remember to use the C<g> modifier
+if you want all occurrences on each line changed (see also I<--global>).
+
+
+=head2 Backslashing your regexes
+
+"$" is a pain. If you're running this from C<bash> or a similar shell,
+"$" in your regexes is handled by the shell unless inside single quotes,
+or backslashed. You may find single-quoting all your I<-e> options helpful.
+
+Once the "$" is past the shell so C<globalChange> actually sees it, it
+is still special to regex. To get a literal dollar sign, you'll need to
+backslash it (in addition to any shell backslashing you already did).
+On the left side of a regex, unescaped "$" means I<end of line>.
+On both sides, it is used to insert "capture" groups that were parenthesized
+on the left side.
+
+Use of $n instead of \n for inserting capture groups is Perl-specific.
+This script should probably accept either form, but that has proven harder
+than anticipated, and for now, I<only> the $n form works.
+
+One of the uglier backslashing cases arises if you double-quote a I<-e>
+option, and want a literal "$" inside the regex:
+
+    globalChange -e "s/\\\$GLOBALS\['x'\]/$x/" *
+
+
+=head2 Choice and treatment of files
+
+Files already ending in C<.bak> or C<#> or C<~> are not changed unless you
+specify I<--force>.
+Changed files replace the originals.
+The original files are backed up if I<--backup> is in effect.
+If there are already conflicting C<.bak> files, they are quietly deleted.
+BSD/OSX C<cp> lacks the I<--preserve> and I<-b> options,
+so they are not used.
+
+At the end, a summary of changes is displayed.
+If more than one regex change was being applied, then the
+number of successful applications of each one is also displayed.
+To suppress these reports, use I<--quiet>.
+
+
+=head2 Why globalChange instead of sed?
+
+This script is meant just to do regex changes, but do them really well.
+For example, it:
+
+=over
+
+=item * Supports B<Unicode> and many other character encodings
+(see I<--listEncodings>)
+
+=item * Supports full B<Perl-style regular expressions> (as of this writing,
+C<sed> lacks a I<-P> option like some C<grep>s have)
+
+=item * Has I<--test> mode (aka I<--dry-run>), and
+can colorize the parts of lines that changed.
+
+=item * Allows you to specify B<multiple replacements>,
+so you can choose between
+them at each match. This is especially useful when annotating some existing
+phenomenon that you can match for, but where it takes human judgement to
+decide which annotation applies to each instance
+
+=item * Can limit changes to B<certain fields>, supporting a wide range
+of flat-file formats (experimental)
+
+=item * Provides B<interactive> query-replace
+(with an interface much like C<emacs query-replace>,
+except that you can't go back to 'undo' previous changes). You can also
+just tell it to skip certain potential changes
+(see I<--firstPerFile>, I<--lastPerFile>, and I<--perFile>).
+
+=item * Provides an interactive response that causes the same change to be
+applied unconditionally, but B<only until> a line is reached where there is no
+such change to do. That is, contiguous lines that match are changed,
+but then it goes back to asking again
+
+=item * Does the equivalent of C<sed>'s I<--separate>
+and I<--in-place=extension> by default
+
+=item * Has I<--recursive> (experimental)
+
+=item * Permits arbitrary Perl code on right hand side (experimental)
+
+=item * Simple I<multi-line matching> is in development, but not yet
+finished. See I<--spanLines>, I<--preLines>, I<--postLines>,
+I<--pre>, and I<--post>, below.
+
+=back
+
+These and other features try to address limitations I've encountered with
+other tools; particularly the notion of constraining matches, contexts, etc.
+by additional regexes.
+
+This script does not have script-like capabilities like
+C<sed>, or have "hold" and "pattern" spaces,
+or do transliteration, or have "addressing" of changes. It should
+feel a lot less like programming, and (hopefully) more descriptive.
+
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--backup>
+
+Make backups like the *nix C<cp -b> command.
+Default: on (turn off with I<--nobackup>).
+Backups are not made for files that are not changed.
+See also I<--backupExtension> and I<--backupDirectory>.
+
+=item * B<--backupDirectory> I<path>
+
+Directory where backup files should be put.
+Default: "" (same directory as source files).
+If using I<--recursive> with this, for the moment all the
+backups are written to the same (flat) directory rathen than
+having an isomorphic directory tree built.
+You can put these signals in I<path> for special effects:
+
+    %d    The date as yyyy_mm_dd
+    %t    The time as hh:mm:ss
+
+=item * B<--backupExtension> I<ext>
+
+Append "." and I<ext> to original filenames in order to make the backup
+file names.
+Default: C<bak>.
+
+=item * B<--color>
+
+Colorize STDERR output. Defaults to on if environment variable C<USE_COLOR>
+is set and STDERR is going to a terminal. This is especially useful with
+I<--test>, since you then see the before/after versions of each changed line,
+with the changed portion colorized.
+
+There are also options to control several specific display items. The
+color names are as provided by C<ColorManager.pm> (q.v.).
+
+=over
+
+=item * B<--sourceColor> I<color> -- For unchanged input lines
+
+=item * B<--matchColor> I<color> -- For matched portions of lines
+
+=item * B<--askColor> I<color> -- For prompts (I<--interactive>, I<--multiDest>)
+
+=item * B<--errorColor> I<color> -- For interactive error messages
+
+=item * B<--resultColor> I<color> -- For changed lines
+
+=back
+
+=item * B<--compileRegex>
+
+Pre-compile the left-hand sides of regexes to apply, once each, rather
+than interpreting them once per line. Default: on.
+
+=item * B<-d> I<regex>
+
+Shorthand for deleting text matched by I<regex>.
+Repeatable.
+
+=item * B<--dropEmptiedLines>
+
+For lines that are changed, if they end up with nothing but whitespace
+then delete them entirely.
+B<Note>: Experimental. Does not yet work with I<--fieldChoice>.
+
+=item * B<--dry-run> OR B<--dryrun>
+
+Synonyms for I<--test> (q.v.).
+
+=item * B<-e> I<s/from/to/modifiers>
+
+A Perl-style regex change expression to do.
+Repeatable (changes are done in the order specified).
+See also I<--multiDest>, I<--interactive>, I<--fileOfExprs>, et al.
+
+You can use a delimiter other than "/" if desired.
+The delimiter can also be backslashed to use it literally.
+See also section L<#Backslashing your regexes>.
+For back-references C<$1> is used, not (yet) C<\1>.
+
+To see how your expression(s) were interpreted, use I<-v> (repeatable)
+or I<--dry-run>.
+
+Each change expression (whether specified via I<-e>, I<-d>, or I<-f>)
+gets a copy of several options, as they were set when the change expression
+was specified.
+Those "sticky" or "persistent" options are:
+I<--global>, I<--fieldChoice>, I<--ignoreCase>, I<--multiDest>,
+I<--post>, I<--postLines>, I<--pre>, I<--preLines>, I<--spanLines>.
+
+Those options apply to all following change expressions, unless/until
+they are explicitly re-set. For example, you can specify
+that all following regex changes should ignore case, via I<--ignoreCase>.
+
+Alternatively, you can append C</i> to individual I<-e> option values,
+to make just those be case-insensitive (this is not sticky).
+
+=item * B<-f> I<path> or B<--fileOfExprs> I<path>
+
+Read regex changes to do from this file, one per line,
+and treat each one as if specified via I<-e>.
+Lines beginning with (optional whitespace and then) "#" are ignored.
+
+For example:
+
+    # My list of important changes
+    s/\ba+r+g+h+\b/argh/g
+    s/(3)\.14\d+/$1.14159/g
+
+Repeatable. See also I<-e>.
+
+I<-v> specified before I<-f> will cause each line read to be echoed.
+
+B<Note>: There is no way (yet) to change a "sticky" option's value
+(see under I<-e>) for specific changes within a single I<-f> file;
+the value in effect when this option is specified applies to all.
+
+=item * B<--fieldChoice> I<n> (sticky)
+
+Only apply the changes within field I<n> (counting from 1).
+By default, input lines/records are treated entire, and not parsed into fields
+(the default behavior can be explicitly chosen by setting I<--fieldChoice 0>).
+This option applies to all following changes, until changed
+(in other words, only one value is in effect at a time).
+
+You can only specify one field for each change-expression (I<-e>) to apply to,
+but separate (possibly equivalent) expressions can apply to different fields.
+
+B<Note>: If you use this option at all (other than for field 0, which is the
+way I<not> to specify a fieldChoice), then each record is parsed into fields.
+Each regex change either applies to one or to all fields, as determined by
+this option's setting at the time the change was defined. In this case,
+any changes for which this option was unset (or set to 0), are
+applied to each field as a separate step. This means that matches and changes
+cannot apply across field boundaries. When the fields are re-assembled into
+a record for output, any syntactically-special strings should be escaped
+in the appropriate way for the chosen output format (for example, quoting the
+field, doubling quotes, or backslashing for many CSV variants; using character
+references for HTML or XML; and so on.
+
+See L<"Input file format options">, and the help for
+C<TabularFormats.pm>, for details on field-parsing options,
+such as basic data format, particular delimiters and quoting rules, etc.
+
+If this option is not used at all,
+then records are not parsed into fields at all,
+and all changes apply to each record as a unitary string.
+
+=item * B<--fileStart>
+
+Show a message at the start of each input file. Default.
+To turn these messages off, use I<--nofileStart> or I<--quiet>.
+
+=item * B<--firstPerFile> I<n> (unfinished)
+
+Automatically skip the first I<n-1> matches in each input file, and start doing
+changes I<after> that.
+If you use this with I<--interactive>, the results are,
+unfortunately, undefined for the moment.
+See also I<--lastPerFile> and I<--perFile>.
+
+=item * B<--force>
+
+Operate on apparent backup files, such as those
+ending in '~', '#', or '.bak' (by default they are skipped).
+
+=item * B<--global> (sticky)
+
+Apply following changes to all matches in each line, rather than just
+the first (turn off again with I<--noglobal>). For I<individual> regexes,
+you can append the modifier C<g> instead (for example, C<s/foo/bar/g>).
+
+=item * B<--hiliteResults>
+
+With I<--showResults>, highlight changed lines. This will insert ANSI
+color escape codes, so don't use this if you want the stdout output to be
+usable as-is. If you do, you can use C<uncolorize> to remove the escapes.
+
+=item * B<--iencoding> I<t>
+
+Character set to use for input. See also I<--listEncodings>.
+
+=item * B<--ignoreCase> (sticky)
+
+Ignore case distinctions for following matches (turn off again with
+I<--noignoreCase>). For I<individual> regexes,
+you can append the modifier C<i> (for example, C<s/foo/bar/i>).
+
+v=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--instance> I<n>, B<--instanceBegin> I<n>, B<--instanceEnd> I<n> (sticky)
+
+Chooses which particular matches to an expression, among those on a given line,
+actually "count" (that is, result in a replacement).
+I<--instance> is just shorthand for setting
+both I<--instanceBeg> and I<--instanceEnd> to the same value (which means
+that is the I<only> instance to be affected). I<n> may be positive to count
+from the left, or negative to count from the right; C<0> is the default
+value, and means there are no restrictions.
+
+B<Unfinished>
+
+=item * B<--interactive>
+
+Ask the user before changing each line. The commands recognized are
+based largely on C<emacs query-replace>
+(L<http://www.gnu.org/software/emacs/manual/html_node/emacs/Query-Replace.html>):
+
+=over
+
+=item B<SPACE> or B<Y> -- change this line, and find next line to be changed.
+
+=item B<DEL> or B<N> -- skip (do not change this line)
+
+=item B<CR> or B<q> -- stop doing changes (exit)
+
+=item B<+>  -- do the change in this and contiguous following matched lines.
+Stop upon reaching a line that does not change.
+B<experimental>
+
+=item B<!>  -- do this and all following changes (*** To EOF or all files? ***)
+
+=item B<.>  -- replace this instance, copy the remainder of the file (with no
+further changes), then exit
+
+=item B<^L> or B<l> -- redisplay screen and ask again
+
+=item B<,>  -- show result of replacement, then ask again
+
+=item B<T>  -- like B<,>, show the results and ask again. However, show them
+as a list of separate fields (only useful when I<--fieldChoice> has been used
+for at least one of the requested changes).
+
+=item B<^H> or B<h> -- display help and ask again
+
+=item B<?> -- display the line before and after the current change,
+and ask again
+
+=item B<=> -- display the proposed result (post-change), and ask again
+
+=item B<f> -- display the fields into which the line was parsed (if it was)
+
+=back
+
+The following commands of C<emacs query-replace> are I<not> supported here:
+
+=over
+
+=item B<^>  -- go back to previous occurence (not supported)
+
+=item B<^R> -- edit this line (not supported)
+
+=item B<^W> -- delete and edit (not supported)
+
+=item B<e>  -- edit in minibuffer (not supported)
+
+=back
+
+=item * B<--iString> I<s>
+
+Use I<s> instead of the default "  " as the string to repeat in order to
+indent progress reports (this is only really useful with I<-r>).
+
+=item * B<--lastPerFile> I<n>
+
+Automatically stop after the first I<n-1> matches in each input file.
+If you use this with I<--interactive>, the results are,
+unfortunately, undefined for the moment.
+See also I<--firstPerFile>, I<--perFile>, I<--maxChanges>, I<--maxLinesChanged>.
+
+=item * B<--listEncodings>
+
+Show the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
+
+=item * B<--maxChanges> I<n>
+
+Stop after this total number of changes (cumulative across all files).
+I<--maxChanges> is not so intrusive as to stop in
+the middle of changing a single line; all the changes for a given line
+are done, then everything stops if the total across all files exceeds I<n>.
+See also I<--firstPerFile>, I<--lastPerFile>, and I<--maxLinesChanged>.
+
+=item * B<--maxLinesChanged> I<n>
+
+Stop after doing changes to a total of I<n> different input lines (there might
+be more than one change at some or all of those I<n> lines).
+See also I<--firstPerFile> I<--lastPerFile>, and I<--maxChanges>.
+
+=item * B<--multiDest> (sticky)
+
+This option allows you to specify B<multiple> right-hand sides for change
+expressions. It implies I<--interactive>, and when a change with alternatives
+on the RHS matches, you are shown the line and asked to choose one of the
+alternative changes (or some other possibilities such as
+adding a new alternative or not making a change at all).
+This happens for every single multi-change.
+This is unlike I<--interactive>, which only asks once for each
+line that changes, after I<all> changes have been (tentatively) applied to it.
+
+For example, with I<--multiDest> you could stop at each
+occurrence of the word C<to>, and specify whether to tag it
+as a preposition or infinitive marker, like this:
+
+    globalChange --multiDest -e s/\bto\b/to[PREP]|to[INF]/
+
+The "|" character separates the choices. It cannot be escaped,
+but can be changed to a different character by I<--multiSep> (q.v.).
+You cannot parenthesize in order to avoid re-stating parts of the right-hand
+side (such as one might wish to do for the "to" in the example above).
+
+B<Note>: At present, you're only asked once, for all matches to the
+same expression on the same line
+(this only matters if you use C</g> or I<--global>).
+Once the line is complete, you will still be asked before all the changes
+are really applied, as with plain I<--interactive>. This should be streamlined.
+
+The responses available when asked to choose are:
+
+=over
+
+=item B<number> -- a number indicating which replacement to use this time
+
+=item B<=> -- provisionally apply each replacement in turn,
+show what the result would be, and then ask again
+
+=item B<?> -- show a list of the available replacements and their numbers,
+and ask again
+
+=item B<+> -- add a new replacement to the list for this change expression
+and ask again
+
+=item B<h> -- display help
+and ask again.
+
+=item B<s> or B<n> -- do not change this match
+
+=back
+
+B<Experimental>.
+
+=item * B<--multiSep>
+
+Change the character used to separate right-hand-side alternatives
+with I<--multiDest> (q.v.).
+
+=item * B<--oencoding> I<t>
+
+Character set to use for output.
+See also I<--iencoding> and I<--listEncodings>.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--perFile>
+
+Report the number of changes in each individual file, not just the grand total.
+See also I<--firstPerFile> and I<--lastPerFile>.
+
+=item * B<--prepend> I<string>
+
+Insert I<string> at the beginning of each file.
+This counts toward the number of files changed, and the total number of
+changes, but not as a line changed. I<string> is run through
+C<sjdUtils::unbackslash()>, so you can include special characters using any
+of the usual Perl backslash codes (\n, \r, \xFF, \x{FFFF}, etc.).
+
+B<Note>: There is no option for appending something to the end of all files. This
+can be done easily with C<cat> or C<echo> and the ">>" operator
+(if you do this before globalChange rather than after, the added lines will
+also be subject to change):
+
+    for x in `ls foo*`; do echo 'new text' >>$x; done
+
+=item * B<--quiet> OR B<-q>
+
+Suppress most messages, including the summary report
+and message for the start of each file (see also I<-v>, I<--showChanges>,
+and I<--nofileStart>).
+
+=item * B<--recursive>
+
+Modify files in a whole subtree (experimental). See also I<--iString>.
+
+=item * B<--showChanges>
+
+Display all lines that actually change. See also I<-v> (use twice to show
+individual changes), I<--test>, and I<--vSep>.
+
+At startup, an C<Add> line will appear for each change requested.
+This helps especially for seeing the effect of shell quoting, backslashing,
+and so on.
+Each C<Add> message includes a sequential number assigned to that change.
+See also section L<#Backslashing your regexes>.
+
+With I<--showChanges> (or I<--test>) actual changes are displayed like this:
+
+    0: Add /(function.*) {/$1\n    {/
+
+    ******* Starting file 'searchController.php'
+    Line 173: changed by expressions [1]:
+    Z<< < >>    public function makeTabBar($category) {
+    Z<< > >>    public function makeTabBar($category)\n    {
+    Z<<<< >>> >>>> 1 change(s) in file 'searchController.php' (DRY RUN)
+
+As globalChange starts processing each input file, a notice is displayed.
+
+For each changed line, a list appears showing the line number
+and how many times each expression
+affected the line. Position in the bracketed list corresponds to the
+numbers shown in the C<Add> messages at the beginning.
+
+The before and after lines show the original and final form
+of the line. However, they are modified to make
+whitespace, control, and other special characters visible,
+and to highlight the part of the line that changed (that is, from the
+first differing character to the last).
+This uses C<sjdUtils::showInvisibles($x, 'SYM', 'SP')>
+and C<sjdUtils::colorize()>,
+and requires Unicode and ANSI color support by your terminal program.
+
+The total number of changes in each file is also reported.
+However, it can be inaccurate (see L<#Known bugs and limitations>).
+
+=item * B<--showAllMatches>
+
+Display the matched text for each match (even if, for example,
+pre-conditions are not fulfilled).
+
+=item * B<--showMatchCounts>
+
+Display how many times each change expression matched.
+
+=item * B<--showResults>
+
+Write the results to stdout (as well as to the usual
+destination file(s) unless I<--test> is also set). Unlike I<-v>, I<--test>,
+etc., this shows both changed and unchanged lines, so looks just like the
+output file(s) would.
+Use I<--hiliteResults> to modify this to highlight changed lines.
+
+=item * B<--sideBySide> I<n>
+
+When showing difference lines (before and after versions of changed lines),
+arrange them side-by-side (allowing I<n> columns for each), rather than
+above and below (the default).
+
+=item * B<--test> OR B<--dry-run> OR B<--dryrun>
+
+Show the specific changes that would be made, but don't actually I<do> them.
+Files that would not change are not specially reported,
+unless you use I<--zero>. See also I<--showResults>.
+
+=item * B<--tickInterval> I<n>
+
+Print a message after every I<n> input lines
+Default: 10,000 (set C<0> to turn off).
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8> I<--oencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+
+Add more messages (repeatable).
+
+With no I<-v>, you'll still get a notice as each file begins to be processed,
+and any total-lines-done notices specified via I<--tickInterval>. You can
+silence the file-start messages with I<-q>.
+
+The first I<-v> reports the regex changes requested
+and a few other things.
+
+The second I<-v> shows the total number of changes done to each file
+that changes.
+
+The third I<-v> also shows, for each changed line, its original and final
+form and the total number of changes that were made.
+
+A fourth I<-v> also shows each line before it is processed, with its
+line number. The lines are displayed via I<sjdUtils::showInvisibles()>
+so invisible characters aren't.
+The fourth I<-v> also adds detailed tracing for features still in development.
+
+=item * B<--version>
+
+Show version/license info and exit.
+
+=item * B<--vSep> I<s>
+
+Set the string to be inserted to represent field boundaries in I<--verbose>
+reports of what changes. Default: I<|>. See also I<--showChanges>.
+This is not the same option as I<--multiSep> (q.v.).
+
+=item * B<--zero>
+
+With I<--test>, report each file even if it would have no changes.
+
+=back
+
+
+=head2 Unfinished options
+
+=over
+
+=item B<--post> I<regex> (sticky)
+
+Just like I<--pre>, but places a constraint via I<following> lines rather
+than preceding lines.
+Unfinished.
+
+=item B<--postLines> I<n> (sticky)
+
+Just like I<--preLines>, but sets the scope of I<--post> rather than I<--pre>.
+Incomplete and experimental. Default: 1.
+
+=item B<--pre> I<regex> (sticky)
+
+Like I<ignoreCase> and some other options, this applies to following
+change expressions, until overridden (turn it of by setting to "").
+It constrains expressions so that they can only match if the I<regex>
+specified on I<--pre> is I<also> matched, within some number of lines of
+prior context (see I<--prelines>). For example,
+
+    --pre '/^<h1>/' -e 's/<li\b/<ul>\n<li/'
+
+would insert an HTML unordered-list start-tag before a list-item start-tag,
+but I<only> if the preceding line began with a heading level 1 start-tag.
+I<--pre> constraints are not affected by I<--fieldChoice>.
+Incomplete and experimental.
+
+=item B<--preLines> I<n> (sticky)
+
+Sets the number of lines of preceding context within which a I<--pre>
+constraint must be matched. Default: 1, meaning that the
+1 preceding line is eligible. Has no effect if I<--pre> is not used after it.
+Remains effective until explicitly changed. Default: 1.
+Incomplete and experimental.
+
+=item B<--span> I<n> (sticky)
+
+Allows change expressions to match even if split across multiple lines.
+It implies the Perl regex modifier "s", and
+it causes I<--fieldChoice> (if set) to be ignored (though not cleared).
+Of course, it causes at least I<n> lines to be buffered at once, so
+multi-line matching is possible.
+Turn off by setting to 0 or 1.
+B<Incomplete and experimental.>
+
+=back
+
+
+=for nobody ===================================================================
+
+=head2 Input file format options
+
+These are only meaningful with I<--fieldChoice>.
+See C<TabularFormats.pm> for the available options, which are numerous.
+The most important are probably I<--basictype>
+(to select CSV, JSON, XSV, SEXP, ARFF, HTML, etc.),
+I<--fieldSep> (to select a CSV-style delimiter such as TAB or comma),
+and I<--quote '"'> (to specify a character used to quote fields, for
+example when the field value must contain the I<--fieldSep> character.
+
+
+
+=for nobody ===================================================================
+
+=head1 Known bugs and limitations
+
+You cannot use the I<--delim> character (control character #255) in the
+I<-e> option values themselves (e.g., you can't backslash it). But on the
+command line, you can use most anything you like to separate the to, from, and
+modifiers of the regex change.
+
+Captures need to be referred to on the RHS as $1 etc., not \1 etc.
+
+Modified files lose 'execute' permissions.
+
+Be careful to escape '$' and '@' on I<both> sides of expressions, lest you
+interpolate some Perl variable (unless you I<want> to do that,
+for example with C<$recnum> or C<$curFileName>).
+
+How to escape metacharacters in expressions is not necessarily obvious.
+If you encounter problems, try I<-v -v> and/or I<--test> so you see what the
+regexes parse to and what they do on actual data.
+
+The "contiguous" command in I<--interactive> mode applies changes
+without asking, but only until a line is encountered that isn't affected; then
+it goes back to asking again. It would be nice to add an option for
+stopping at the next line matching some regex, or even for "up to end of
+the current function/element/class/...".
+
+The total number of changes in each line counts changes to each field (if any),
+and by each expression.
+But it does not distinguish multiple changes to a single
+field by a single expression (as enabled by "/g").
+
+The grand total number of changes is reported as double what it should be
+(thank you Mr. Verity).
+
+With I<--multiDest> you're only asked once, for all matches to
+the same expression on the same line
+(of course, this only matters if you use C</g> or I<--global>).
+Once the line is complete, you are still asked before all the changes
+are really applied, as with plain I<--interactive>. This should be streamlined.
+
+You can only specify one field for each change-expression to apply to (or
+specify field 0, which means apply to all).
+
+Might be unhappy with odd characters in filenames (say, "'").
+
+Features to transparently handle various kinds of compressed files are
+not yet finished.
+
+These features are unfinished:
+I<--multiDest>, I<--pre>, I<--preLines>, I<--post>, I<--postLines>, I<--span>.
+
+
+
+=for nobody ===================================================================
+
+=head1 Related commands
+
+C<emacs> and many other editors can do similar things. For example, to do
+a multi-file change of C<foo> to C<bar> in all files in directory ~/stuff
+in C<emacs> (remember ESC-x [command] runs a command by name):
+
+    find-grep-dired RET [path-to-a-directory] RET [grep-target] RET
+
+This gets you a C<dired> display that lists all the files directly
+within the specified directory, that contain matches to [grep-target].
+In C<dired> you can "mark" (choose) certain files with:
+
+    "m" to mark the file the cursor is on
+    "u" to unmark the file the cursor is on
+    "U" to unmark all
+    dired-mark-files-containing-regexp M-x ... RET
+    dired-mark-files-regexp M-x ... RET
+
+Perhaps surprisingly, "M" is not available for "mark all".
+
+Once you've marked all the files you want to do the change in, do:
+
+    dired-do-query-replace-regexp
+
+There is apparently no C<dired-do-replace-regexp>, but you can just
+say "Y" to the first queried change, to do all the rest across all the matched
+files with no more queries.
+
+Unlike C<globalChange>, C<emacs> can also go backwards (sorry 'bout dat).
+
+C<sed> -- similar to this script in some ways, but lacks character set, PCRE,
+and query-replace; and has a variety of other options instead.
+
+C<grepData> -- similar Perl-based searching with C<TabularFormats> support,
+but no changes.
+
+C<rename>, C<renameFiles> -- Similar changes,
+but to filenames rather than content.
+
+C<TabularFormats.pm> -- parsing support for the I<--fieldChoice> option.
+
+
+
+=for nobody ===================================================================
+
+=head1 Regex syntax summary (Perl, or essentially PCRE)
+
+This summary is not complete. See also L<http://perldoc.perl.org/perlre.html>.
+
+=over
+
+=item * B<.> -- any character (except newline, unless Regex Modifier /s is on).
+
+=item * B<[ace-m]> -- any of the listed characters.
+'^' at the start negates the list.
+'-' for ranges (to get hyphen, put it first (except for '^')).
+
+=item * B<[:posixclass:]> -- named sets of characters (this goes
+*inside* the normal [], for example: C<[[:alpha:]]>.
+Class names:
+I<alpha, alnum, ascii, blank, cntrl, digit, graph, lower,
+print, punct, space, upper, word, xdigit>.
+
+=item * B<()> -- grouping, and saves matched text for use in the 'to' part
+(right hand side) of the change. Groups are numbered in order of their "(".
+You can also name groups, like I<< (?<name>...) >>, and refer to them
+via I<\g{name}>.
+
+Unlike with C<sed> and C<emacs>,
+B<do not backslash parentheses> to get this effect;
+instead, backslash when you want a literal parenthesis.
+To refer to the n-th parenthesized match, use '$n' with the group number I<n>,
+or '\g{n}' with I<n> either a group number or group name.
+Perl dislikes C<\n> as with the C<sed> command).
+
+=item * B<|> -- match either the pattern on the right or the one on the left.
+
+=item * B<*, +, ?, {min,max}> -- sets repeatability of the prior item or group.
+Normally these do a "greedy" match, matching as many repetitions as possible.
+Appending a '?', as in '[aeiou]*?', makes a non-greedy match, matching
+the least number possible. For example, '<.*?>' matches from a less-than
+sign, up to the I<first> following greater-than sign rather than all the way
+to the I<last> following greater-than sign as with '<.*>'.
+
+=item * B<^, $> -- start, end of string/line. The exact meaning is
+affected by the various L<Regex Modifiers>, especially C<s>.
+
+
+=item * Backslashed character classes (capitalize to invert a class).
+See also the Posix character-class names, above.
+
+=over
+
+=item B<\w>: word character (includes letters, digits, underscore, and certain
+other Unicode connector punctuation characters),
+
+=item B<\d>: digit (may include Unicode numerics other than (0-9),
+
+=item B<\s>: whitespace
+
+=back
+
+
+=item * Backslashed assertions (zero-width):
+
+=over
+
+=item B<\b>: word-boundary (includes line-breaks and start/end of string),
+
+=item B<\B>: Match except at a word boundary
+
+=item B<\A>: Match only at beginning of string
+
+=item B<\Z>: Match only at end of string, or before newline at the end
+
+=item B<\z>: Match only at end of string
+
+=item B<\G>: Match only at the end-of-match position of prior m//g (or ^)
+
+=back
+
+
+=item * Backslashed special-character codes:
+
+=over
+
+=item  B<\a>: bell,
+
+=item  B<\e>: escape,
+
+=item  B<\f>: formfeed,
+
+=item  B<\n>: newline,
+
+=item  B<\r>: carriage return,
+
+=item  B<\t>: tab,
+
+=item  B<\C>: any octet (byte), even if part of a larger character,
+
+=item  B<\cX>: control character X,
+
+=item  B<\xFF> or B<\x{FF}>: char with hex code point FF,
+
+=item  B<\N{name}> or B<\N{U+FFFF}>: Unicode character by name or code point,
+
+=item  B<\o{77}> char with octal code point 77.
+
+=back
+
+
+=item * Special variables
+
+=over
+
+=item  B<$1> through B<$9>:  Nth capture group
+
+=item  B<$+>: the last bracket
+
+=item  B<$&>: entire matched string (also ${^MATCH})
+
+=item  B<$`>: string preceding match (also ${^PREMATCH})
+
+=item  B<$'>: string following match (also ${^POSTMATCH})
+
+=item  B<$^N>: most-recently-closed group
+
+=back
+
+
+=item * Special \-codes for the right-hand-side:
+
+=over
+
+=item  B<\l>: lowercase the next character,
+
+=item  B<\u>: uppercase the next character,
+
+=item  B<\L>: lowercase on,
+
+=item  B<\U>: uppercase on,
+
+=item  B<\Q>: metacharacters off,
+
+=item  B<\E>: end B<\L> or B<\U> or B<\Q>.
+
+=back
+
+=back
+
+
+=head3 Look-Around Assertions
+
+Look-around assertions are zero-width patterns (that is, they do not actual
+"use up" any characters of the input text), but are tested to determine
+whether the primary match is happening in an acceptable context.
+Positive assertions match when
+their subpattern matches, negative when it fails.
+
+=over
+
+=item B<< (?=pattern) >>
+
+A zero-width positive look-ahead assertion. For example,
+C</\w+(?=\t)/> matches a word only when followed by a tab,
+without including the tab in $& .
+
+=item B<< (?!pattern) >>
+
+A zero-width negative look-ahead assertion. For example
+C</foo(?!bar)/> matches any "foo" that isn't followed by "bar".
+You cannot use this for look-behind.
+
+If you are looking for a "bar" that isn't preceded by a "foo",
+C</(?!foo)bar/> will not do what you want. That's because the (?!foo)
+is just saying that the next thing cannot be "foo"--and it's not,
+it's a "bar", so "foobar" will match. Use look-behind instead (see below).
+
+=item B<< (?<=pattern) \K >>
+
+A zero-width positive look-behind assertion. For example,
+C</(?<=\t)\w+/> matches a word that follows a tab, without including
+the tab in $& . Works only for fixed-width look-behind.
+
+A special form, \K , "keeps" everything it had matched prior
+to the \K and does not include it in $& . This effectively provides
+variable-length look-behind.
+
+=item B<< (?<!pattern) >>
+
+A zero-width negative look-behind assertion. For example
+C</(?<!bar)foo/> matches any "foo" that does not follow
+"bar". Works only for fixed-width look-behind (that is, you can't
+use repetition operators).
+
+=back
+
+(there are additional regex operators)
+
+
+
+=head2 B<Regex Modifiers>
+
+(see also L<http://perldoc.perl.org/perlre.html#Modifiers>)
+
+=over
+
+=item * B<i> ignore case distinctions for matching (see also C<\\L>, C<\\U>,
+etc. within regexes).
+
+=item * B<g> global change, instead of just the first instance per line.
+B<Note>: This is not the default.
+
+=item * B<e> add another layer of evaluation (using Perl eval()).
+
+=item * B<x> allow ignorable whitespace in the expression.
+
+=item * B<s> allow '.' (the wildcard) to include newlines (this won't do much
+for you here, unless you're also using non-*nix --ilineends, or say you are).
+
+=item * B<m> allows '^' and '$' to match next to newlines, not just at the
+beginning and end of the entire string.
+
+=item * B<a, d, l, u> -- choose which of 4 sets of character-set rules
+to apply (ASCII, Default, Locale-based, or Unicode).
+
+=back
+
+
+
+=for nobody ===================================================================
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

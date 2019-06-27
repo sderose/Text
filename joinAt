@@ -1,0 +1,165 @@
+#!/usr/bin/perl -w
+#
+# joinAt
+#
+# 2014-08-31f: Written by Steven J. DeRose, sderose@acm.org.
+#
+use strict;
+use Getopt::Long;
+use sjdUtils;
+use alogging;
+
+my $version = "2014-10-03";
+
+my $decode        = 0;
+my $expr          = '=$';
+my $keep          = 0;
+my $iencoding     = "";
+my $mime          = 0;
+my $oencoding     = "utf8";
+my $verbose       = 0;
+
+###############################################################################
+#
+my %getoptHash = (
+    "decode!"                 => \$decode,
+    "expr=s"                  => \$expr,
+    "keep!"                   => \$keep,
+    "iencoding=s"             => \$iencoding,
+    "mime!"                   => \$mime,
+    "oencoding=s"             => \$oencoding,
+    "h|help"                  => sub { system "perldoc $0"; exit; },
+    "v|verbose+"              => \$verbose,
+    "version"                 => sub {
+        die "Version of $version, by Steven J. DeRose.\n";
+    },
+    );
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+sjdUtils::setVerbose($verbose);
+
+if (length($expr) < 1) {
+    eMsg(-1, "-expr required.");
+}
+
+print "";
+binmode(STDOUT, ":encoding($oencoding)");
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $inMIMEHeader = ($mime) ? 1:0;
+
+while (my $rec = <>) {
+    $rec =~ s/[\r\n]+$//;
+    if ($inMIMEHeader) {
+        if ($rec =~ m/^\s*$/) { $inMIMEHeader = 0; }
+        print "$rec\n";
+        next;
+    }
+    if ($rec =~ m/$expr/) {
+        if (!$keep) { $rec =~ s/$expr//; }
+    }
+    else { $rec .= "\n"; }
+    if ($decode) {
+        $rec =~ s/=([0-9a-f][0-9a-f])/{ chr(hex($1)); }/gie;
+    }
+    print "$rec";
+}
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+joinAt [options] [-expr I<regex>] [files]
+
+Remove the line-break at the end of any line matching the given I<regex>.
+
+The default is /=$/, which joins up lines that were split into shorter pieces,
+with '=' inserted at the end of each piece, as
+part of the task of decoding "quoted-printable" mail format
+(RFC 2045). Use I<--decode> to also unescape =xx special characters.
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--decode>
+
+In addition, turn sequences of '=' plus 2 hex digits to the correponding
+character code point (UTF-8 may still have to be expanded after that).
+
+=item * B<--expr> I<e>
+
+The regular expression identifying lines to be joined with their following line.
+Default: C<=$>.
+
+=item * B<--mime>
+
+Assume there's a MIME header at the top, and do not start changing things until
+after the first blank line (which indicates the end of the MIME header).
+
+=item * B<--iencoding> I<e>
+
+Assume the input is in encoding I<e>. Output is always utf-8.
+
+=item * B<--keep>
+
+Do not delete the matched text; just the newline. Default: delete both.
+
+=item * B<--oencoding> I<e>
+
+Write output in encoding I<e>. Default: utf-8.
+
+=item * B<--verbose> or B<-v>
+
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+=head1 Known Bugs and Limitations
+
+I<--decode> does not complain if it sees '=' followed by non-hex-digits.
+
+After I<--decode>, any UTF-8 is not interpreted; this could be a feature or a bug.
+
+Perhaps should watch for "Content-Transfer-Encoding: quoted-printable" in MIME
+header, and use it to control whether to decode that.
+
+Would be nice to add a way to remove the newline I<before> matched lines,
+rather than after.
+
+
+=head1 Related commands
+
+C<splitAtMatches> -- inserts newlines before, after, or in place
+of regex matches.
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

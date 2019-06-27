@@ -1,0 +1,1106 @@
+#!/usr/bin/perl -w
+#
+# Like 'head' and 'tail', but grab any range, given
+#    starting and ending line, column, pattern, etc.
+#
+# 2006-03-23: Written by Steven J. DeRose.
+# 2007-03-26 sjd: support STDIN and named input files.
+# 2007-04-27 sjd: fix bunch of bugs on line-counting.
+# 2007-06-19 sjd: Add--fpat.
+# 2007-12-11 sjd: strict.
+# 2007-09-03 sjd: Testing. Improve doc. Getopt::Long. --lpat, --fpatnot,
+#     --lpatnot. Reorganize/clean up logic.
+#     Options for whether to include the --fpat/--lpat lines themselves, or not.
+# 2008-09-18 sjd: Add --lineends, --outlineends.
+# 2009-12-09 sjd: Fix test of --lpat option conflict.
+# 2010-03-28 sjd: Add --iencoding and --unicode. perldoc. Fix several bugs
+#     with --nlines/--fline, line-counting, line-length. Add 'use strict' and
+#     restructure logic for --char using output buffering. Modularize.
+# 2012-07-10 sjd: Bugs in --fchar/--lchar. Standardize naming, options.
+#     fchar/lchar/fline/lline/nlines accept hex, octal, binary. Better doc.
+#     Better handling of multiple combined conditions.
+# 2012-07-11 sjd: Add Reader package.
+# 2012-09-20 sjd: Couple small bugs.
+# 2013-01-14 sjd: Compile regexes.
+# 2013-02-08 sjd: Separate character-level i/o; sync rest to RecordFile.pm.
+# 2013-03-20 sjd: Clean up Reader i/f. Add --tickInterval.
+# 2014-11-04: Fix off-by-one on --fline.
+# 2016-10-10: Handle missing files right.
+# 2018-01-17: Start on --fpatnot and --lpatnot.
+# 2018-02-24: --fpatnot/--lpatnot to --fpatbreak/--lpatbreak. --iterate.
+#
+# To do: See the doc.
+#
+use strict;
+use Getopt::Long;
+use Encode;
+use Fcntl;
+
+use sjdUtils;
+use alogging;
+
+our $VERSION_DATE = "2018-02-24";
+
+my %options = (
+    "e"            => "",        # error-message prefix
+    "fchar"        => 0,         # First char to copy
+    "fline"        => 0,         # First line to retrieve
+    "fpat"         => "",        # Regex for first line to retrieve
+    "fpatBreak"    => 'INCLUDELINE', # Include --fpat matched line?
+    "fpatNum"      => 1,         # Which instance of fpat counts
+    "iencoding"    => "",
+    "ilineends"    => "U",
+    "iterate"      => 0,         # Find start/end points repeatedly.
+    "insert"       => '--',      # Put this between --iterate blocks.
+    "lline"        => 0,         # Last line to retrieve
+    "lchar"        => 0,         # Last char to copy
+    "lpat"         => "",        # Regex for last line to retrieve
+    "lpatBreak"    => 'INCLUDELINE', # Include --lpat matched line?
+    "lpatNum"      => 1,         # Which instance of lPat counts
+    "olineends"    => "U",
+    "nlines"       => 0,         # Number of lines to retrieve
+    "quiet"        => 0,
+    "replace"      => 0,
+    "tickInterval" => 100000,
+    "verbose"      => 0,
+    );
+
+###############################################################################
+#
+my %getoptHash = (
+	"fchar=o"                 => \$options{"fchar"},
+	"fline=o"                 => \$options{"fline"},
+	"fpat=s"                  => \$options{"fpat"},
+	"fpatBreak!"              => \$options{"fpatBreak"},
+	"fpatNum=o"               => \$options{"fpatNum"},
+    "h|help"                  => sub { system "perldoc $0"; exit; },
+    "iencoding=s"             => \$options{"iencoding"},
+	"ilineends=s"             => \$options{"ilineends"},
+    "listEncodings"           => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+	"lchar=o"                 => \$options{"lchar"},
+	"lline=o"                 => \$options{"lline"},
+	"lpat=s"                  => \$options{"lpat"},
+	"lpatBreak!"                => \$options{"lpatBreak"},
+	"lpatNum=o"               => \$options{"lpatNum"},
+	"nlines|lines=o"          => \$options{"nlines"},
+	"olineends=s"             => \$options{"olineends"},
+	"replace"                 => \$options{"replace"},
+    "q!"                      => \$options{"quiet"},
+    "tickInterval=o"          => \$options{"tickInterval"},
+    "unicode"                 => sub { $options{"iencoding"} = "utf8"; },
+    "v+"                      => \$options{"verbose"},
+    "version"                 => sub {
+        die "Version of $VERSION_DATE by Steven J. DeRose.\n";
+    }
+    );
+
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || dieCleanly("Bad options.");
+
+sjdUtils::setVerbose($options{"verbose"});
+
+
+###############################################################################
+# Validate the options
+#
+($options{"replace"}) && die
+    "-replace option is not yet implemented. Sorry.\n";
+
+if ($options{"fline"} && $options{"lline"} &&
+    ($options{"fline"} > $options{"lline"})) {
+    die "Line numbers illegal: must be 1 <= --fline(" . $options{"fline"} .
+        ") <= --lline(" . $options{"lline"} . ").\n";
+}
+
+if ($options{"fline"} && ($options{"fchar"} > $options{"lchar"}) &&
+    ($options{"fline"}==$options{"lline"} || $options{"nlines"}==1)) {
+	  die "When --fline = --lline or --nlines = 1, " .
+          "-lchar (" . $options{"lchar"} . ") must be > --fchar (" .
+          $options{"fchar"} . ").\n";
+}
+
+if ($options{"nlines"} && ($options{"lline"} || $options{"lpat"})) {
+	die "Can't specify --nlines with either --lline or --lpat.\n";
+}
+if ($options{"lpat"} && ($options{"lline"} || $options{"lchar"})) {
+	die "Can't specify both --lpat and (--lline (" . $options{"lline"} .
+        ") or --lchar (" . $options{"lchar"} . ")).\n";
+}
+
+#if ($options{"fpatBreak"} && !$options{"fpat"}) {
+#    die "Can't specify --fpatBreak without --fpat.\n";
+#}
+#if ($options{"lpatBreak"} && !$options{"lpat"}) {
+#    die "Can't specify --lpatBreak without --lpat.\n";
+#}
+
+$options{"ilineends"} = uc(substr($options{"ilineends"} . "U", 0, 1));
+if    ($options{"ilineends"} eq "M") { $/ = chr(13); }
+elsif ($options{"ilineends"} eq "U") { $/ = chr(10); }
+elsif ($options{"ilineends"} eq "D") { $/ = chr(13) . chr(10); }
+else {
+	die "-ilineends, must specify Mac, Dos, or Unix/*nix, not '" .
+        $options{"ilineends"} . "'.\n";
+}
+
+my $newline = "";
+$options{"olineends"} = uc(substr($options{"olineends"} . "U", 0, 1));
+if    ($options{"olineends"} eq "M") { $newline = chr(13); }
+elsif ($options{"olineends"} eq "U") { $newline = chr(10); }
+elsif ($options{"olineends"} eq "D") { $newline = chr(13) . chr(10); }
+else {
+	die "-olineends must be Mac, Dos, or Unix/*nix, not '" .
+        $options{"olineends"} . "'.\n";
+}
+
+if (scalar @ARGV > 1) { die "Extra arguments: " . join("|",@ARGV) ."\n"; }
+
+if (!$ARGV[0]) {
+    push @ARGV, "-";
+    (-t STDIN) && (!$options{"quiet"}) &&
+        vMsg(0,"Waiting on STDIN...");
+}
+
+if ($options{"iencoding"} ne "") {
+    print "";
+    binmode(STDOUT, ":encoding(" . $options{"iencoding"} . ")");
+}
+
+# Compile the regexes
+#
+my $fpatc = ($options{"fpat"}) ? qr/$options{"fpat"}/ : undef;
+my $lpatc = ($options{"lpat"}) ? qr/$options{"lpat"}/ : undef;
+my $recordSepc = ($options{"recordSep"}) ? qr/$options{"recordSep"}/ : undef;
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $reader    = undef;
+my $firstLine = "";
+my $fileCount = 0;
+
+while (my $file = shift) {
+    if (!-f $file) {
+        warn "\n******* Can't find file '$file'.\n\n";
+        next;
+    }
+    $reader = new Reader($file, $options{"iencoding"});
+	if (!$reader) {
+        warn "Can't open file '$file'.\n";
+        next;
+    }
+    $fileCount++;
+
+    # If no line argument, interpret chars as raw file offsets.
+    #
+    $firstLine = "";
+    if ($options{"fline"}==0 && $options{"lline"}==0 &&
+        $options{"fpat"} eq "" && $options{"lpat"} eq "") {
+        charOffsetsOnly();
+    }
+    elsif ($options{"iterate"}) {
+        my $nBlocks = 0;
+        while (1) {
+            findStartPoint();
+            copyToEndPoint();
+            if ($options{"lchar"}) {
+                handleLchar();
+            }
+            print($options{'insert'} . "\n");
+            $nBlocks++;
+        }
+    }
+    else {
+        findStartPoint();
+        copyToEndPoint();
+        if ($options{"lchar"}) {
+            handleLchar();
+        }
+    }
+    outFinalize();
+    $reader->close();
+} # per file
+
+if (!$options{"quiet"}) {
+    if (!$fileCount) {
+        warn "body: No files found.\n";
+    }
+    elsif (-t STDOUT) {
+        bWarn(0,"body: Done after $fileCount file(s).");
+    }
+}
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+#
+sub charOffsetsOnly {
+	bWarn(1, "No line number args, just doing fchar/lchar");
+
+    findStartPoint();
+    outLine($firstLine);
+
+	my $lastLine = "";
+    while (defined (my $rec = $reader->readOneRecord())) {
+        my $tell = $reader->{charPos};
+        if ($options{"lchar"} && $tell>$options{"lchar"}) { # done
+            bWarn(0, "At --lchar line.");
+            my $needed = $tell - $options{"lchar"};
+            $rec = substr($rec,0, $needed);
+            outLine($rec);
+            last;
+        }
+        outLine($rec);
+    }
+} # charOffsetsOnly
+
+
+###############################################################################
+# Find the place to begin copying at.
+#
+# Upon returning:
+#     The first line or partial-line to be fetched is in $firstLine.
+#     It will be a complete line unless --fchar was specified, in which case
+#       any not-needed beginning part of it will have been removed.
+#     No actual output will have been done.
+#
+sub findStartPoint {
+    # If *only* --fchar for start, it's relative to whole file.
+    #
+    my $fpatNumFoundSoFar = 0;
+    my $offset = 1; # unlike seek()!
+    if ($options{"fchar"} && !$options{"fline"} && !$options{"fpat"}) {
+        while (defined ($firstLine = $reader->readOneRecord())) {
+            my $extras = $reader->{charPos} - $options{"fchar"};
+            if ($extras>=0) {
+                $firstLine = substr($firstLine,$extras);
+                last;
+            }
+        }
+        bWarn(1, "first line or part: '$firstLine'");
+        return;
+    }
+
+    # Otherwise, do fline, then fpat, then fchar relative to line.
+    #
+    if ($options{"fline"} > 1) {
+        bWarn(1, "Seeking fline " . $options{"fline"} . "...");
+        while (defined ($firstLine = $reader->readOneRecord())) {
+            if ($reader->{recnum} >= $options{"fline"}-1) { last; }
+        }
+        ($reader->{recnum} < $options{"fline"}-1) && alogging::eMsg(
+            -1, "Couldn't reach starting line " . $options{"fline"} .
+            ", EOF after line " . $reader->{recnum} . ".");
+        bWarn(1, "At fline " . $reader->{recnum});
+    }
+
+    if ($options{"fpat"}) { # scan for first matching line
+        bWarn(1, "Seeking fpat /" . $options{"fpat"} .
+              "/ #" . $options{"fpatNum"} . "...");
+    	my $gotFpat = 0;
+        while (defined ($firstLine = $reader->readOneRecord())) {
+    		# bWarn(1,  "Trying '$firstLine'");
+    		if ($firstLine =~ m/$fpatc/) {
+                $fpatNumFoundSoFar++;
+                if ($fpatNumFoundSoFar >= $options{"fpatNum"}) {
+                    $gotFpat = 1;
+                    last;
+                }
+            }
+    	}
+    	if ($gotFpat) {
+            bWarn(1, "Found --fpat /" . $options{"fpat"} .
+              "/ #" . $options{"fpatNum"}, $firstLine);
+        }
+        else {
+            bWarn(0, "-fpat /" . $options{"fpat"} . "/ #" .
+                  $options{"fpatNum"} . " not found by EOF, nothing copied.");
+            die "\n";
+        }
+        if ($options{"fpatBreak"} eq 'INCLUDELINE') {
+            # Do nothing, leave whole line for fchar to chew on
+        }
+        elsif ($options{"fpatBreak"} eq 'INCLUDEMATCH') {
+                $firstLine = ${'MATCH'} . ${'POSTMATCH'};
+        }
+        elsif ($options{"fpatBreak"} eq 'EXCLUDEMATCH') {
+                $firstLine = ${'POSTMATCH'};
+        }
+        elsif ($options{"fpatBreak"} eq 'EXCLUDELINE') {
+                # Move to next line
+                $firstLine = $reader->readOneRecord();
+        }
+        else {
+            die "Bad --fpatBreak: " . $options{"fpatBreak"} . ".\n";
+        }
+    } # fpat
+
+    if ($options{"fchar"}) { # fchar *within* line
+        bWarn(1, "Seeking fchar " . $options{"fchar"});
+        my $flinelen = length($firstLine);
+    	if ($options{"fchar"} > $flinelen) {
+            alogging::eMsg(0, "fline (" . $options{"fline"} .
+                ") too short ($flinelen) for fchar (" .
+                $options{"fchar"} . ").");
+    	}
+    	else {
+    		$firstLine = substr($firstLine,$options{"fchar"}-1);
+    	}
+    }
+    bWarn(1, "Copy starts at '$firstLine' (line " . $reader->{recnum} . ")");
+} # findStartPoint
+
+
+###############################################################################
+# Copy until we hit the appropriate end condition.
+#
+# Assume initial line is in $firstLine, not yet output.
+# If fline=lline, both char offsets apply to same line.
+#
+sub copyToEndPoint {
+    # If we're only doing one line, by numbers...
+    #
+    if (($options{"fline"} && $options{"fline"} == $options{"lline"}) ||
+        $options{"nlines"} == 1) {
+        bWarn(1, "Doing char offsets in a single line.");
+        if ($options{"lchar"} > 0) {
+            $firstLine = substr($firstLine, 0,
+                                $options{"lchar"}-$options{"fchar"});
+        }
+        outLine($firstLine);
+        outFinalize();
+        return;
+    }
+
+    # Else have to search for end, so continue doing more lines.
+    #
+    outLine($firstLine);
+    bWarn(2, "Seeking end line.", "From: $firstLine");
+
+    my $rec = "";
+    my $ncopied = 1;
+    my $lpatFound = 0;
+
+    while (defined ($rec = $reader->readOneRecord())) {
+        # Must stop *at* -lline, because we might be taking only part of it.
+        if ($options{"lline"} && $reader->{recnum}>=$options{"lline"}) {
+            bWarn(
+                1, "lline (" . $options{"lline"} . ") reached: $rec");
+            last;
+        }
+        if ($options{"nlines"}>0 && $ncopied>=$options{"nlines"}) {
+            bWarn(1,
+                "nlines (" . $options{"nlines"} . ") reached...");
+            last;
+        }
+        if ($options{"lpat"}) {
+            $rec =~ m/(.*?)($lpatc)(.*$)/;
+            my $PRE = $`;
+            my $MAT = $&;
+            bWarn(1, "lpat matched /" . $options{"lpat"} . "/", "    $rec");
+            warn " Got: $1, $2, $3.\n";
+            if ($MAT) {
+                $lpatFound = 1;
+
+                if ($options{"lpatBreak"} eq 'INCLUDELINE') {
+                    bWarn(1, "lpatBreak INCLUDELINE");
+                }
+                elsif ($options{"lpatBreak"} eq 'INCLUDEMATCH') {
+                    $rec = ${'PRE'} . ${'MAT'};
+                }
+                elsif ($options{"lpatBreak"} eq 'EXCLUDEMATCH') {
+                    $rec = ${'PRE'};
+                }
+                elsif ($options{"lpatBreak"} eq 'EXCLUDELINE') {
+                    bWarn(1, "lpatBreak EXCLUDELINE");
+                    $rec = "";
+                }
+                else {
+                    die "Bad  --lpatBreak: " . $options{"lpatBreak"} . ".\n";
+                }
+                outPeek();
+                last;
+            }
+        } # lpat
+        outLine($rec);
+        $ncopied++;
+    } # while !EOF
+    outFinalize();
+
+    if ($ncopied == $options{"nlines"}) {
+        # Possibly remove part of it?
+        outLine($rec);
+    }
+
+    if ($options{"lpat"} && !$lpatFound) {
+        bWarn(0,"EOF hit before --lpat pattern (" .
+            $options{"lpat"} . ") was found.");
+    }
+} # copyToEndPoint
+
+
+###############################################################################
+# Do --lchar and we're done (line to be chopped was already queued by somebody,
+# so pull it back, truncate, then re-queue).
+#
+sub handleLchar {
+    bWarn(1, "Reached final line, doing lchar...");
+    my $lastLine = outBack(); # Retrieve last-queued line
+    my $llinelen = length($lastLine);
+    if ($options{"lchar"} > $llinelen) {
+	    bWarn(0,"Last line is too short for lchar (" .
+            $options{"lchar"} . "): $llinelen.");
+	}
+	else {
+	    $lastLine = substr($lastLine,0,$options{"lchar"});
+	}
+    outLine($lastLine);
+} # handleLchar
+
+
+
+###############################################################################
+###############################################################################
+# Used to output a line. But, it keeps one buffered so we can go back and
+# implement --lchar (hands it back via outBack().
+#
+BEGIN {
+    my $pendingLine = undef;
+
+    sub outLine {
+        if (defined $pendingLine) { print $pendingLine; }
+        $pendingLine = $_[0];
+    }
+
+    sub outBack {
+        if (!defined $pendingLine) {
+            alogging::eMsg(0, "outback: no line to recover.");
+        }
+        my $rc = $pendingLine;
+        $pendingLine = undef;
+        return($rc);
+    }
+
+    sub outFinalize {
+        if (defined $pendingLine) { print $pendingLine; }
+        $pendingLine = undef;
+    }
+
+    sub outPeek {
+        warn "BUF: [[[$pendingLine]]]\n";
+    }
+} # END
+
+
+sub bWarn {
+    my ($level, $msg, $msgLine2) = @_;
+    if (!defined $msgLine2) { $msgLine2 = ''; }
+    my $loc = sprintf(" %s:%d:%d (byte %d):",
+        $0, $reader->{recnum}, $reader->{charPos}, $reader->{bytePos});
+    alogging::vMsg($level, sjdUtils::showInvisibles($msg),
+                   $loc . ($msgLine2 ? ("\n    " . $msgLine2) : ""));
+}
+
+sub tick {
+    return unless ($options{tickInterval}>0);
+    if (($reader->{recnum} % $options{tickInterval}) == 0) {
+        vMsg(0, "At record " . $reader->{recnum});
+    }
+}
+
+
+###############################################################################
+###############################################################################
+# Read lines, tracking line, character, and byte offsets.
+# In theory, Perl "$." is the current record number....
+#
+# Seeking backwards is available, but little tested.
+# Code follows for doing character-level i/o, but is presently unused.
+#
+# CF: RecordFile.pm, TabularFormats.pm, splitFiles, EntityManager.pm
+#
+# Methods:
+#  $x = new(class, path, encoding)
+#  $x->rewind()
+#  $x->close()
+#  $x->readOneRecord()
+#  $x->gotoNthRecord(n)
+#
+#  UNUSED $x->peekRec()
+#  UNUSED $x->backRec(n)
+#
+#  UNUSED $x->readChars(n)
+#  UNUSED $x->seekByte(n)
+#  UNUSED $x->seekChar(n)
+#  UNUSED $x->backChar(n)
+#
+package Reader;
+
+# Could these be supported by reading, re-coding the char into the encoding,
+# and measuring it?
+#
+my %badEncodings = ( # Only includes ones also in Perl 'Encode'
+    "big5-eten"     => 1,    "big5-hkscs"    => 1,
+    "euc-cn"        => 1,    "euc-jp"        => 1,    "euc-kr"        => 1,
+    "hz"            => 1,    # 7-bit version of GB2312
+    "iso-2022-jp"   => 1,    "iso-2022-jp-1" => 1,    "iso-2022-kr"   => 1,
+    "jis0201-raw"   => 1,    "jis0208-raw"   => 1,    "jis0212-raw"   => 1,
+    "shiftjis"      => 1,    "7bit-jis"      => 1,
+    "UCS-2BE"       => 1,    "UCS-2LE"       => 1,
+    "UTF-16"        => 1,    "UTF-16BE"      => 1,    "UTF-16LE"      => 1,
+    "UTF-32"        => 1,    "UTF-32BE"      => 1,    "UTF-32LE"      => 1,
+    "ksc5601-raw"   => 1,    # Unified Hangul
+    "MacChineseSimp"=> 1,    "MacChineseTrad"=> 1,
+    "MacJapanese"   => 1,    "MacKorean"     => 1,    # MacThai?
+    "MIME-Header-ISO_2022_JP" => 1,
+    "gb12345-raw"   => 1,    # 2-byte
+    "gb2312-raw"    => 1,    # 2-byte
+    );
+
+
+sub new {
+    my ($class, $path, $enc) = @_;
+    open(my $fh, "<$path");
+    if (!$fh) {
+        die "Unable to open '$path'\n";
+        return(undef);
+    }
+    if ($enc) {
+        binmode($fh, ":encoding($enc)");
+    }
+    my $self = {
+        path      => $path,
+        fh        => $fh,
+        encoding  => $enc,
+        recordSep => "\n",
+
+        bytePos   => 0,
+        charPos   => 1,
+        recnum    => 1,
+    };
+    bless $self, $class;
+    #$self->resetStats();
+    return($self);
+}
+
+sub rewind {
+    my ($self) = @_;
+    seek($self->{fh},0,Fcntl::SEEK_SET);
+    $self->{bytePos}  = 0;
+    $self->{charPos}  = 1;
+    $self->{recnum}   = 1;
+}
+
+sub close {
+    my ($self) = @_;
+    $self->rewind();
+    close($self->{fh});
+}
+
+sub readOneRecord {
+    my ($self) = @_;
+    if ($self->{bytePos} != tell($self->{fh})) {
+        warn "bytePos out of sync!\n";
+    }
+    my $fh = $self->{fh};
+    my $buf = undef;
+    # $buf = $self->readCharsThrough($self->{recordSep});
+    if (!defined($buf = readline($fh))) {
+        return(undef);
+    }
+    $self->{bytePos} = tell($self->{fh});
+    $self->{charPos} += length($buf);
+    $self->{recnum}++;
+    main::tick();
+    return($buf);
+} # readOneRecord
+
+sub gotoNthRecord {
+    my ($self, $n) = @_;
+
+    # Do we need to move backwards?
+    if ($n < $self->{recnum}) { $self->rewind(); }
+
+    # Scan forward, counting bytes/chars/recs
+     while (defined $self->readOneRecord()) {
+        if ($self->{recnum} >= $n) { return(1); }
+    }
+    return(0); # EOF
+}
+
+
+###############################################################################
+###############################################################################
+# Character-level i/o -- not used currently.
+#
+package UNUSED;
+
+sub peekRec { # Get next record without moving
+    my ($self) = @_;
+    my $fh = $self->{fh};
+    my $startPos = tell($fh);
+    my $buf = readline($fh); # Not *our* readOneRecordn()!
+    my $byteCount = tell($fh) - $startPos;
+    seek($fh, $startPos, Fcntl::SEEK_SET);
+    return($byteCount, $buf);
+}
+
+# According to http://docstore.mik.ua/oreilly/perl/cookbook/ch08_05.htm,
+# there's really no way to do this. Probably true for encodings in general,
+# though easy enough for fixed-width encodings (not, e.g., utf8).
+#
+# O(n**2) to read a file backwards!!!
+#
+sub backRec {
+    my ($self, $n) = @_;
+    if (!$n) { $n = 1; }
+    $self->gotoNthRecord($self->{recnum}-$n);
+}
+sub readCharsThrough {
+    my ($self, $targetChar) = @_;
+    my $buf = "";
+    while (defined (my $char = $self->readChars())) {
+        $buf .= $char;
+        if ($char eq $targetChar) { last; }
+    }
+    return($buf);
+}
+
+# Character-level:
+
+sub readChars {
+    my ($self, $n) = @_;
+    if (!$n) { $n = 1; }
+    my $fh = $self->{fh};
+    my $buf = undef;
+    my $char = undef;
+    while ($n--) {
+        if (read($fh, $char,1) <= 0) { # EOF
+            return($buf);
+        }
+        $buf .= $char;
+        $self->{bytePos} = tell($fh);
+        $self->{charPos}++;
+        if (defined $recordSepc && $char =~ $recordSepc) {
+            $self->{recnum}++;
+        }
+    }
+    return($buf);
+}
+
+sub seekByte {
+    my ($self, $n) = @_;
+
+    # Do we need to move backwards?
+    if ($n < $self->{bytePos}) { $self->rewind(); }
+
+    # Scan forward, counting bytes/chars/recs
+     while (defined $self->readChars(1)) {
+        if ($self->{bytePos} >= $n) { return(1); }
+    }
+    return(0); # EOF
+}
+
+sub seekChar {
+    my ($self, $n) = @_;
+
+    # Do we need to move backwards?
+    if ($n < $self->{charPos}) { $self->rewind(); }
+
+    # Scan forward, counting bytes/chars/recs
+     while (defined $self->readChars(1)) {
+        if ($self->{charPos} >= $n) { return(1); }
+    }
+    return(0); # EOF
+}
+
+sub backChar {
+    my ($self, $n) = @_;
+    if (!$n) { $n = 1; }
+    my $fh = $self->{fh};
+    my $startPos = tell($fh);
+
+    if ($self->{encoding} eq "utf8") {
+        my $byte = undef;
+        seek($fh, -1, Fcntl::SEEK_CUR);
+        while ($n>0) {
+            $self->{bytePos}--;
+            read($fh, $byte, 1) || return(undef);
+            if ($byte >> 6 != 2) { # utf-8 start byte
+                $n--;
+                $self->{charPos}--;
+                if (char($byte) eq "\n") {
+                    $self->{recnum}--;
+                }
+            }
+            seek($fh, -2, Fcntl::SEEK_CUR);
+        }
+    }
+    elsif (!defined $badEncodings{$self->{encoding}}) {
+        seek($fh, -1, Fcntl::SEEK_CUR);
+    }
+    else {
+        warn "backChar: Can't do for encoding '$self->{encoding}'.\n";
+        return(undef);
+    }
+    return(1);
+} # backChar
+
+# End of UNUSED package
+
+
+###############################################################################
+
+=pod
+
+=head1 Usage
+
+body [options] file(s)
+
+Extract a range of lines or characters from the input.
+
+The starting and ending locations
+can be specified by line numbers,
+by regular expression patterns to find,
+and/or by character offsets.
+If both line and character offsets are specified,
+the character offset is counted relative to (that is, within) the line.
+
+If multiple files are specified, the whole process is applied to each of
+them separately, not applied once to their concatenated data.
+
+This could be considered a simpler (more accessible?) version of C<awk>.
+Probably, everything C<body> can do, C<awk> can too (plus much else).
+On the other hand, C<awk> required some programming skill, and may not
+support Unicode (recent versions of C<gawk> do).
+
+=head2 Examples
+
+=over
+
+=item * body --fline 100 --lline 204 foo.txt
+
+Gets lines 100 through 204 from the file.
+This is similar to the following C<awk> script:
+
+    $ awk 'LN >= 100 && LN <= 204 { print $0 }'
+
+
+=item * body --fchar 0xBEEF --nlines 100 foo.txt
+
+Gets from hexadecimal character offset 0xBEEF, the following 100 lines
+(the first of which may well be a partial line, because offset 0xBEEF may
+well point to the middle of some line).
+This is similar to the following C<awk> script (but supports the
+starting offset being mid-line more accurately):
+
+    $ awk 'offset < 0xBEEF && nlines < 100 {
+        print $0; offset += length($0); nlines++ }'
+
+
+=item * body --fpat '^#START' --lpat '#END' *.txt
+
+Gets (entire) lines from the one in which "#START" is found, up to
+the one in which "#END" is found, from B<each> of the C<.txt> files in
+the current directory. The lines in which the matches are found,
+are included by default (but see I<--fpatBreak>, I<--fpatNum>, I<--lpatBreak>,
+and I<--lpatNum>). This is similar to the following C<awk> script:
+
+    $ awk '$0 ~ /my start(ing?) pattern/ { p=1 }
+           $0 ~ /my end(ing?) pattern/ { exit }
+           p { print $0 }'
+
+=back
+
+
+=head2 Edge cases
+
+You can specify any mix of I<--fline>, I<--fpat>, and I<--fchar>.
+If none of them are specified, data is extracted starting at the
+beginning of the file. Otherwise, these options  are used,
+in the order just stated, to move forward in the file:
+
+If EOF is hit before a specified goal is reached,
+then an error is reported and nothing is copied.
+
+=over
+
+=item # First, to the line number (counting from 1) specified by I<--fline>.
+
+=item # Then to a match to I<--fpat> (the first match, unless
+I<--fpatNum> is specified).
+A match I<can> be found in the current line (that is, the I<--fline> line,
+or if that is not specified, the first line).
+
+=item # If I<--fpatBreak> is specified (which requires that I<--fpat> is also
+specified), then to the chosen place relative to the found match.
+The default is to include the entire line containing the match.
+If it is instead set to EXCLUDELINE, that line is entirely discarded,
+and the following line becomes the current line.
+
+=item # Then to offset I<--fchar> in the current line (depending on
+I<--fpatBreak>, this ight include only part of the matched input line).
+If the line (or part) is not wide enough, copying begins at the start of the
+next line and an warning is issued.
+
+B<However>, if I<--fline> and I<--fpat> are both omitted,
+then I<--fchar> is treated as an offset in the I<file> rather than in
+the starting (in this case, first) line.
+
+=back
+
+After locating the starting point, data is copied until stopped by EOF or by
+matching any ending condition.
+
+Similar to finding the starting point, if
+I<--fchar> is the only ending condition specified, then it is treated as a
+global file offset, and data is copied up to there. If other ending
+conditions are specified, the script copies data until:
+
+=over
+
+=item * the line whose number is specified on I<--lline> is reached
+(this means a line number from the input; see the next item for getting
+a specific number of lines); or
+
+=item * the number of lines specified in I<--nlines>
+(counting a possibly-partial initial line) have been seen; or
+
+=item * the first match (or a later match, if I<--fpatNum> is specified)
+of the pattern specified in I<--lpat> is found.
+Only matches after the starting point count, though a match
+could occur even on the first line that was retrieved.
+
+=item * if I<--lpatBreak> is specified (which requires that I<--lpat> is also
+specified), then the exact endpoint is determined by that choice.
+This could result in no data being copied, for example
+if the initial lines is also the final line before considering I<--lpatBreak>.
+
+=item * if I<--lchar> is also specified, then any part of that line (or partial
+line) beyond column I<--lchar> is discarded.
+
+=back
+
+If any of these ending conditions is met, copying stops unless I<--iterate>
+is specified. If it is, then look for new starting and ending points,
+beginning with the first data not included in the body part found as
+just described. Lather, rinse, repeat. In this case, the value of
+I<--insert> is placed as a separate line between the found blocks.
+
+
+=head1 Options
+
+B<Note>: Numeric option values may be expressed in decimal, hex (0x...),
+octal (0...), or binary (0b...).
+
+=over
+
+=item * B<--fchar> I<n>
+
+Start with the character at offset I<n> (counting from 1).
+If I<--fline> and/or I<--fpat> are also specified, I<n> counts within
+the initial line.
+Otherwise, I<n> counts from beginning of file.
+
+=item * B<--fline> I<n>
+
+Start with line number I<n> (counting from 1).
+
+=item * B<--fpat> I<regex>
+
+Start with a line matching I<regex> (normally the first such line,
+but see I<--fpatNum>). If I<--fline> is also specified,
+the first matching line I<after> line number I<--fline> is sought.
+See also I<--fpatBreak>.
+
+=item * B<--fpatBreak> I<where>
+
+Choose where to start copying relative to the match for I<--fpat>
+(if the latter is not set, this does nothing). One of:
+
+=over
+
+=item * INCLUDELINE -- include the entire line containing the match (default).
+
+=item * INCLUDEMATCH -- break line to include the match
+
+=item * EXCLUDEMATCH -- break line to exclude the match
+
+=item * EXCLUDE -- exclude the entire matched line.
+
+=back
+Don't include the line matched by I<--fpat>. Instead start just after it.
+Default: the matched line itself is included.
+
+=item * B<--fpatNum> I<n>
+
+Wait for the I<n>th match of the I<--fpat> pattern (default: 1).
+
+=item * B<--iencoding> I<e>
+
+Assume input file is in this character encoding.
+
+=item * B<--ilineends> I<t>
+
+Input line-breaks as for Unix (default), Mac, or DOS.
+
+=item * B<--iterate> (not yet supported)
+
+After finding an entire start...end block as described above, repeat the
+whole process to find another, and another. Issue them all, with the
+value of I<--insert> inserted as a separate line between them.
+
+=item * B<--insert> I<s>
+
+See I<--iterate>.
+
+=item * B<--lchar> I<n>
+
+End with the character at offset I<n>.
+If I<--lline> and/or I<--lpat> are also specified, I<n> counts within
+the final line.
+Otherwise, I<n> counts from beginning of file.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>,
+and exit.
+
+=item * B<--lline> I<n>
+
+End with line number I<n> (counting from 1). See also I<--nlines>.
+
+=item * B<--lpat> I<regex>
+
+End at a line after the starting point, that matches I<regex>
+(normally the first such line, but see I<--lpatNum>).
+I<--lpat> only considers matches in or following the chosen starting point.
+Unless I<--lpatBreak> is specified, the matching line itself is included
+in the result.
+
+=item * B<--lpatBreak> I<where>
+
+Choose where to stop copying relative to the match for I<--lpat>.
+I<where> takes the same values as for B<--lpatBreak>.
+
+=item * B<--lpatNum> I<n>
+
+Wait for the I<n>th match of the I<--lpat> pattern (default: 1).
+
+=item * B<--nlines> I<n> or B<--lines> I<n>
+
+Get I<n> lines, counting first line retrieved as 1. See also I<--lline>.
+
+=item * B<--olineends> I<t>
+
+Output line-breaks as for Unix (default), Mac, or DOS.
+
+=item * B<--quiet> OR B<-q>
+
+Suppress most messages.
+
+=item * B<--tickInterval> I<n>
+
+Report progress after every I<n> records are read.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+
+More detailed messages.
+
+=item * B<--version>
+
+Report version date and exit.
+
+=back
+
+
+=head1 Known bugs and limitations
+
+The I<--nlines> and I<--lline> options have off-by-one errors.
+
+The I<--lPat> option will not catch the pattern if it is on the same line
+matched by I<--fpat>.
+
+Some combinations of start/end options have not been tested much.
+
+Starting conditions are applied sequentially, but copying stops whenever
+I<any> of the ending conditions is met. This might not always be as desired.
+
+Should add I<--fbyte>, I<--lbyte>, I<--nchars>, I<--nbytes>.
+
+Fix STDIN!!!
+
+Add way to specify where to put the boundary:
+    exactly before/after match
+    before/after line with match
+
+Finish I<--fpatNum> and I<--lpatNum>.
+
+Off-by-one on I<--nlines> and I<--lline>.
+I<--nlines> doesn't work if no other args.
+
+Add I<--nchars>, I<--fbytes>, I<--lbytes>.
+
+Finish I<--iterate> option to do fpat...lpat blocks repeatedly.
+
+And separate each instance into its own file?
+
+Add I<--replace> [file]: Instead of fetching the range, fetch everything else,
+and *replace* the specified range with the contents of [file].
+Likewise, option to invert what's retrieved.
+
+Options to match fpat/lpat only in certain TabularFormats fields?
+
+Add iterative options like for 'tail'?
+(--retry, --follow, --max-unchanged, --pid, --sleep-internal)
+
+Replace internal Reader package with RecordFile.pm?
+
+
+=head1 Related commands
+
+C<head>, C<tail>, C<awk>.
+
+C<csplit> -- splits one file into several, at places where a patterns matches.
+
+C<split> -- splits one file into several, with each file including
+N lines, or N bytes, or full lines adding up to at most N bytes.
+
+C<disaggregate> -- splits up record-oriented files by the value of some
+field, or number of fields, or round-robin.
+
+C<RecordFile.pm> -- similar to internal 'Reader' package.
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

@@ -1,0 +1,224 @@
+#!/usr/bin/perl -w
+#
+# numberLines
+#
+# 2009-06-08: Written by Steven J. DeRose.
+# 2010-01-12 sjd: Add -width, -sep, -encoding, -hex, -ignore.
+# 2011-07-05 sjd: Clean up doc.
+# 2012-10-05 sjd: Cleanup, add -listEncodings.
+# 2014-09-09: -- for options.
+# 2016-10-10: Add --remove to do unnumbering.
+# 2018-09-27: Add --byLength, --suffix.
+#
+# To do:
+#     Option to colorize the number
+#     Option to count from/by increments
+#     Compare cat -n. Add --number-nonblank, show-ends, squeeze-blank, show-tabs, --show-nonprinting.
+#
+use strict;
+use Getopt::Long;
+use Encode;
+
+our $VERSION_DATE = "2018-09-27";
+
+my $byLength   = 0;
+my $delim      = " ";
+my $iencoding  = "";
+my $hex        = 0;
+my $ignore     = "";
+my $quiet      = 0;
+my $remove     = 0;
+my $suffix     = 0;
+my $verbose    = 0;
+my $width      = 6;
+
+
+###############################################################################
+#
+my %getoptHash = (
+    "byLength!"       => \$byLength,
+    "delim=s"         => \$delim,
+    "hex!"            => \$hex,
+    "h|help"          => sub { system "perldoc $0"; exit; },
+    "iencoding=s"     => \$iencoding,
+    "ignore=s"        => \$ignore,
+    "listEncodings"   => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "q|quiet!"        => \$quiet,
+    "remove!"         => \$remove,
+    "suffix!"         => \$suffix,
+    "v|verbose+"      => \$verbose,
+    "version"         => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+	"width=i"         => \$width,
+    );
+
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die("Bad options.\n");
+
+
+###############################################################################
+#
+($suffix && $remove) && die
+    "Sorry, can't combine --suffix and --remove.\n";
+if ($iencoding ne "") {
+    binmode(STDIN, ":encoding($iencoding)") ||
+	die "Binmode failed for -iencoding '$iencoding'.\n";
+    print "";
+    binmode(STDOUT,":encoding($iencoding)");
+}
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $format = "%0$width" . ($hex ? "x":"d");
+($verbose) && warn "Format string: '$format'\n";
+
+my $recnum = 0;
+
+while (my $rec = <>) {
+    if ($ignore && $rec =~ /$ignore/) {
+        print ((" " x $width) . $delim . $rec);
+    }
+    elsif ($remove) {
+        $recnum++;
+        if ($hex) { $rec =~ s/^\s*[\da-fA-F]+$delim//; }
+        else { $rec =~ s/^\s*\d+$delim//; }
+        print $rec;
+    }
+    else {
+        $recnum++;
+        my $toInsert = ($byLength) ? length($rec) : $recnum;
+        my $num = sprintf($format, $toInsert);
+        if ($suffix) {
+            print "$rec$delim$num";
+        }
+        else {
+            print "$num$delim$rec";
+        }
+    }
+}
+($verbose) && warn "Handled $recnum (non-ignored) lines.\n";
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+numberLines [options]
+
+Print a line number before each line from stdin, similar to C<grep -c>,
+I<uniq -c>, etc.
+
+Can also use hex numbers (I<--hex),
+remove numbers (I<--remove>),
+insert at the end rather than the beginning (I<--suffix>), or
+insert each line's length instead of a serial number (I<--byLength>).
+
+
+=head1 Options
+
+=over
+
+=item * B<--byLength>
+
+Instead of putting serial numbers in, insert the length of each line.
+
+=item * B<--delim> I<s>
+
+Delimiter string to put between number and line (default: space).
+This script does not support all the flexibility of C<deriveData> and
+C<TabularFormats> (q.v.).
+
+=item * B<--hex>
+
+Write the numbers in base 16 instead of base 10.
+
+=item * B<--iencoding> I<e>
+
+Assume this character encoding for input.
+
+=item * B<--ignore> I<regex>
+
+Don't count or number or unnumber lines that match I<regex>.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
+
+=item * B<--quiet> or B<-q>
+
+Suppress most messages (not that there are many anyway).
+
+=item * B<--remove>
+
+Remove initial numbers, instead of adding them.
+This only works for initial (decimal or I<--hex>) digits,
+optionally preceded by whitespace, and non-optionally followed by I<--delim>.
+Cannot be combined with I<--suffix>.
+
+=item * B<--suffix>
+
+Put the numbers at the ends of lines instead of the beginning.
+Also, the I<--delim> goes before the number instead of after.
+
+=item * B<--verbose> or B<-v>
+
+More messages.
+
+=item * B<--version>
+
+Display version info and exit.
+
+=item * B<--width> I<n>
+
+Zero-pad the number to at least this many digits (set C<0> for no padding).
+
+=back
+
+
+=head1 Related commands
+
+C<cat -n> is similar, but doesn't have I<--hex>, I<--width>, or
+support for Unicode and other encodings.
+
+C<deriveData> can insert a new field into each record of a file(s) in
+CSV, XSV, and many other roughly "tabular" file formats. The expression for what
+value to insert can make reference to (among other things) the current record number,
+and so can be used to insert line-numbers much like C<numberLines>.
+
+C<iota> generates serial-numbered things in many forms, but does not attach
+them to incoming data lines. These may be integrated.
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version,
+see L<http://www.derose.net/steve/utilities/>.
+
+=cut

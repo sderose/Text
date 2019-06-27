@@ -1,0 +1,735 @@
+#!/usr/bin/perl -w
+#
+# addup: Add up numbers that are tokens of each line, until EOF.
+#
+# 2006-??-??: Written by Steven J. DeRose.
+# 2006-11-28 sjd: Fix missing \\ in default $delim.
+# 2007-09-26 sjd: Add --avg.
+# 2008-08-31 sjd: Add -n *, --product, use getOpt, output multiple bases.
+# 2008-09-12 sjd: Add --com, handle lines w/ too few tokens.
+# 2008-10-01 sjd: ccli. Support time.
+# 2010-01-22 sjd: Make accept input file, not just stdin.
+# 2010-04-08 sjd: Support floating-point numbers.
+# 2010-08-06 sjd: Allow trailing '%'.
+# 2010-12-11 sjd: Add --human-readable. Use sjdUtils.pm. Split report().
+#     Integrate TabularFormats.pm. Support field names. product in subtotals.
+# 2012-04-13 sjd: Fix warnings; check for nil return from parseRecord().
+# 2012-07-09ff sjd: Cut over to TabularFormats.pm. Use vMsg().
+#     Break out handleToken().
+# 2012-10-01 sjd: Fix field-parsing bugs.
+# 2013-10-15: Add --time.
+# 2014-11-11: Fix to make simple case ($field eq "") works.
+# 2016-08-09: Add subtotal and help commands. Count $total into time total.
+# 2016-09-23: Fixes to time. Add "*" and "@" comments.
+# 2016-11-04: Formatting. Start on --logbook.
+# 2017-06-29: Add timespans and --roundMinutes.
+#
+# To do:
+#     Support bash and iso-style date strings:
+#         Two in one line for spans /.*{}.*{}/
+#         --logbook: One per line, with daily from-to, time, and tabs for subtotal per day
+#     add --simple option to avoid tformats. fix tformats header.
+#     fieldNum repeatable?
+#     report variance?
+#     BUG in adding mixed time and int?
+#     Add other basic operators.
+#     Clean up --time option vs. adding on final report.
+#
+use strict;
+use Getopt::Long;
+
+use sjdUtils;
+use alogging;
+use TabularFormats;
+
+our $VERSION_DATE = "2017-06-29";
+
+my $avg             = 0;
+my $bases           = 0;
+my $field           = "";
+my $logbook         = 0;
+my $logStart        = "\\b(IN|BEGIN|START)\\b";
+my $logEnd          = "\\b(OUT|END|FINISH)\\b";
+
+my $humanReadable   = 0;
+my $product         = 0;
+my $quiet           = 0;
+my $roundMinutes    = 0;  # Round time to a multiple of this many minutes.
+my $time            = 0;
+my $trivial         = 0;  # Use just split() for field-parsing.
+my $verbose         = 0;
+
+
+###############################################################################
+#
+my %getoptHash = (
+    "avg|average!"      => \$avg,
+    "bases!"            => \$bases,
+    "h|help"            => sub { system "perldoc $0"; exit; },
+    "human-readable!"   => \$humanReadable,
+    "field|n=s"         => \$field,
+    "logbook!"          => \$logbook,
+    "product!"          => \$product,
+    "q|quiet!"          => \$quiet,
+    "time!"             => \$time,
+    "trivial!"          => \$trivial,
+    "v|verbose+"        => \$verbose,
+    "version"           => sub {
+        die "Version $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    );
+
+(my $tfmt = new TabularFormats()) ||
+    dieCleanly("Could not construct TabularFormats instance.");
+$tfmt->addOptionsToGetoptLongArg(\%getoptHash);
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+
+###############################################################################
+###############################################################################
+# Process options
+#
+sjdUtils::setVerbose($verbose);
+
+($ARGV[0] && !-f $ARGV[0]) &&
+    die "Can't find input file '$ARGV[0]'.\n";
+
+my $fieldNum = 0;
+if ($field) {
+    my $fieldNameIsNumeric = sjdUtils::isNumeric($field);
+    if (!$fieldNameIsNumeric) { # Needed for all formats?
+        $tfmt->setOption("header",1);
+    }
+
+    # Parse header record, if requested to.
+    #
+    my @fieldNames = ();
+    if ($tfmt->getOption("header")) {
+        my $headerRec = $tfmt->readHeader();
+        @fieldNames = @{$tfmt->parseHeaderRecord($headerRec)};
+    }
+
+    # Figure out which field(s) to use
+    #
+    if ($fieldNameIsNumeric) {
+        $fieldNum = $field;
+        vMsg(1, "Using explicit field: $fieldNum");
+        if ($field eq "-1") { vMsg(1, "Using special field: $field"); }
+    }
+    elsif ($field eq "*") {
+        vMsg(1, "Using special field: $field");
+    }
+    else {
+        $fieldNum = $tfmt->getFieldNumber($field);
+        ($fieldNum && $fieldNum>0) || die
+            "Couldn't find field name '$field' in header record. Known fields: " .
+            join(", ", @fieldNames) . ".\n";
+        vMsg(1, "Using named field '$field' mapped to: $fieldNum");
+    }
+} # $field
+
+my $logStartC = '';
+my $logEndC = '';
+if ($logbook) {
+    $logStartC = qr/$logStart/;
+    $logEndC = qr/$logEnd/;
+}
+
+my $isInteractive = (-t STDIN);
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $comment      = $tfmt->getOption("comment");
+my $numTokens    = 0;         # How many tokens of various types?
+my $timeTokens   = 0;
+my $nNonNumeric  = 0;
+my $notEnough    = 0;         # Num records without enough fields
+my $total        = 0;         # Running totals
+my $floatTotal   = 0.0;
+my $totalHours   = 0;
+my $totalMinutes = 0;
+my $totalSeconds = 0;
+my $totalProduct = 1;
+
+
+my $recnum = 0;
+while (my $rec = <>) {
+    $recnum++;
+    my $originalRec = $rec;
+
+    # Clean and parse the record
+    #
+    chomp($rec);
+    alogging::hMsg(2, "Rec #$recnum: '$rec'");
+    $rec =~ s/^\s*//;                             # strip leading spaces
+    if (($comment ne "") &&                       # skip line as comment
+		($rec =~ m/^$comment/)) {
+        alogging::vMsg(2, "  Comment ($comment)");
+		next;
+    }
+    if ($rec =~ m/^\s*$/) { next; }               # empty line
+
+    if (!$field) {
+        (my $token1 = $rec) =~ s/\s.*//;
+        handleToken($token1);
+    }
+    else {
+        my @tokens = undef;                           # parse into fields
+        if ($trivial) {
+            @tokens = split(/\s+/, $rec);
+            unshift @tokens, ""; # count from 1
+        }
+        else {
+            my $tokensRef = $tfmt->parseRecordToArray($rec);
+            if (!$tokensRef) {
+                my $m = $tfmt->getLastMessage();
+                vMsg(0,"Couldn't parse line:\n  --> $m\n  '" .
+                      sjdUtils::showInvisibles($rec) . "'");
+                next;
+            }
+            @tokens = @$tokensRef;
+        }
+
+        # Add up the selected field(s)
+        #
+        if ($field eq "*") {                          # all fields
+            vMsg(2, "Record $recnum: Doing '*' (" . scalar(@tokens)-1 . ")");
+            for (my $i=0; $i<scalar @tokens; $i++) {
+                handleToken($tokens[$i]);
+            }
+        }
+        elsif ($field eq -1) {                        # default, get what you can
+            $rec =~ m/^\s*(\S+)/;
+            vMsg(2, "Record $recnum: Doing easy field '$1'");
+            handleToken($1);
+        }
+        elsif (scalar @tokens >= $fieldNum) {         # selected field (default 1)
+            vMsg(2, "Record $recnum: Doing field $fieldNum");
+            handleToken($tokens[$fieldNum]);
+        }
+        else {                                        # token shortage
+            vMsg(2, "Record $recnum: No field $fieldNum (only " .
+                  scalar(@tokens)-1 . ")");
+            $notEnough++;
+        }
+    }
+    alogging::vMsg(
+        1, "Subtotal $total " . ($product ? "(product $totalProduct) ":"") .
+        ", time $totalHours:$totalMinutes:$totalSeconds.");
+} # EOF
+
+report();
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+#
+sub clear() {
+    $numTokens    = 0;
+    $timeTokens   = 0;
+    $nNonNumeric  = 0;
+    $notEnough    = 0;
+    $total        = 0;
+    $floatTotal   = 0.0;
+    $totalHours   = 0;
+    $totalMinutes = 0;
+    $totalSeconds = 0;
+    $totalProduct = 1;
+    print "******* CLEARED *******\n";
+}
+
+# Deal with one input line or one field extracted from such.
+# Commands are handled here, values get sent to handleNumber().
+#
+sub handleToken {
+    my ($val) = @_;
+
+    $val =~ s/%$//;
+    if ($val eq "") {                             # nil
+        return;
+    }
+    elsif ($logbook && (my $dt = parseDatetime($val))) {
+        handleLogbookEntry($dt);
+    }
+    elsif ($val =~ m/^(h|\?|help)$/) {            # help
+        showHelp();
+    }
+    elsif ($val eq "st") {                        # subtotal
+        report();
+    }
+    elsif ($val eq "prod") {                      # turn on product reporting
+        $product = 1;
+        report();
+    }
+    elsif ($val eq "avg") {                       # turn on average reporting
+        $avg = 1;
+        report();
+    }
+    elsif ($val eq "q" || $val eq "quit") {       # quit
+        report();
+        exit;
+    }
+    elsif ($val eq "clr") {                       # clear
+        clear();
+    }
+    elsif ($val =~ m/\*\s*(\d+(\.\d+)?)/) {       # "*" multiply
+        $product *= $1;
+        $total *= $1;
+        report();
+    }
+    elsif ($val =~ m/@\s*(\d+(\.\d+)?)/) {       # "@" pay @ rate
+        reportPay($1);
+    }
+    else {
+        my $value = handleNumber($val);
+    }
+} # handleToken
+
+# Handle input that isn't a command. Should be a value to add.
+#
+sub handleNumber {
+    my ($val) = @_;
+    my $original = $val;
+    if (!$isInteractive && index($val, "\e") >= 0) {
+        $val = sjdUtils::uncolorize($val);
+    }
+
+    my $timeExpr = qr/\s*(\d*:\d+(:\d+)?)\s*/;
+
+    if ($val =~ m/^$timeExpr$/) {            # time hh:mm:ss
+        alogging::vMsg(2, "Taken as time");
+        $timeTokens++;
+        my ($hour, $min, $sec) = split(/:/, $1);
+        if (!defined $hour) { $hour = 0; }
+        if (!defined $min)  { $min = 0; }
+        if (!defined $sec)  { $sec = 0; }
+        vMsg(1, "Time: $hour : $min : $sec ");
+        addTime($hour, $min, $sec);
+        return;
+    }
+
+    if ($val =~ m/^$timeExpr-$timeExpr$/) {  # timespan hh:mm:ss - hh:mm:ss
+        alogging::vMsg(2, "Taken as timespan");
+        $timeTokens++;
+        my ($hour1, $min1, $sec1) = split(/:/, $1);
+        if (!defined $hour1) { $hour1 = 0; }
+        if (!defined $min1)  { $min1 = 0; }
+        if (!defined $sec1)  { $sec1 = 0; }
+
+        my ($hour2, $min2, $sec2) = split(/:/, $3);
+        if (!defined $hour2) { $hour2 = 0; }
+        if (!defined $min2)  { $min2 = 0; }
+        if (!defined $sec2)  { $sec2 = 0; }
+
+        my $hour = $hour2 - $hour1;
+        my $min  = $min2 - $min1;
+        my $sec  = $sec2 - $sec1;
+        if ($sec < 0) { $sec += 60; $min -= 1; }
+        if ($min < 0) { $min += 60; $hour -= 1; }
+
+        vMsg(1, "Time: $hour1:$min1:$sec1 TO $hour2:$min2:$sec2 = " .
+             "$hour:$min:$sec.");
+        if ($hour < 0) {
+            eMsg(0, "Negative time, ignored!");
+            return;
+        }
+        if ($roundMinutes) 
+        {
+            vMsg("--roundMinutes not yet supported.");
+        }
+        addTime($hour, $min, $sec);
+        return;
+    }
+
+    if ($bases) {                            # hex/octal/binary
+        $val = oct $val if $val =~ /^0/;
+    }
+    if ($humanReadable) {                    # power suffixes
+        $val = sjdUtils::fromHNumber($val);
+    }
+
+    if (sjdUtils::isNumeric($val)) {         # number
+    #elsif ($val =~ m/\d+/) {
+        alogging::vMsg(2, "Taken as numeric");
+        $numTokens++;
+        $total += $val;
+        $totalProduct *= $val;
+        if ($time) { addTime($val,0,0); }
+        return;
+    }
+
+    # fail
+    ($quiet) || alogging::vMsg(0, sprintf(
+        "In record %5d, field %2d: Unrecognized: '%s' (original '%s')",
+        $recnum, $fieldNum, $val, $original));
+    $nNonNumeric++;
+    return;
+} # handleToken
+
+sub addTime {
+    my ($hour, $min, $sec) = @_;
+    if (!sjdUtils::isNumeric($hour) ||
+        !sjdUtils::isNumeric($min) ||
+        !sjdUtils::isNumeric($sec)) {
+        eMsg(0, "In record $recnum, non-numeric portion in time.");
+        return;
+    }
+    if ($hour != int($hour)) {
+        $totalSeconds += int( 3600*($hour-int($hour)));
+        $hour = int($hour);
+    }
+    $totalHours   += $hour;
+    $totalMinutes += $min;
+    $totalSeconds += $sec;
+    my $carry = int($totalSeconds/60.0);
+    if ($carry>0) {
+        $totalMinutes += $carry;
+        $totalSeconds = $totalSeconds % 60;
+    }
+    $carry = int($totalMinutes/60.0);
+    if ($carry>0) {
+        $totalHours += $carry;
+        $totalMinutes = $totalMinutes % 60;
+    }
+}
+
+
+# For --logbook, measure and count the timespans between entries. Either:
+#     count from the first to last time on each date, or
+#     distinguish "in" and "out" times somehow, or
+#     find time-spans via pairs in single records.
+# First extract the time, and whether it's a start or end. E.g., entries like:
+#     IN: Fri Nov  4 09:40:43 EDT 2016
+#
+#     --logStart 'IN'
+#     --logEnd 'OUT'
+#
+BEGIN {
+    use Date::Parse;
+
+    my $lastTime = "";
+    my $lastType = 0;
+    my $dayTotal = 0;
+
+    # For now, only handle the form like "Fri Nov  4 09:40:43 EDT 2016".
+    sub parseDatetime {
+        my ($val) = @_;
+
+        # Figure out whether this is a START or an END event
+        my $matchS = ($val =~ m/$logStartC/);
+        my $matchE = ($val =~ m/$logEndC/);
+        my $type = "";
+        if (!$matchS && !$matchE) {
+            bumpStat("logbookNoMatch");
+            return 0;
+        }
+        elsif ($matchS && $matchE) {
+            error("Value matches both --logStart and --logEnd: '$val'.");
+            $type = 'END';
+        }
+        else {
+            $type = ($matchS) ? 'START' : 'END';
+        }
+
+        if (($lastType=="" && $type!='START') || $type == $lastType) {
+            error("$recnum: --logbook $type event out of sequence: '$val'.");
+            return 0;
+        }
+
+        # Extract and handle the timestamp
+        my $time = Date::Parse::str2time($val);
+        if ($type == 'START') {
+            my $dateS = "";
+            my $dateE = "";
+            if (0 || 'newDay...') {
+                print "$dateE, time logged = $dayTotal.\n";
+                $dayTotal = 0;
+            }
+        }
+        else {  # 'END'
+            my $span = $time - $lastTime;
+            print("Got span of $span seconds.\n");
+            $dayTotal += $span;
+        }
+
+        $lastTime = $time;
+        $lastType = $type;
+        return ($time);
+    } # parseDatetime
+
+    sub handleLogbookEntry {
+        my ($val) = @_;  # [ $ss,$mm,$hh,$day,$month,$year,$zoneSeconds ]
+        die "--logbook not yet finished.\n";
+    }
+} # END
+
+
+sub showHelp {
+    my $baseWord = ($bases) ? "on" : "off";
+    print qq|
+Enter one quantity per line, in one of these forms:
+    999    decimal integer
+    -99    signed decimal integer
+  -9.99    signed decimal float
+  1.2E8    exponential notation
+  h:m:s    time (also h, h:m, :m, :m:s)
+  h:m:s - h:m:s (for a time-span -- experimental)
+
+With --bases (which is now $baseWord), you can also use:
+    077    octal integer (leading 0)
+   0xFF    hexadecimal integer
+
+Other commands:
+     st    print subtotal and continue
+      q    print subtotal and quit
+     ^D    print subtotal and quit
+      ?    show this help and continue
+    clr    clear all totals
+      *    multiply total by following number
+      @    Report pay for total time at following hourly rate
+|;
+}
+
+
+###############################################################################
+# Report
+#
+sub report {
+    print "Records handled: $recnum.\n";
+    (!$quiet && $notEnough) && warn
+        "WARNING: $notEnough of $recnum records did not contain"
+        . " $fieldNum fields. Field separator was /" .
+        $tfmt->getOption("delim") . "/.\n";
+
+    (!$quiet && $nNonNumeric) && warn
+        "WARNING: $nNonNumeric of $recnum records: not numeric.\n";
+
+    if ($numTokens) {
+        if ($total == int($total)) {
+            print sprintf("Total: d%d  (o%o, x%04x)\n", $total, $total, $total);
+        }
+        else {
+            print sprintf("Total: %f.\n", $total);
+        }
+        if ($humanReadable && $total > 1023) {
+            print "    " . sjdUtils::toHNumber($total) . "\n";
+        }
+
+        if ($avg) {
+            my $realRecords = $numTokens;
+            my $a = ($total * 1.0) / $realRecords;
+            printf("Average of $realRecords records: %7.5g.\n", $a);
+            if ($humanReadable && ($a > 1023)) {
+                print "    " . sjdUtils::toHNumber($a) . "\n";
+            }
+        }
+        if ($product) {
+            print "Product: $totalProduct.\n";
+            if ($humanReadable && ($product > 1023)) {
+                print "    " . sjdUtils::toHNumber($product) . "\n";
+            }
+        }
+    }
+
+    if ($time || $timeTokens) {
+        my $tthours = $totalHours + $total;
+        printf("Total time:  %02d:%02d:%02d\n",
+            $tthours, $totalMinutes, $totalSeconds);
+    }
+} # report
+
+sub reportPay {
+    my ($rate) = @_;
+    if ($time || $timeTokens) {
+        my $tthours = $totalHours + $total;
+        printf("Total time:  %02d:%02d:%02d\n",
+            $tthours, $totalMinutes, $totalSeconds);
+        my $dec = $tthours + $totalMinutes/60 + $totalSeconds/3600;
+        printf("Payment @ %5.2f/hour = \$%7.2f.\n", $rate, $dec*$rate);
+    }
+    else {
+        print("No time information entered.\n");
+    }
+} # report
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+addup [options] [file]
+
+Takes the first token of each line from [file] or stdin, treats it as
+a number (or time), and prints out the final total.
+
+This is particularly nice
+for adding up counts such as generated by C<uniq -c> (since it ignores
+the other data on each line). It also  makes for a decent "adding machine".
+
+By default, it supports time as well as plain numbers.
+If an entry contains ':', it will be treated as hours:minutes (and
+optional :seconds). Entries without ":" are counted as hours,
+and are also added to a separate (non-time) total.
+
+With I<--bases>, you can also enter hexadecimal (0xBEEF) and/or
+octal (0777). With I<--humanReadable> (or I<-h>), you can use suffixes such as
+[KMG], as with the I<-h> option of various *nix programs.
+
+There are also options to get the product and average rather than just
+the total.
+
+A few commands are also available:
+    st    Display current subtotals (time and non-time)
+     q    Quit
+     ?    Show help and continue
+  prod    Turn I<--product> on and report
+   avg    Turn I<--avg> on and report
+   clr    Clear all totals
+    ^D    Print totals and quit.
+     *    multiply total by following number
+     @    Report pay for total time at following hourly rate
+
+You can use I<--field> to select a field other than the
+first whitespace-delimited token, and various options to control how
+fields are located. If some records lack sufficient fields,
+the number of such records will be reported at the end unless you
+specify I<--quiet>.
+
+A fancier feature for parsing out time-logs consisting of start and end entries,
+is being developed.
+
+
+=head1 Options
+
+(see also C<TabularFormats.pm> for its options, usable here)
+
+=over
+
+=item * B<--avg> or B<--average>
+
+Show the average, not just the total.
+
+=item * B<--bases>
+
+Support bin/octal/hex/dec in C/C++ notations.
+Without I<--bases>, leading zeros do I<not> imply octal.
+
+=item * B<--field> I<numberOrName>
+
+Specifies which field is to be added up.
+This may be a number (counting from 1, not 0);
+or "*" to use all fields;
+or a field name if C<TabularFormats.pm> has that information (for example,
+for I<--basicType CSV> files with a I<--header> line).
+
+=item * B<--human-readable>
+
+Show large totals with K/M/G/T suffixes, and accept such suffixes
+in the input (they count as powers of 1024, not 1000).
+
+=item * B<-n> I<n>
+
+Synonym for I<--field>.
+
+=item * B<--product>
+
+Also show the product of all the numbers.
+
+=item * B<logbook>
+
+Add up spans of time between beginning and ending timestamps. There must be
+one timestamp per record (or field, if using fields), and the time itself
+must be in the usual *nix string format, like:
+
+    Fri Nov  4 09:40:43 EDT 2016
+
+Records are categorized as indicating a start or and end time, by seeing
+whether they match regexes specified via I<--logStart> and I<--logEnd>.
+Records that match both will be treated as ends, with a warning issued.
+
+=item * B<--logStart>
+
+If a record (or the chosen portion) matches this regular expression,
+then I<--logbook>) treats the record as a starting time.
+
+Default: /\b(IN|BEGIN|START)\b/
+
+=item * B<--logEnd>
+
+If a record (or the chosen portion) matches this regular expression,
+then I<--logbook>) treats the record as an ending time.
+
+Default: /\b(OUT|END|FINISH)\b/
+
+=item * B<--quiet> or B<-q>
+
+Suppress most messages, including warnings about unrecognized values
+(non-numeric, non-time).
+
+=item * B<--roundMinutes> I<n>
+
+For timespans (like C<h:m:s - h:m:s>), 
+round the duraction to a multiple of I<n> minutes.
+For example, specify C<15> to round to the nearest 1/4 hour of time in
+a span, or C<6> to round to 1/10 hour units.
+Default 0: no rounding.
+
+B<(not yet supported)>
+
+B<Note>: This calculates the time difference exactly, I<then> rounds it.
+The result could be different if, instead,  the start and end times were 
+rounded, and then the difference were calculated.
+
+=item * B<--time>
+
+Take all input numbers as times, not just ones with ":".
+
+=item * B<--trivial>
+
+Parse each line trivially (via Perl split(/\s+/)), instead
+of using C<TabularFormats.pm>.
+
+=item * B<--verbose> or B<-v>
+
+Print a subtotal after each input line, and some other messages.
+
+=item * B<--version>
+
+Display version info and exit.
+
+=back
+
+
+
+=head1 Known bugs and limitations
+
+Doesn't do anything special for elapsed times greater than a day.
+
+No way to treat K/M/G/T suffixes as powers or 1000 instead of 1024.
+
+There is no way to change (most) option settings interactively.
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

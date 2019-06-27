@@ -1,0 +1,118 @@
+#!/usr/bin/perl -w
+#
+# doubleSpace: double-space the input. useful for stuff with long lines.
+#
+# 2007-??: Written by Steven J. DeRose.
+# 2008-05-05 sjd: Add -n. Getopt::Long.
+# 2012-11-07: ?
+# 2015-12-18: Add --blanks.
+#
+# To do:
+#     Make sure char encodings are ok
+#     Offer 'wrap' functionality too?
+#     Integrate with 'anycat' to handle compressed files
+#     Option to add blanks up to -n, but not beyond (dropping blank-line runs)
+#
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2015-12-18";
+
+my $blanks  = 1;
+my $n       = 1;
+my $quiet   = 0;
+my $verbose = 0;
+
+
+###############################################################################
+#
+my %getoptHash = (
+    "blanks!"                 => \$blanks,
+    "h|help"                  => sub { system "perldoc $0"; exit; },
+    "n=i"                     => \$n,
+    "q|quiet!"                => \$quiet,
+    "v|verbose+"              => \$verbose,
+    "version"                 => sub {
+        die "Version of $VERSION_DATE by Steven J. DeRose.\n";
+    }
+    );
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $extraSep = "\n" x $n;
+
+while (<>) {
+    if (!$blanks && $_ =~ m/^\s*$/) {
+        print $_;
+    }
+    else {
+        print $_ . $extraSep;
+    }
+}
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+doubleSpace [options]
+
+Copies stdin to stdout, adding a blank line(s) after every line.
+
+By default it double-spaces the output. This is especially useful
+for program output that has many long messages, so you can see
+each individual message more clearly.
+
+
+
+=head1 Options
+
+(prefix "no" to negate when applicable)
+
+=over
+
+=item * B<--blanks>
+
+Add blank lines after I<already>-blank input lines, just like for any
+other input lines. This is the default. Use I<--noblanks> to turn off.
+
+=item * B<-n> I<n>
+
+Put even more blank lines in (default = 1).
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--verbose> OR B<-v>
+Add more messages, and check integrity frequently.
+
+=item * B<--version>
+
+Display the version number, then exit.
+
+=back
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

@@ -1,0 +1,385 @@
+#!/usr/bin/perl -w
+#
+# findDates
+#
+# 2013-10-01: Written by Steven J. DeRose.
+# 2014-09-08: Fix readdir.
+#
+# To do:
+#     Avoid duplicate matches
+#
+use strict;
+use Getopt::Long;
+use Encode;
+
+use sjdUtils;
+use alogging;
+
+my $version = "2013-10-01";
+
+my $color         = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
+my $iencoding     = "";
+my $ignoreCase    = 0;
+my $ilineends     = "U";
+my $oencoding     = "";
+my $olineends     = "U";
+my $quiet         = 0;
+my $recursive     = 0;
+my $tickInterval  = 10000;
+my $verbose       = 0;
+
+
+###############################################################################
+#
+my %getoptHash = (
+    "color!"                  => \$color,
+    "h|help"                  => sub { system "perldoc $0"; exit; },
+    "iencoding=s"             => \$iencoding,
+    "i|ignoreCase!"           => \$ignoreCase,
+    "ilineends=s"             => \$ilineends,
+    "listEncodings"           => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "oencoding=s"             => \$oencoding,
+    "olineends=s"             => \$olineends,
+    "q!"                      => \$quiet,
+    "recursive!"              => \$recursive,
+    "tick=i"                  => \$tickInterval,
+    "unicode!"                => sub { $iencoding = $oencoding = "utf8"; },
+    "v+"                      => \$verbose,
+    "version"                 => sub {
+        die "Version of $version, by Steven J. DeRose.\n";
+    },
+    );
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+sjdUtils::setColors($color);
+sjdUtils::setVerbose($verbose);
+
+
+###############################################################################
+# Set implied options, validate option values...
+#
+if (scalar(@ARGV)==0) {
+    push @ARGV, "-";
+	($quiet) || warn "Reading from stdin...\n";
+}
+
+$ilineends = uc(substr($ilineends."U",0,1));
+if    ($ilineends eq "M") { $/ = chr(13); }
+elsif ($ilineends eq "D") { $/ = chr(13).chr(10); }
+else { }
+
+$olineends = uc(substr($olineends."U",0,1));
+if    ($olineends eq "M") { $\ = chr(13); }
+elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+else { }
+
+if ($oencoding) {
+    print "";
+    binmode(STDOUT, ":encoding($oencoding)");
+}
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $fh        = undef;
+my $totalRecs = 0;
+my $totalHits = 0;
+my $nDirs     = 0;
+my $nFiles    = 0;
+my $nBinary   = 0;
+my $nMissing  = 0;
+
+# Some date formats.
+#     -- English only for month names
+#     -- 4-digit years only
+#     -- written out numbers unfinished
+#     -- No packed forms like 20010101T124259
+#
+my $spaceExpr =
+    # "\\s";
+    "(\\s|&nbsp;|&#0*160;|&#[Xx]0*[Aa]0;)";
+my $dayExpr =
+    "[0-3]?\\d";
+my $dayWords =
+    "(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|" .
+    "eleventh|twelfth|thirteenth|fourteenth|fifteenth|" .
+    "sixteenth|seventeenth|eighteenth|nineteenth|twentieth|" .
+    "(twenty-?(first|second|third|fourth|fifth|sixth|seventh|eigth|ninth))" .
+    "thirtieth|thirty-?first)";
+my $monthExpr =
+    "(Jan(\\.|uary)?|Feb(\\.|ruary)?|Mar(\\.|ch)?|" .
+    "Apr(\\.|il)?|May|Jun(\\.|e)?|" .
+    "Jul(\\.|y)?|Aug(\\.|ust)?|Sept\\\.?|Sep(\\.|tember)?|" .
+    "Oct(\\.|ober)?|Nov(\\.|ember)?|Dec(\\.|ember)?)";
+my $eraExpr =
+    "(bc|bce|ad|ce|b\\.c\\.|b\\.c\\.e\\.|a\\.d\\.|c\\.e\\.)";
+my $yearExpr =
+        "([12][901]\\d\\d)";
+
+my @dateExprs = (
+    "$yearExpr-[01]?\\d-$dayExpr",                                   # 2013-10-01
+    "$dayExpr-$dayExpr-$yearExpr",                                   # 01-01-2013
+    "$monthExpr$spaceExpr+$dayExpr,?$spaceExpr*$yearExpr",           # Jan 1, 2001
+    "$dayExpr/$dayExpr/$yearExpr",                                   # 01/01/2001
+    "\\d{1,2}(st|nd|rd|th)?( of)? $monthExpr,?$spaceExpr$yearExpr",  # 1 Jan., 20012
+    "$monthExpr,?$spaceExpr$yearExpr",                               # Mar, 2001
+    #"$yearExpr",                                                     # 2001
+    #"$monthExpr$spaceExpr*$dayExpr",                                 # Jan. 31
+);
+my @dateExprsC = ();
+for (my $i=0; $i<scalar(@dateExprs); $i++) {
+    my $e = $dateExprs[$i];
+    if ($verbose) {
+        warn "Expr $i: /$e/\n";
+    }
+    push @dateExprsC, qr/\b($e)\b/;
+}
+
+if (!$ARGV[0]) {
+    push @ARGV, "-";
+}
+while (my $file = shift) {
+    doOneItem($file);
+}
+
+report();
+
+exit;
+
+
+###############################################################################
+###############################################################################
+#
+sub doOneItem {
+    my ($file) = @_;
+    if ($file =~ m/(#|~|\.bak)$/) {
+        vMsg(0, "Probable backup file being processed: '$file'");
+    }
+    if ($file eq "-" || -f $file) {
+        doOneFile($file);
+    }
+    elsif (-d $file) {
+        $nDirs++;
+        if (!$recursive) {
+            vMsg(0, "Skipping directory '$file'");
+        }
+        else {
+            opendir(D, $file);
+            while (my $child = readdir(D)) {
+                if ($child eq '.' || $child eq '..') { next; }
+                doOneItem("$file/$child");
+            }
+            closedir(D);
+        }
+    }
+    elsif (!-B $file) {
+        vMsg(0, "Skipping binary file '$file'");
+        $nBinary++;
+    }
+    elsif (!-e $file) {
+        vMsg(0, "Can't find file '$file'");
+        $nMissing++;
+    }
+    else {
+        vMsg(0, "What is '$file'?");
+    }
+} # doOneItem
+
+
+sub doOneFile {
+    my ($file) = @_;
+    if (!open($fh, "<$file")) {
+        vMsg(0, "Failed to open '$file'.");
+        return();
+    }
+    if ($iencoding) {
+        binmode($fh, ":encoding($iencoding)");
+    }
+    $nFiles++;
+
+    my $recnum = 0;
+    my $hits = 0;
+    while (my $rec = <$fh>) {
+        $recnum++;
+        ($recnum % $tickInterval == 0) && vMsg(
+            0, sprintf("Processed %9d (%6.2f%s) records.",
+                       $recnum, sjdUtils::toHNumber($recnum)));
+        chomp $rec;
+        for (my $i=0; $i<scalar(@dateExprsC); $i++) {
+            my $e = $dateExprsC[$i];
+            while ($rec =~ m/$e/g) {
+                if ($verbose) {
+                    print "$recnum\t$i\t\"$1\"\n";
+                }
+                else {
+                    print "$1\n";
+                }
+                $hits++;
+           }
+        }
+    } # EOF
+    $totalRecs += $recnum;
+    $totalHits += $hits;
+} # doOneFile
+
+
+###############################################################################
+###############################################################################
+#
+sub report {
+    ($quiet) || warn "Done, $totalRecs records processed.\n";
+
+    reportLine("Total records",     $totalRecs);
+    reportLine("Total dates",       $totalHits);
+    reportLine("Total directories", $nDirs    );
+    reportLine("Total files",       $nFiles   );
+    reportLine("Binary files",      $nBinary  );
+    reportLine("Files not found",   $nMissing );
+}
+
+sub reportLine {
+    my ($label, $datum, $denominator) = @_;
+    if (defined $denominator) {
+        my $pct = ($denominator==0) ? 0 : (100.0*$datum/$denominator);
+        warn sprintf("  %-30s %9d (%7.2f%%)\n", $label, $datum, $pct);
+    }
+    else {
+        warn sprintf("  %-30s %9d\n", $label, $datum);
+    }
+}
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+findDates [options] file
+
+Locate date strings in the input, and report them.
+
+Fairly smart about numeric vs. text forms:
+
+    2013-10-01
+    01-01-2013
+    Jan 1, 2001
+    01/01/2001
+    1 Jan., 20012
+    March, 2001
+
+
+
+=head2 Limitations:
+
+=over
+
+=item * For months and eras, only handle English so far.
+
+=item * Doesn't handle packed dates such s 20131001, or dates with times.
+
+=item * Doesn't do anything for partial dates or date ranges.
+
+=item * Doesn't do "first of septembet, the year of our Lord nineteen hundred and thirty"
+
+=back
+
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--color>
+
+Colorize the output. Default to on if
+environment variable C<USE_COLOR> is set and STDERR is going to the terminal.
+
+=item * B<--iencoding> I<e>
+
+Specify character encoding for input.
+
+=item * B<--ignoreCase> or B<-i>
+
+Disregard upper/lower case distinctions.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--listEncodings>
+
+Show all available character encodings, then exit.
+
+=item * B<--oencoding> I<e>
+
+Specify character encoding for output.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--recursive>
+
+Process directories recursively.
+
+=item * B<--tick> I<n>
+
+Report progress every I<n> records (0 to turn off).
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8> I<--oencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+
+=head1 Known Bugs and Limitations
+
+
+
+=head1 Related commands
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

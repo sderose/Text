@@ -1,0 +1,202 @@
+#!/usr/bin/perl -w
+#
+# Insert a string or another file, at a given line and offset in stdin.
+#
+# Written ~2006 by Steven J. DeRose.
+# 2007-02-05 sjd: Add -e.
+# 2008-02-11 sjd: Add -indent. Getopt.
+# 2011-10-04 sjd: Fix ARGV to _ in GetOpt.
+# 2018-09-17: Add --expr.
+#
+use strict;
+use Getopt::Long;
+
+our $VERSION_DATE = "2018-09-17";
+
+my $doEdit     = 0;
+my $expr       = 0;
+my $indent     = 0;
+my $insertion  = "<HERE/>";
+my $newlines   = 0;
+my $quiet      = 0;
+my $targetline = 1;
+my $targetcol  = 1;
+my $verbose    = 0;
+
+
+# Process options
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+	"c|column=i"        => \$targetcol,
+	"e|edit!"           => \$doEdit,
+	"expr=s"            => \$expr,
+	"f|file=s"          => sub { $insertion = `cat $_[1]`; },
+	"h|help|?"          => sub { system "perldoc $0"; exit; },
+	"i|indent!"         => \$indent,
+	"l|line=i"          => \$targetline,
+	"m|message=s"       => \$insertion,
+	"n|newlines!"       => \$newlines,
+	"q|quiet!"          => \$quiet,
+	"v|verbose+"        => \$verbose,
+    "version"           => sub {
+		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+	}
+	);
+
+($result) || die "Bad options.\n";
+
+# Validate and default options
+#
+if ($targetline < 1) {
+	warn "Bad -l (line) value '$targetline'.\n";
+	system "perldoc $0";
+	exit;
+}
+if ($targetcol < 1) {
+	warn "Bad -c (column) value '$targetcol'.\n";
+	system "perldoc $0";
+	exit;
+}
+
+if ($newlines) {
+	$insertion = "\n$insertion\n";
+	($verbose) && warn "Putting newlines around the message.\n";
+}
+
+if ($indent) { $doEdit = 1; }
+
+my $tfile = "";
+my $fh;
+if ($doEdit) {
+	$tfile = "/tmp/insertat_" . int(rand(100000));
+    open $fh, ">$tfile";
+}
+else {
+	$fh = "--";
+}
+
+# warn "$targetline, $targetcol, '$insertion'.\n";
+
+
+###############################################################################
+#
+my $didit = 0;
+my $recnum = 0;
+while (<>) {
+	my $rec = $_;
+    $recnum++;
+    if ($recnum == $targetline ||
+        (!$didit && $expr && $rec =~ m/$expr/)) {
+        vMsg(1, "Inserting at line $recnum.");
+        if ($targetcol < length($rec)) {
+ 		   print $fh substr($rec,0,$targetcol-1);
+           print $fh $insertion;
+		   print $fh substr($rec,$targetcol-1);
+		}
+		else {
+ 		   print $fh $rec;
+			   print $fh $insertion;
+		}
+		$didit = 1;
+    }
+	else {
+		print $fh $rec;
+    }
+}
+
+($didit) || warn "\nNever reached insertion point, total lines = $recnum.\n";
+
+($quiet) || warn "Inserted '$insertion'.\n";
+
+if ($doEdit) {
+	if ($indent) {
+		my $tfile2 = "$tfile" . "_indent";
+		system "indent $tfile >$tfile2";
+		system "mv $tfile2 $tfile";
+	}
+	system "$ENV{EDITOR} $tfile &";
+	system "sleep 5s";
+	system "rm $tfile";
+}
+
+exit;
+
+
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+insertat [-l line] [-expr 'regex'] [-c column] [-m 'msg'] [-f path] [-q]
+
+Inserts a message or the content of a file, at a certain point in the
+input. The point can be a given
+line number and column, or the first line matching a given regex.
+
+Good for inserting error message where they apply.
+If neither I<-m> nor I<-f> is given, inserts '<HERE/>'.
+
+
+=head1 Options
+
+=over
+
+=item * B<--column> I<n> OR B<-c>
+
+What column to insert at (default 1).
+
+=item * B<--edit> OR B<-e>
+
+Open result in your $EDITOR.
+
+=item * B<--file> I<name> OR B<-f>
+
+A file to insert the contents of.
+
+=item * B<--indent> OR B<-i>
+
+Run the *nix C<indent> command on the output (implies I<-e>).
+This is mainly designed for indenting C code, but may work ok on
+other things, too.
+
+=item * B<--lline> I<n> OR B<-l>
+
+What line to insert at (default 1).
+
+=item * B<--message> I<msg> OR B<-m>
+
+A message string to insert.
+
+=item * B<--newlines> OR B<-n>
+
+Put newlines around the message.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--verbose> OR B<-v>
+Verbose.
+
+=item * B<--version>
+
+Print version info and exit.
+
+=back
+
+
+=head1 Related commands
+
+
+=head1 Ownership
+
+Copyright 2007, 2018 by Steven J. DeRose.
+This work by is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut

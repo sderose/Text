@@ -1,0 +1,187 @@
+#!/usr/bin/perl -w
+#
+# dotFill: Add dot-leader fills for readbility.
+#
+# 2007-11-09: Written by Steven J. DeRose.
+# 2010-03-24: Add -min, -runchar, -expand, perldoc.
+# 2013-12-12: Clean up.
+#
+# To do:
+#    Option to only fill runs longer than a certain amount.
+#    Handle all Unicode spaces
+#
+use strict;
+use Getopt::Long;
+
+my $derosebin = "$ENV{HOME}/bin";
+(-d $derosebin) || warn "Cannot access utility directory at $derosebin.\n";
+
+our $VERSION_DATE = "2013-12-12";
+
+my $expand          = 1;
+my $fillchar        = ".";
+my $min             = 2;
+my $num             = 1;
+my $quiet           = 0;
+my $runchar         = " ";
+my $tabinterval     = 4;
+my $verbose         = 0;
+
+
+# Process options
+#
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+	"c|fillchar=s"      => \$fillchar,
+    "expand!"           => \$expand,
+	"h|help|?"          => sub { system "perldoc $0"; exit; },
+    "min=i"             => \$min,
+	"n=i"               => \$num,
+	"q|quiet!"          => \$quiet,
+    "runchar=s"         => \$runchar,
+	"tab=i"             => \$tabinterval,
+	"v|verbose+"        => \$verbose,
+    "version"           => sub {
+		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+	}
+	);
+
+($result) || die "Bad options.\n";
+
+$fillchar = substr($fillchar,0,1);
+$runchar = substr($runchar,0,1);
+($min > 0) || die "-min value must be >0.\n";
+($num > 0) || die "-n value must be >0.\n";
+
+
+###############################################################################
+# Main
+#
+my $lhs = "((" . $runchar . "){" . $min . ",}" . ")";
+($verbose) && warn "lhs: /$lhs/\n";
+
+my $lineNum = 0;
+while (my $rec = <>) {
+	$lineNum++;
+	if ($lineNum % $num == 0) {
+		if ($expand) { $rec = expandTabs($rec); }
+        $rec =~ s/$lhs/{$fillchar x length($1)}/ge;
+	}
+	print $rec;
+}
+
+($quiet) || warn "Done, $lineNum lines processed.\n";
+
+exit;
+
+
+
+###############################################################################
+###############################################################################
+# (should do the same as the *nix 'expand' command.
+#
+sub expandTabs {
+	my $rec = $_[0];
+	my $interval = $_[1];
+	my $buf = "";
+	for (my $i=0; $i<length($rec); $i++) {
+		if (substr($rec,$i,1) eq "\t") {
+			my $needed = $interval - (length($buf) % $interval);
+			$buf .= (" " x $needed);
+		}
+		else {
+			$buf .= substr($rec,$i,1);
+		}
+	}
+	return($buf);
+}
+
+
+
+###############################################################################
+###############################################################################
+###############################################################################
+#
+
+=pod
+
+=head1 Usage
+
+dotFill [options] [file]
+
+Turns space-runs into runs of some other character, on alternating lines.
+This is useful for making tabular data more easily readable.
+Tabs are expanded first.
+
+
+
+=head1 Options
+
+=over
+
+=item B<-c> I<c>
+
+Character to fill in (default: '.').
+
+=item B<--expand>
+
+Expand tabs (default).
+
+=item B<--min> I<n>
+
+Only fill runs at least I<n> spaces long (default: 2).
+
+=item B<-n> I<n>
+
+Do this every I<n> lines (default: 1).
+
+=item B<-q>
+
+Suppress most messages.
+
+=item B<--runchar> I<c>
+
+Replace runs of character I<c> (default: space).
+
+=item B<-t> I<n>
+
+Set the tab interval to I<n> (default: 4).
+
+=item B<-v>
+
+Add more detailed messages.
+
+=item B<--version>
+
+Display version info and exit.
+
+=back
+
+
+
+=head1 Related commands
+
+These commands are also useful for readability:
+
+C<ds> -- double-space a file
+
+C<align> -- pad inter-field space to line things up
+
+C<dropBlankLines> -- delete lines with only whitespace
+
+C<normalizeSpace> -- reduce runs of whitespace to a single space
+
+C<numberLines> -- Display a line-number before each line
+
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version,
+see L<http://www.derose.net/steve/utilities/>.
+
+=cut
