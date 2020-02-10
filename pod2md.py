@@ -1,14 +1,6 @@
 #!/usr/bin/env python
 #
-# pod2md.py
-#
-# 2019-02-19: Written. Copyright by Steven J. DeRose.
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
-#     Let --extract-to default to same name but .md?
-#     Option for MediaWiki and/or HTML output?
+# pod2md.py: Convert perldoc-tsyle "POD" markup, to MarkDown.
 #
 from __future__ import print_function
 import sys
@@ -19,6 +11,9 @@ import re
 #import subprocess
 import codecs
 import PowerWalk
+
+#from sjdUtils import sjdUtils
+from alogging import ALogger
 
 PY2 = sys.version_info[0] == 2
 PY3 = sys.version_info[0] == 3
@@ -32,18 +27,147 @@ else:
     def unichr(n): return chr(n)
     def unicode(s, encoding='utf-8', errors='strict'): return str(s, encoding, errors)
 
-#from sjdUtils import sjdUtils
-from alogging import ALogger
-
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2019-02-19",
+    'title'        : "pod2md.py",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
     'language'     : "Python 3.7",
-    'version_date' : "2019-02-19",
+    'created'      : "2019-02-19",
+    'modified'     : "2020-01-02",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
-__version__ = __metadata__['version_date']
+__version__ = __metadata__['modified']
 
-#su = sjdUtils()
+descr = """
+=Description=
+
+pod2md.py: Convert perldoc-tsyle "POD" markup (not including the more
+complex POD 6 version), to MarkDown (mostly of the MediaWiki flavor).
+
+==POD Summary==
+
+POD is mostly for Perl Documenttion. See
+[https://docs.perl6.org/language/pod].
+
+===Line-level (must start at start of line)===
+    =pod     Start POD when embedded in Perl
+    =cut     En POD
+    =head1   First-level heading
+    ...
+    =over    Indent one list level / start list
+    =back    End list
+    =item
+
+===Inline===
+
+    B<(.*?)>' bold
+    C<(.*?)>' command
+    E<(.*?)>' special characters
+    F<(.*?)>' filename
+    I<(.*?)>' italic
+    L<(.*?)>' link
+    S<(.*?)>' no-break
+    X<(.*?)>' index entry
+    Z<(.*?)>' No POD
+
+==Markdown summary==
+
+===Line-level (must start at start of line)===
+
+    =heading1=
+    ==heading2==
+    ...
+
+    ||cell|cell|cell...
+    ---- [horizontal rule]
+
+    * First-level bulleted list item
+    # First-level numbered list item
+    ** Second-level bulleted list item
+    ...
+
+    :term;definition text
+        indented text
+
+===Inline===
+
+   '''bold'''
+   ''italic''
+   [general link]
+   [[internal link]]
+   ISBN xxxxxxxxxx, RFC dddd
+   {{macro/include}}
+
+=Similar regex changes=
+
+Markdown isn't entirely standardized, so this is just one set of options....
+Some variants use "#" in place of "=" for headings.
+
+These regexes don't do anything to accumulate multiple levels of `=over` and
+`=back` for nested lists, and don't do anything for inline S, X, or Z.
+
+    s/^=head1 (.*)/=\\1=/
+    s/^=head2 (.*)/==\\1==/
+    s/^=head3 (.*)/===\\1===/
+    s/^=head4 (.*)/====\\1====/
+    s/^=head5 (.*)/=====\\1=====/
+    s/^=head6 (.*)/======\\1======/
+
+    s/^=(over|back|pod|cut *//
+    s/^=item B<\\*?>/\\* /
+    s/^=item B<\\d+>/\\# /
+    s/^=item /:/    /
+
+    s/B<(.*?)>/'''\1'''/
+    s/C<(.*?)>/`\1`/
+    s/E<(.*?)>/&\1;/
+    s/F<(.*?)>/`\1`/
+    s/I<(.*?)>/''\1''/
+    s/L<(.*?)>/[\1]/
+
+You can put these changes into a file and apply them all with my
+`globalChange` script.
+
+=head1 Known bugs and limitations
+
+=Related Commands=
+
+=References=
+
+* [https://www.mediawiki.org/wiki/Markup_spec] -- Obsolete, but one of
+relatively few sites that enumerate MediaWiki markup constructs.
+* [https://en.wikipedia.org/wiki/MediaWiki#Markup] -- MediaWiki or Markdown Extra
+* [https://en.wikipedia.org/wiki/Markdown#Standardization]
+* [https://tools.ietf.org/html/rfc7763] -- text/markdown media type
+* [https://tools.ietf.org/html/rfc7764] -- Guidance on Markdown
+* []
+
+=History=
+
+* 2019-02-19: Written. Copyright by Steven J. DeRose.
+* Creative Commons Attribution-Share-alike 3.0 unported license.
+* See http://creativecommons.org/licenses/by-sa/3.0/.
+* 2020-01-02: Clean up.
+
+=To do=
+
+* Let --extract-to default to same name but .md?
+* Option for MediaWiki and/or HTML output?
+
+=Rights=
+
+Copyright 2019 by Steven J. DeRose. This script is licensed under a
+Creative Commons Attribution-Share-alike 3.0 unported license.
+See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>
+or L<http://github.com/sderose>.
+
+=Options=
+"""
+
 lg = ALogger(1)
 xfh = None
 
@@ -160,47 +284,6 @@ def decodeSpecialChar(text):
 #
 if __name__ == "__main__":
     def processOptions():
-        descr = """
-=head1 Description
-
-Convert perldoc-sylte "POD" markup, to MarkDown.
-
-=head2
-
-Block codes: line-initial =xxx
-    headN
-    pod
-    cut
-    over
-    back
-    item
-
-Inline codes:  X<text>, X<<text>>, etc.
-
-    B<(.*?)>' bold
-    C<(.*?)>' command
-    E<(.*?)>' special characters
-    F<(.*?)>' filename
-    I<(.*?)>' italic
-    L<(.*?)>' link
-    S<(.*?)>' no-break
-    X<(.*?)>' index entry
-    Z<(.*?)>' No POD
-
-
-=head1 Related Commands
-
-=head1 Known bugs and Limitations
-
-=head1 Licensing
-
-Copyright 2019-02-19 by Steven J. DeRose. This script is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
-
-=head1 Options
-"""
-
         try:
             from MarkupHelpFormatter import MarkupHelpFormatter
             formatter = MarkupHelpFormatter
