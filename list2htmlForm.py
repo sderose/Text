@@ -2,18 +2,73 @@
 #
 # list2htmlForm
 #
-# 2012-04-26: Written by Steven J. DeRose.
-# 2018-04-18: lint.
-#
-# To do:
-#
 from __future__ import print_function
 import sys
 import os
 import re
 import argparse
 
-__version__ = "2018-04-18"
+__metadata__ = {
+    'title'        : "list2htmlForm.py",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2012-04-26",
+    'modified'     : "2020-03-04",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
+}
+__version__ = __metadata__['modified']
+
+descr = """
+=Usage=
+
+list2htmlForm [options]
+
+Make each line of a file into an item in an XHTML form.
+You can make radio buttons, checkboxes or a pop-up menu,
+and lay them out in various ways.
+
+=Options=
+
+* B<--break>
+Put an HTML C<< <br> >> in front of each item (not applicable to I<--type menu>).
+
+* B<--group> I<g>
+Use I<g> as the group name for buttons.
+
+* B<--type>
+Radio (default), checkbox, or menu?
+
+* B<--verbose>
+Add more detailed messages (doesn't do much at the moment).
+
+* B<--version>
+Display version info and exit.
+
+=head Related Commands
+
+=Known bugs and limitations=
+
+=Rights=
+
+This program is Copyright 2012 by Steven J. DeRose.
+It is hereby licensed under the Creative Commons
+Attribution-Share-Alike 3.0 unported license.
+For more information on this license, see [here|"https://creativecommons.org"].
+
+For the most recent version, see [http://www.derose.net/steve/utilities] or
+[http://github/com/sderose].
+
+=History=
+
+* 2012-04-26: Written by Steven J. DeRose.
+* 2018-04-18: lint.
+* 2020-04-04: lint, new layout, POD to MarkDown.
+
+=Options=
+"""
 
 def vMsg(level, msg):
     if (args.verbose >= level): sys.stderr.write(msg+"\n")
@@ -90,7 +145,6 @@ def doOneFile(someFH):
     return(recnum)
 
 
-
 ###############################################################################
 ###############################################################################
 # Main
@@ -114,68 +168,4 @@ vMsg(0, "Done, %d files, %d records." % (totalFiles, totalRecords))
 
 sys.exit(0)
 
-
-
-###############################################################################
-###############################################################################
-#
-perldoc = """
-
-=pod
-
-=head1 Usage
-
-list2htmlForm [options]
-
-Make each line of a file into an item in an XHTML form.
-You can make radio buttons, checkboxes or a pop-up menu,
-and lay them out in various ways.
-
-
-=head1 Options
-
-=over
-
-=item * B<--break>
-
-Put an HTML C<< <br> >> in front of each item (not applicable to I<--type menu>).
-
-=item * B<--group> I<g>
-
-Use I<g> as the group name for buttons.
-
-=item * B<--type>
-
-Radio (default), checkbox, or menu?
-
-=item * B<--verbose>
-
-Add more detailed messages (doesn't do much at the moment).
-
-=item * B<--version>
-
-Display version info and exit.
-
-=back
-
-
-
-=head Related Commands
-
-
-
-=head1 Known bugs and limitations
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut
-"""
 

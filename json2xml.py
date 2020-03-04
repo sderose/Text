@@ -2,32 +2,123 @@
 #
 # json2xml.py
 #
-# 2012-12-04: Written by Steven J. DeRose.
-# 2018-04-18: lint.
-#
-# To do:
-#     Fix -pad.
-#     Option to move atomic named items to parent attributes?
-#
 from __future__ import print_function
 import sys
 import os
 import re
 import argparse
-#import string
-#import math
 
 import json
 import pyxser  # https://sourceforge.net/projects/pyxser/
 
-#from sjdUtils import sjdUtils
-from alogging import ALogger
-#su = sjdUtils()
-#su.setColors(args.color)
-lg = ALogger(1)
+__metadata__ = {
+    'title'        : "json2xml.py",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2012-12-04",
+    'modified'     : "2020-03-04",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+}
+__version__ = __metadata__['modified']
 
-__version__ = "2018-04-18"
 
+###############################################################################
+#
+descr = """
+=Usage=
+
+json2xml.py [options] [files]
+
+Simple but thorough conversion using off-the-shelf packages `json` and `pyxser`.
+
+=head2 Notes
+
+The `json` decoder library produces exactly these Python types:
+
+    JSON          -- Python
+    --------------------------
+    object        -- dict
+    array         -- list
+    string        -- unicode
+    number (int)  -- int, long
+    number (real) -- float
+    true          -- True
+    false         -- False
+    null          -- None
+
+Thus, these are the only Python types passed to the XML serialized library.
+This makes some of the generality of `pyxser` unnecessary here.
+
+=Options=
+
+* '''--noprop'''
+
+Untag the "pyxs:prop" elements from the XML output. Where they have names,
+the name is lost (should instead move these items onto the container element
+as named attributes, or something like that).
+
+* '''--nonamespace'''
+
+Delete the "pyxs:" namespace prefixes from all output XML elements.
+
+* '''--nosize'''
+
+Delete the "size" attributes from the XML output.
+
+* '''--notype'''
+
+Delete the "type" attributes from the XML output (this would mainly be
+useful in environments that don't care, such as many scripting languages,
+or JSON data such as this script deals with).
+
+* '''--pad''' I<n>
+
+Left-pad integers with spaces, to a minimum of I<n> columns.
+(incomplete -- presently just puts a tab on each side instead).
+
+* '''--quiet''' OR '''-q'''
+Suppress most messages.
+
+* '''--verbose'''
+
+Add more detailed messages (doesn't do much at the moment).
+
+* '''--version'''
+
+Display version info and exit.
+
+=Related Commands=
+
+`json` -- built-in Python package for JSON support.
+
+`pyxser` -- Python library (written in C by Daniel Molina Wegener),
+to serialize any Python object as XML. [https://github.com/dmw/pyxser].
+
+=Known bugs and limitations=
+
+=Rights=
+
+Copyright 2012 by Steven J. DeRose. This work is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see [http://creativecommons.org/licenses/by-sa/3.0].
+
+For the most recent version, see [http://www.derose.net/steve/utilities] or
+[http://github.com/sderose].
+
+=History=
+
+* 2012-12-04: Written by Steven J. DeRose.
+* 2018-04-18: lint.
+* 2020-03-04: line, POD to MarkDown. New layout.
+
+=To do=
+
+* Fix -pad.
+* Option to move atomic named items to parent attributes?
+"""
 
 ###############################################################################
 # Process options
@@ -131,17 +222,17 @@ def mySerialize(pyObject, depth=0):
         return buf
     elif (isinstance(pyObject, int)):
         return "<int>%d</int>" % (pyObject)
-    elif (isinstance(pyObject, long)):
-        return "<long>%d</long>" % (pyObject)
+    #elif (isinstance(pyObject, long)):
+    #    return "<long>%d</long>" % (pyObject)
     elif (isinstance(pyObject, float)):
         return "<float>%f</float>" % (pyObject)
-    elif (isinstance(pyObject, unicode)):
+    elif (isinstance(pyObject, str)):
         return "<unicode>%f</unicode>" % (pyObject)
     elif (pyObject is True):
         return "<True/>"
     elif (pyObject is False):
         return "<False/>"
-     elif (pyObject is None):
+    elif (pyObject is None):
         return "<None/>"
 
 
@@ -154,123 +245,18 @@ args = processOptions()
 if (len(args.files) == 0):
     fh = sys.stdin
 elif (not os.path.isfile(args.files[0])):
-    lg.vMsg(0,"Can't find file '" + args.files[0] + "'.")
+    sys.stderr.write("Can't find file '" + args.files[0] + "'.")
     sys.exit(0)
 else:
     fh = open(args.files[0], "r")
 
 # Load the JSON and make a Python Object.
 #
-pyObject = json.load(fh)
+pyObject0 = json.load(fh)
 
-if (args.pyxser): theXml = serialize(pyObject)
-else: theXml = mySerialize(pyObject)
+if (args.pyxser): theXml0 = serialize(pyObject0)
+else: theXml0 = mySerialize(pyObject0)
 
-print(theXml)
+print(theXml0)
 
 sys.exit(0)
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-perldoc = """
-
-=pod
-
-=head1 Usage
-
-json2xml.py [options]
-
-Simple but thorough conversion using off-the-shelf packages 'json' and 'pyxser'.
-
-
-=head2 Notes
-
-The C<json> decoder library produces exactly these Python types:
-
-    JSON          -- Python
-    --------------------------
-    object        -- dict
-    array         -- list
-    string        -- unicode
-    number (int)  -- int, long
-    number (real) -- float
-    true          -- True
-    false         -- False
-    null          -- None
-
-Thus, these are the only Python types passed to the XML serialized library.
-This makes some of the generality of C<pyxser> unnecessary here.
-
-
-
-=head1 Options
-
-=over
-
-=item * B<--noprop>
-
-Untag the "pyxs:prop" elements from the XML output. Where they have names,
-the name is lost (should instead move these items onto the container element
-as named attributes, or something like that).
-
-=item * B<--nonamespace>
-
-Delete the "pyxs:" namespace prefixes from all output XML elements.
-
-=item * B<--nosize>
-
-Delete the "size" attributes from the XML output.
-
-=item * B<--notype>
-
-Delete the "type" attributes from the XML output (this would mainly be
-useful in environments that don't care, such as many scripting languages,
-or JSON data such as this script deals with).
-
-=item * B<--pad> I<n>
-
-Left-pad integers with spaces, to a minimum of I<n> columns.
-(incomplete -- presently just puts a tab on each side instead).
-
-=item * B<--quiet> OR B<-q>
-Suppress most messages.
-
-=item * B<--verbose>
-
-Add more detailed messages (doesn't do much at the moment).
-
-=item * B<--version>
-
-Display version info and exit.
-
-=back
-
-
-
-=head Related Commands
-
-C<json> -- built-in Python package for JSON support.
-
-C<pyxser> -- Python library (written in C by Daniel Molina Wegener),
-to serialize any Python object as XML. L<https://github.com/dmw/pyxser>.
-
-
-
-=head1 Known bugs and limitations
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut
-"""

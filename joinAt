@@ -1,94 +1,45 @@
 #!/usr/bin/perl -w
 #
-# joinAt
+# joinAt: join matching lines, with the next (or previous) line.
 #
-# 2014-08-31f: Written by Steven J. DeRose, sderose@acm.org.
+# 2014-08-31f: Written by Steven J. DeRose.
 #
 use strict;
 use Getopt::Long;
-use sjdUtils;
-use alogging;
 
-my $version = "2014-10-03";
-
-my $decode        = 0;
-my $expr          = '=$';
-my $keep          = 0;
-my $iencoding     = "";
-my $mime          = 0;
-my $oencoding     = "utf8";
-my $verbose       = 0;
-
-###############################################################################
-#
-my %getoptHash = (
-    "decode!"                 => \$decode,
-    "expr=s"                  => \$expr,
-    "keep!"                   => \$keep,
-    "iencoding=s"             => \$iencoding,
-    "mime!"                   => \$mime,
-    "oencoding=s"             => \$oencoding,
-    "h|help"                  => sub { system "perldoc $0"; exit; },
-    "v|verbose+"              => \$verbose,
-    "version"                 => sub {
-        die "Version of $version, by Steven J. DeRose.\n";
-    },
-    );
-Getopt::Long::Configure ("ignore_case");
-GetOptions(%getoptHash) || die "Bad options.\n";
-
-sjdUtils::setVerbose($verbose);
-
-if (length($expr) < 1) {
-    eMsg(-1, "-expr required.");
-}
-
-print "";
-binmode(STDOUT, ":encoding($oencoding)");
+our %metadata = (
+    'title'        => "joinAt",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2014-08-31",
+    'modified'     => "2020-02-18",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
 
 ###############################################################################
-###############################################################################
-# Main
-#
-my $inMIMEHeader = ($mime) ? 1:0;
-
-while (my $rec = <>) {
-    $rec =~ s/[\r\n]+$//;
-    if ($inMIMEHeader) {
-        if ($rec =~ m/^\s*$/) { $inMIMEHeader = 0; }
-        print "$rec\n";
-        next;
-    }
-    if ($rec =~ m/$expr/) {
-        if (!$keep) { $rec =~ s/$expr//; }
-    }
-    else { $rec .= "\n"; }
-    if ($decode) {
-        $rec =~ s/=([0-9a-f][0-9a-f])/{ chr(hex($1)); }/gie;
-    }
-    print "$rec";
-}
-
-exit;
-
-
-###############################################################################
-###############################################################################
-#
 
 =pod
 
 =head1 Usage
 
-joinAt [options] [-expr I<regex>] [files]
+joinAt [options] [--expr I<regex>] [files]
 
-Remove the line-break at the end of any line matching the given I<regex>.
+Remove the line-break at the end of any line matching the given I<regex>
+(or I<--previous> for the beginning instead).
 
-The default is /=$/, which joins up lines that were split into shorter pieces,
+By default, the matching text is also deleted, though see I<--keep>.
+The match does not have to occur at the start or end of the line.
+
+The default is /=$/, which joins up lines that were split into shorter pieces
 with '=' inserted at the end of each piece, as
 part of the task of decoding "quoted-printable" mail format
-(RFC 2045). Use I<--decode> to also unescape =xx special characters.
+(see L<IETF RFC 2045>).
+See I<--decode> to also unescape =xx special characters.
 
 
 =head1 Options
@@ -102,15 +53,14 @@ part of the task of decoding "quoted-printable" mail format
 In addition, turn sequences of '=' plus 2 hex digits to the correponding
 character code point (UTF-8 may still have to be expanded after that).
 
+This is done I<before> testing whether a line matches I<--expr>.
+
 =item * B<--expr> I<e>
 
-The regular expression identifying lines to be joined with their following line.
+The regular expression identifying lines to be joined with an adjacent line.
+Matching lines are joined with the following line unless I<--previous>
+is specified, in which case there are joined with the previous line instead.
 Default: C<=$>.
-
-=item * B<--mime>
-
-Assume there's a MIME header at the top, and do not start changing things until
-after the first blank line (which indicates the end of the MIME header).
 
 =item * B<--iencoding> I<e>
 
@@ -120,9 +70,31 @@ Assume the input is in encoding I<e>. Output is always utf-8.
 
 Do not delete the matched text; just the newline. Default: delete both.
 
+=item * B<--mime>
+
+Assume there's a MIME header at the top, and do not start changing things until
+after the first blank line (which indicates the end of the MIME header).
+I<--decode> does not apply to the MIME header, and with I<--previous> The
+line immediately following the MIME header cannot join onto the blank line
+separating the header.
+
 =item * B<--oencoding> I<e>
 
 Write output in encoding I<e>. Default: utf-8.
+
+=item * B<--previous>
+
+Join matching lines with the I<preceding> line rather than the next line.
+
+=item * B<--separator> I<s>
+
+Insert I<s> in place of the removed line-breaks. Default: ''.
+A typical value might be a single space.
+
+=item * B<--strip>
+
+Remove any leading whitespace from the later of lines being joined.
+This would typically be accompanied by I<--separator ' '>, but need not be.
 
 =item * B<--verbose> or B<-v>
 
@@ -134,7 +106,6 @@ Show version info and exit.
 
 =back
 
-
 =head1 Known Bugs and Limitations
 
 I<--decode> does not complain if it sees '=' followed by non-hex-digits.
@@ -144,22 +115,117 @@ After I<--decode>, any UTF-8 is not interpreted; this could be a feature or a bu
 Perhaps should watch for "Content-Transfer-Encoding: quoted-printable" in MIME
 header, and use it to control whether to decode that.
 
-Would be nice to add a way to remove the newline I<before> matched lines,
-rather than after.
+Would be nice to add a way to strip indentation from 2nd of joined lines.
 
+I<--strip> just uses Perl regex '\\s' for whitespace, which probably misses
+a lot of Unicode cases.
 
 =head1 Related commands
 
 C<splitAtMatches> -- inserts newlines before, after, or in place
 of regex matches.
 
+=head1 History
 
-=head1 Ownership
+=over
 
-This work by Steven J. DeRose is licensed under a Creative Commons
+=item * 2014-08-31f: Written by Steven J. DeRose.
+
+=item * 2014-10-03: ???
+
+=item * 2020-02-18: New layout. Add I<--previous>, I<--separator>, I<--strip>.
+Document a few edge cases.
+
+=back
+
+=head1 Rights
+
+Copyright 2014 by Steven J. DeRose. This work is licensed under a Creative Commons
 Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0>.
 
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+For the most recent version, see L<here|"http://www.derose.net/steve/utilities/"> or
+L<https://github.com/sderose>.
 
 =cut
+
+###############################################################################
+# Options
+#
+my $decode        = 0;
+my $expr          = '=$';
+my $keep          = 0;
+my $iencoding     = "";
+my $mime          = 0;
+my $oencoding     = "utf8";
+my $previous      = 0;
+my $separator     = "";
+my $strip         = 0;
+my $verbose       = 0;
+
+my %getoptHash = (
+    "decode!"                 => \$decode,
+    "expr=s"                  => \$expr,
+    "keep!"                   => \$keep,
+    "iencoding=s"             => \$iencoding,
+    "mime!"                   => \$mime,
+    "oencoding=s"             => \$oencoding,
+    "previous!"               => \$previous,
+    "separator=s"             => \$separator,
+    "strip!"                  => \$strip,
+    "h|help"                  => sub { system "perldoc $0"; exit; },
+    "v|verbose+"              => \$verbose,
+    "version"                 => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    );
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die "Bad options.\n";
+
+(length($expr) >= 1) || die "-expr required.";
+
+print "";
+binmode(STDOUT, ":encoding($oencoding)");
+
+
+###############################################################################
+###############################################################################
+# Main
+#
+my $inMIMEHeader = ($mime) ? 1:0;
+my $pendingStrip = 0;
+while (my $rec = <>) {
+    $rec =~ s/[\r\n]+$//;
+    if ($inMIMEHeader) {
+        if ($rec =~ m/^\s*$/) { $inMIMEHeader = 0; }
+        print "$rec\n";
+        next;
+    }
+    if ($decode) {
+        $rec =~ s/=([0-9a-f][0-9a-f])/{ chr(hex($1)); }/gie;
+    }
+    if ($rec =~ m/$expr/) {
+        if (!$keep) { $rec =~ s/$expr//; }
+        if ($previous) {
+            if ($strip) { $rec =~ s/^\s+//; }
+            print $separator . $rec;
+        }
+        else {
+            if ($pendingStrip) {
+                $rec =~ s/^\s+//;
+                $pendingStrip = 0;
+            }
+            print "\n" . $rec . $separator;
+            if ($strip) { $pendingStrip = 1; }
+        }
+    }
+    else { # Not a matching line
+        if ($previous) { print "\n"; }
+        if ($pendingStrip) { $rec =~ s/^\s+//; }
+        print "$rec";
+        $pendingStrip = 0;
+    }
+}
+if ($previous) { print "\n"; }
+
+exit;

@@ -2,36 +2,80 @@
 #
 # findUnbalancedQuotes.py
 #
-# 2017-07-03: Written. Copyright by Steven J. DeRose (port from bash script).
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
-#     Really count ins and outs and types....
-#
 from __future__ import print_function
 import sys, os, argparse
 import re
-#import string
-#import math
-#import subprocess
 import codecs
 
-#import pudb
-#pudb.set_trace()
-
-from sjdUtils import sjdUtils
+from alogging import ALogger
 from MarkupHelpFormatter import MarkupHelpFormatter
 
-global args, su, lg
+lg = ALogger()
 
-__version__ = "2017-07-03"
+PY3 = sys.version_info[0] == 3
+if PY3:
+    def unichr(n): return chr(n)
+
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2017-07-03",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2017-07-03",
+    'title'        : "findUnbalancedQuotes.py",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2017-07-03",
+    'modified'     : "2020-03-04",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
 }
+__version__ = __metadata__['modified']
+
+descr = """
+=Description=
+
+Scan for lines with imbalanced quotes.
+
+This script does not know about particular programming or other languages,
+so does not (yet) deal with cases such as quotes backslashed within quotes,
+multi-line quotations, here documents, etc.
+
+With ''--unicode'', checks for various curly quote pairs, though not perfectly.
+
+=Related Commands=
+
+=Known bugs and Limitations=
+
+Does not know to ignore comments in programming langauges.
+
+Does not know about quoted quoted, or backslashing or doubling.
+
+Does not know about multi-line quotes.
+
+Does not know about Perl q/.../, Python ""..."", here documents, etc.
+
+Could usefully add parenthesis balancing.
+
+Add option to colorize the quotes or quoted portions?
+
+=History=
+
+2017-07-03: Written by Steven J. DeRose (port from bash script).
+
+=To do=
+
+* Really count ins and outs and types....
+
+=Rights=
+
+This program is Copyright 2017 by Steven J. DeRose.
+It is hereby licensed under the Creative Commons
+Attribution-Share-Alike 3.0 unported license.
+For more information on this license, see L<here|"https://creativecommons.org">.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/> or
+L<http://github/com/sderose>.
+
+=Options=
+"""
 
 # Quote-pairs
 #
@@ -74,55 +118,12 @@ pairedQuotes = [
 ]
 
 
-
 ###############################################################################
 #
 def processOptions():
-    global args, su, lg
     parser = argparse.ArgumentParser(
-        description="""
+        description=descr, formatter_class=MarkupHelpFormatter)
 
-=head1 Description
-
-Scan for lines with imbalanced quotes.
-
-This script does not know about particular programming or other languages,
-so does not (yet) deal with cases such as quotes backslashed within quotes,
-multi-line quotations, here documents, etc.
-
-With I<--unicode>, checks for various curly quote pairs, though not perfectly.
-
-
-=head1 Related Commands
-
-=head1 Known bugs and Limitations
-
-Does not know to ignore comments in programming langauges.
-
-Does not know about quoted quoted, or backslashing or doubling.
-
-Does not know about multi-line quotes.
-
-Does not know about Perl q/.../, Python ""..."", here documents, etc.
-
-Could usefully add parenthesis balancing.
-
-Should add option to colorize the quotes or quoted portions.
-
-
-=head1 Licensing
-
-Copyright 2015 by Steven J. DeRose. This script is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
-
-=head1 Options
-        """,
-        formatter_class=MarkupHelpFormatter
-    )
-    parser.add_argument(
-        "--color",  # Don't default. See below.
-        help='Colorize the output.')
     parser.add_argument(
         "--iencoding",        type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
@@ -148,12 +149,7 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    su = sjdUtils()
-    lg = su.getLogger()
     lg.setVerbose(args0.verbose)
-    if (args0.color == None):
-        args0.color = ("USE_COLOR" in os.environ and sys.stderr.isatty())
-    su.setColors(args0.color)
     return(args0)
 
 
@@ -185,7 +181,7 @@ def doOneFile(path):
     """
     try:
         fh = open(path, mode="r")  # binary
-    except:
+    except IOError:
         lg.error("Couldn't open '%s'." % (path), stat="cantOpen")
         return(0)
     lg.bumpStat("totalFiles")
@@ -200,7 +196,7 @@ def doOneFile(path):
     while (True):
         try:
             rec = fh.readline()
-        except Exception as e:
+        except IOError as e:
             lg.error("Error (%s) reading record %d of '%s'." %
                 (type(e), recnum, path), stat="readError")
             break
@@ -223,7 +219,7 @@ def doOneFile(path):
             report(recnum, "Odd number of back quotes (%s)" % (n), rec)
 
         if (args.iencoding == 'utf8'):
-            for pair in (quotePairs):
+            for pair in (pairedQuotes):
                 nopen = countChar(rec, unichr(pair[0]))
                 nclos = countChar(rec, unichr(pair[1]))
                 if (nopen != nclos):

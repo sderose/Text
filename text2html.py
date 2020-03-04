@@ -2,30 +2,29 @@
 #
 # text2html.py
 #
-# 2018-07-21: Written by Steven J. DeRose.
-#
-# To do:
-#
 from __future__ import print_function
 import sys, os
 import argparse
 import re
-#import string
-#import math
-#import subprocess
 import codecs
 
 import XmlOutput
-#from sjdUtils import sjdUtils
 from alogging import ALogger
 
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2018-07-21",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2018-07-21",
+    'title'        : "text2html.py",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2018-07-21",
+    'modified'     : "2020-03-04",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
+    'description'  :
+        'Simple formatter class for Python argparse.',
 }
-__version__ = __metadata__['version_date']
+__version__ = __metadata__['modified']
 
 lg = ALogger(1)
 
@@ -37,6 +36,101 @@ else:
     string_types = str
     def unichr(n): return chr(n)
 
+descr = """
+=Description=
+
+Convert simple text layouts to HTML.
+
+==Basic logic==
+
+    Anything with blank lines around it is a block.
+
+   Should catch abutted but indented paras as breaks, too.
+
+    The nominal indent of a block is than of its non-first lines (if any).
+This is to avoid list-marker placement, and indented paragraphs
+
+    Any block starting with a list-marker is a list item.
+
+Unordered list markers (normally only one character)
+    *  -  =  o  +
+    \\u2022 2023 2043 204c 204d 2219 25d8 25e6 2619 29be 29bf
+    all dingbats; rarely, any graphic
+
+Ordered list markers (may be delimited, stacked, etc):
+    Numbering types (see CSS list-style-type)
+        1      2      3
+        A      B      C
+        a      b      c
+        i      ii     iii    iv
+        I      II     III    IV
+        01     02     03     04
+        001    002    003    004
+        1st    2nd    3rd
+        One    Two    Three
+        First  Second Third
+        greek, han, arabic-indic, armenian,...
+
+    Delimited:
+        1  1.  1)  1:  1-  [1]  (1)  -1-  =1=  /1/
+        (maybe any punc + \\d+ + punc?)
+
+    Hierarchy (see MS Word examples)
+        1)     1)     1
+        1)     a)     i)
+        1.     1.1.   1.1.1.
+        I.     A.     1.
+        Article I     Section 1.01        (a)
+
+Features of numbering:
+    * Do headings successively indent?
+    * Do headings show all, current, most recent n, or no numbers?
+    * What separates each level from prev/next?
+    * Any (leading only?) keyword per level?
+        * What leading punctuation on the marker?
+        * What final punctuation on the marker?
+    * What numbering system at each level?
+
+Layout:
+    * Does content indent, too?
+    * Is title run in to following text, or a new block?
+    * Outset of marker from block
+    * Left/right/center justification of marker
+    * (formatting of the markers, font/size/color...)
+
+
+=Related Commands=
+
+`markdown2XML.py`, `pod2html`,....
+
+`XmlOutput.py` (used for output generation).
+
+`BlockFormatter.py`, and `MarkupHelpFormatter.py`.
+
+=Known bugs and Limitations=
+
+=Rights=
+
+This program is Copyright 2018 by Steven J. DeRose.
+It is hereby licensed under the Creative Commons
+Attribution-Share-Alike 3.0 unported license.
+For more information on this license, see [here|"https://creativecommons.org"].
+
+For the most recent version, see [http://www.derose.net/steve/utilities] or
+[http://github/com/sderose].
+
+=History=
+
+* 2018-07-21: Written by Steven J. DeRose.
+
+* 2020-03-04: New layout. lint.
+
+=Options=
+"""
+
+
+###############################################################################
+#
 class marker:
     """See https://developer.mozilla.org/en-US/docs/Web/CSS/list-style-type
     """
@@ -78,7 +172,7 @@ telugu thai tibetan trad-chinese-formal trad-chinese-informal upper-armenian"""
     def __init__(self, text=""):
         return
 
-    def getMarkerType(s):
+    def getMarkerType(self, s):
         """Identify what kind of bullet or number we've got (if any).
         There must be no punctuation or space, that should already be gone.
         """
@@ -90,6 +184,8 @@ telugu thai tibetan trad-chinese-formal trad-chinese-informal upper-armenian"""
         if (re.match(r'[a-z]', s)): return 'lower-latin'  # But 'i'
 
 
+###############################################################################
+#
 class blockify:
     def __init__(self):
         self.encoding = None
@@ -110,6 +206,7 @@ class blockify:
         # Group at blank lines
         assert(False)
 
+
 ###############################################################################
 #
 def doOneFile(path, fh):
@@ -118,16 +215,20 @@ def doOneFile(path, fh):
     xo = XmlOutput.XmlOutput()
     xo.startHTML()
 
-    recs = fh.readlines()
+    try:
+        recs = fh.readlines()
+    except IOError as e:
+        sys.stderr.write("Cannot read '%s':]n    %s" % (path, e))
+        sys.exit()
     recnum = len(recs)
 
     nBlankLines = 0
-    lastRec = ""
+    #lastRec = ""
     lastIndent = 0
     for i in range(recnum):
         # Normalize
         rec = recs[i].rstrip("\r\n")
-        rec = expandtabs(rec, args.tabs)
+        rec = rec.expandtabs(args.tabs)
         stripped = rec.strip()
         isBlank = (stripped == '')
 
@@ -161,7 +262,7 @@ def doOneFile(path, fh):
         # Make new line 'previous'
         lastIndent = indent
         if (not isBlank): nBlankLines = 0
-        lastRec = rec
+        #lastRec = rec
 
     #print(recs)
     return(recnum)
@@ -206,85 +307,6 @@ def targetLen(regex, s, groupNum=0):
 #
 if (__name__ == '_main_'):
     def processOptions():
-        descr = """
-=head1 Description
-
-Convert simple text layouts to HTML.
-
-=head2 Basic logic
-
-    Anything with blank lines around it is a block.
-
-   Should catch abutted but indented paras as breaks, too.
-
-    The nominal indent of a block is than of its non-first lines (if any).
-This is to avoid list-marker placement, and indented paragraphs
-
-    Any block starting with a list-marker is a list item.
-
-Unordered list markers (normally only one character)
-    *  -  =  o  +
-    \u2022 2023 2043 204c 204d 2219 25d8 25e6 2619 29be 29bf
-    all dingbats; rarely, any graphic
-
-Ordered list markers (may be delimited, stacked, etc):
-    Numbering types (see CSS list-style-type)
-        1      2      3
-        A      B      C
-        a      b      c
-        i      ii     iii    iv
-        I      II     III    IV
-        01     02     03     04
-        001    002    003    004
-        1st    2nd    3rd
-        One    Two    Three
-        First  Second Third
-        greek, han, arabic-indic, armenian,...
-
-    Delimited:
-        1  1.  1)  1:  1-  [1]  (1)  -1-  =1=  /1/
-        (maybe any punc + \d+ + punc?)
-
-    Hierarchy (see MS Word examples)
-        1)     1)     1
-        1)     a)     i)
-        1.     1.1.   1.1.1.
-        I.     A.     1.
-        Article I     Section 1.01        (a)
-
-Features of numbering:
-    * Do headings successively indent?
-    * Do headings show all, current, most recent n, or no numbers?
-    * What separates each level from prev/next?
-    * Any (leading only?) keyword per level?
-        * What leading punctuation on the marker?
-        * What final punctuation on the marker?
-    * What numbering system at each level?
-
-Layout:
-    * Does content indent, too?
-    * Is title run in to following text, or a new block?
-    * Outset of marker from block
-    * Left/right/center justification of marker
-    * (formatting of the markers, font/size/color...)
-
-
-=head1 Related Commands
-
-C<markdown2XML.py>, C<pod2html>,...
-
-C<XmlOutput.py> (used for output generation).
-
-=head1 Known bugs and Limitations
-
-=head1 Licensing
-
-Copyright 2018 by Steven J. DeRose. This script is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
-
-=head1 Options
-"""
         try:
             from MarkupHelpFormatter import MarkupHelpFormatter
             formatter = MarkupHelpFormatter
@@ -318,9 +340,6 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
             help='Path(s) to input file(s)')
 
         args0 = parser.parse_args()
-        if (args0.color == None):
-            args0.color = ("USE_COLOR" in os.environ and sys.stderr.isatty())
-        lg.setColors(args0.color)
         if (args0.verbose): lg.setVerbose(args0.verbose)
         return(args0)
 
