@@ -2,13 +2,6 @@
 #
 # anycat: Better versio of *nix 'cut' utility.
 #
-# 2013-04-23: Written by Steven J. DeRose.
-#
-# To do:
-#     Test.
-#     Port to Python on top of PowerWalk.
-#     Integrate with 'ds'?
-#
 use strict;
 use Getopt::Long;
 use Encode;
@@ -18,8 +11,105 @@ use IO::Uncompress::AnyUncompress;
 use sjdUtils;
 use alogging;
 
-my $version = "2013-04-23";
+our %metadata = (
+    'title'        => "anycat.pm",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2006-10",
+    'modified'     => "2020-01-15",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
+=pod
+
+=head1 Usage
+
+anycat [options] file
+
+A version of C<cat>/C<zcat> that should handle a variety of compression types.
+
+Also, if environment variable LINES is set, it waits for you to hit RETURN
+after every screen-ful (poor-man's C<more> -- just pipe to C<more> or C<less>
+if you want a real pager).
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--iencoding> I<e>
+
+Specify character encoding for input. Incompatible with I<--bytes>.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--listEncodings>
+
+Show all available character encodings, then exit.
+
+=item * B<--oencoding> I<e>
+
+Specify character encoding for output.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--recursive>
+
+Process directories recursively.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8> I<--oencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+=head1 Known Bugs and Limitations
+
+Little tested yet.
+
+=head1 Related commands
+
+C<cat>, C<zcat>,...
+
+C<IO::Uncompress::AnyUncompress> -- CPAN package to open various
+compressed formats.
+
+=head1 History
+
+2013-04-23: Written by Steven J. DeRose.
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut
+
+
+###############################################################################
+#
 my $color         = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
 my $iencoding     = "";
 my $ilineends     = "U";
@@ -31,8 +121,6 @@ my $recursive     = 0;
 my $verbose       = 0;
 
 
-###############################################################################
-#
 my %getoptHash = (
     "color!"                       => \$color,
     "h|help"                       => sub { system "perldoc $0"; exit; },
@@ -59,7 +147,7 @@ my %getoptHash = (
     "unicode!"                     => sub { $iencoding=$oencoding="utf8"; },
     "v+"                           => \$verbose,
     "version"                      => sub {
-        die "Version of $version, by Steven J. DeRose.\n";
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
     );
 
@@ -179,97 +267,3 @@ sub doOneFile {
     } # EOF
     $totalRecs += $recnum;
 } # doOneFile
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-anycat [options] file
-
-A version of C<cat>/C<zcat> that should handle a variety of compression types.
-
-Also, if environment variable LINES is set, it waits for you to hit RETURN
-after every screen-ful (poor-man's C<more> -- just pipe to C<more> or C<less>
-if you want a real pager).
-
-
-
-=head1 Options
-
-(prefix 'no' to negate where applicable)
-
-=over
-
-=item * B<--iencoding> I<e>
-
-Specify character encoding for input. Incompatible with I<--bytes>.
-
-=item * B<--ilineends> I<t>
-
-Assume Unix, Dos, or Mac line-breaks for input.
-
-=item * B<--listEncodings>
-
-Show all available character encodings, then exit.
-
-=item * B<--oencoding> I<e>
-
-Specify character encoding for output.
-
-=item * B<--olineends> I<t>
-
-Write Unix, Dos, or Mac line-breaks for output.
-
-=item * B<--quiet> OR B<-q>
-Suppress most messages.
-
-=item * B<--recursive>
-
-Process directories recursively.
-
-=item * B<--unicode>
-
-Synonym for I<--iencoding utf8> I<--oencoding utf8>.
-
-=item * B<--verbose> OR B<-v>
-Add more messages (repeatable).
-
-=item * B<--version>
-
-Show version info and exit.
-
-=back
-
-
-
-=head1 Known Bugs and Limitations
-
-Little tested yet.
-
-
-
-=head1 Related commands
-
-C<cat>, C<zcat>,...
-
-C<IO::Uncompress::AnyUncompress> -- CPAN package to open various
-compressed formats.
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut
