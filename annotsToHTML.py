@@ -74,12 +74,11 @@ I<--cssURL> option to generate a link to a stylesheet that does so.
 """
 
     try:
-        from MarkupHelpFormatter import MarkupHelpFormatter
-        formatter = MarkupHelpFormatter
+        from BlockFormatter import BlockFormatter
+        parser = argparse.ArgumentParser(
+            description=descr, formatter_class=BlockFormatter)
     except ImportError:
-        formatter = None
-    parser = argparse.ArgumentParser(
-        description=descr, formatter_class=formatter)
+        parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
         "--beginMark",        type=str, metavar='S', default="B-",

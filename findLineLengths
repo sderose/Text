@@ -267,11 +267,11 @@ all the particular lines of chosen lengths.
 
 =over
 
-=item B<--count>
+=item * B<--count>
 
 Synonym for I<--table>.
 
-=item B<--iencoding> I<s>
+=item * B<--iencoding> I<s>
 
 Set character encoding for input.
 
@@ -288,28 +288,28 @@ Just report the longest line found and its length.
 
 Show all the encodings supported by I<--iencoding>, and exit.
 
-=item B<--max> I<n>
+=item * B<--max> I<n>
 
 Report results for lines over I<n> characters long.
 
-=item B<--min> I<n>
+=item * B<--min> I<n>
 
 Only report results for lines less then I<n> characters long.
 
-=item B<-n>
+=item * B<-n>
 
 Synonym for I<--where>.
 
-=item B<--newline> (or B<--nl>)
+=item * B<--newline> (or B<--nl>)
 
 Count CR, LF, or CRLF at the end?
 (default on; use I<--nonewline> to turn off).
 
-=item B<--quiet>
+=item * B<--quiet>
 
 Suppress most messages.
 
-=item B<--show>
+=item * B<--show>
 
 Include the text of the first line of the longest length found (default).
 
@@ -317,20 +317,20 @@ Include the text of the first line of the longest length found (default).
 
 Report some extra statistics about line lenghts.
 
-=item B<--table> or B<--count>
+=item * B<--table> or B<--count>
 
 Print how many lines of each length, and the percent
 of all lines that are not longer than that.
 
-=item B<--unicode>
+=item * B<--unicode>
 
 Synonym for I<--iencoding utf8>.
 
-=item B<--version>
+=item * B<--version>
 
 Display version info and exit (sjd).
 
-=item B<--where> (or B<-n>)
+=item * B<--where> (or B<-n>)
 
 Report line numbers for all lines of each length.
 
@@ -342,7 +342,7 @@ Report line numbers for all lines of each length.
 
 =over
 
-=item BSD (and hence Mac OS X) C<wc> does not have the I<-L> option,
+=item * BSD (and hence Mac OS X) C<wc> does not have the I<-L> option,
 so it is not used by this script.
 However, this script does provide I<--longest> to do the same thing.
 

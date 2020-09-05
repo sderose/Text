@@ -1,11 +1,7 @@
 #!/usr/bin/env python
 #
 # list2htmlForm
-#
 # 2012-04-26: Written by Steven J. DeRose.
-# 2018-11-07: Cleanup, Py 3.
-#
-# To do:
 #
 from __future__ import print_function
 import sys
@@ -15,25 +11,94 @@ import argparse
 import string
 import math
 
-from sjdUtils import sjdUtils
-from alogging import ALogger
+__metadata__ = {
+    'title'        : "list2htmlForm",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2012-04-26",
+    'modified'     : "2020-08-27",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+}
+__version__ = __metadata__['modified']
 
-__version__ = "2018-11-07"
 
-su = sjdUtils()
+descr = """
+=head1 Usage
+
+list2htmlForm [options]
+
+Make each line of a file into an item in an XHTML form.
+You can make radio buttons, checkboxes or a pop-up menu,
+and lay them out in various ways.
+
+
+=head1 Options
+
+=over
+
+=item * B<--break>
+
+Put an HTML C<< <br> >> in front of each item (not applicable to I<--type menu>).
+
+=item * B<--group> I<g>
+
+Use I<g> as the group name for buttons.
+
+=item * B<--type>
+
+Radio (default), checkbox, or menu?
+
+=item * B<--verbose>
+
+Add more detailed messages (doesn't do much at the moment).
+
+=item * B<--version>
+
+Display version info and exit.
+
+=back
+
+
+=head Related Commands
+
+
+=head1 Known bugs and limitations
+
+
+=head1 History
+
+* 2012-04-26: Written by Steven J. DeRose.
+* 2018-11-07: Cleanup, Py 3.
+* 2020-08-07: New layout. Lose use of logging and sjdUtils.
+
+
+=Rights=
+
+Copyright 2012-04-26 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share-alike 3.0 unported license.
+For further information on this license, see
+[https://creativecommons.org/licenses/by-sa/3.0].
+
+For the most recent version, see [http://www.derose.net/steve/utilities]
+or [https://github.com/sderose].
+
+
+=Options
+"""
 
 
 ###############################################################################
 # Process options
 #
-descr = """ """
 try:
-    from MarkupHelpFormatter import MarkupHelpFormatter
-    formatter = MarkupHelpFormatter
+    from BlockFormatter import BlockFormatter
+    parser = argparse.ArgumentParser(
+        description=descr, formatter_class=BlockFormatter)
 except ImportError:
-    formatter = None
-parser = argparse.ArgumentParser(
-    description=descr, formatter_class=formatter)
+    parser = argparse.ArgumentParser(description=descr)
 
 parser.add_argument(
     "--verbose",    action='count', default=0,
@@ -59,10 +124,11 @@ args = parser.parse_args()
 
 
 ###############################################################################
-###############################################################################
 #
 def clean(s):
-    return(su.makeXmlName(s))
+    """Turn all non-XML-NAME characters to underscores.
+    """
+    return(re.sub(r'[^-_.:\w\d]', '_', s)
 
 def doOneFile(fh):
     rec = ""
@@ -97,8 +163,6 @@ def doOneFile(fh):
     return(recnum)
 
 
-
-###############################################################################
 ###############################################################################
 # Main
 #
@@ -118,72 +182,4 @@ for fnum in (range(len(args.files))):
         sys.stderr.write("Can't find file '" + f + "'.\n")
 
 sys.stderr.write("Done, %d files, %d records.\n" % (totalFiles, totalRecords))
-
 sys.exit(0)
-
-
-
-###############################################################################
-###############################################################################
-#
-perldoc = """
-
-=pod
-
-=head1 Usage
-
-list2htmlForm [options]
-
-Make each line of a file into an item in an XHTML form.
-You can make radio buttons, checkboxes or a pop-up menu,
-and lay them out in various ways.
-
-
-
-=head1 Options
-
-=over
-
-=item * B<--break>
-
-Put an HTML C<< <br> >> in front of each item (not applicable to I<--type menu>).
-
-=item * B<--group> I<g>
-
-Use I<g> as the group name for buttons.
-
-=item * B<--type>
-
-Radio (default), checkbox, or menu?
-
-=item * B<--verbose>
-
-Add more detailed messages (doesn't do much at the moment).
-
-=item * B<--version>
-
-Display version info and exit.
-
-=back
-
-
-
-=head Related Commands
-
-
-
-=head1 Known bugs and limitations
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut
-"""
-

@@ -1,24 +1,7 @@
 #!/usr/bin/perl -w
 #
 # wrap: wrap STDIN to a given column, with padding (opposite of 'fold')
-#
 # Written by Steven J. DeRose, 2006-08-29.
-# 2007-05-31 sjd: Add $VERSION_DATE.
-# 2007-12-14 sjd: -t, Getopt, --free.
-# 2009-06-28 sjd: Protect from padWidth == 0.
-# 2011-10-25 sjd: Clean up. Default --width to $COLUMNS if defined. Add --delim.
-#     Don't put gutter string after last item on line
-# 2013-01-25 sjd: Add --truncate.
-# 2013-04-15 sjd: Add --iencoding, --oencoding, --listEncodings, --stripItems,
-#     --vertical/--ls. Add $recnum. Rename --delim to --fieldSep.
-#     Don't limit nCols due to gutter following last col.
-# 2013-10-24: Actually print the gutters. Duh.
-# 2015-03-19: Hyphens.
-# 2016-01-21: Avoid div0 for nCols.
-#
-# Todo:
-#     Expand tabs.
-#     Pad wide items to *multiple* of pad+gutter?
 #
 use strict;
 use Getopt::Long;
@@ -27,8 +10,225 @@ use Encode;
 use sjdUtils;
 use alogging;
 
-our $VERSION_DATE = "2016-01-21";
+our %metadata = (
+    'title'        => "wrap",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2006-08-29",
+    'modified'     => "2020-09-03",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
+
+=pod
+
+=head1 Usage
+
+wrap [options]
+
+Accumulate text (or fields) from input lines,
+and re-wrap to make full lines, optionally padding for nice columns.
+
+By default:
+
+=over
+
+=item * Doesn't wrap across blank lines (see I<--blank>),
+
+=item * Wraps to $COLUMNS-1 (or 79) columns (see I<--width>),
+
+=item * Normalizes white-space runs to a single blank,
+
+=item * Wrappable items are separated by /\s+/ (but see I<--fieldSep>).
+
+=back
+
+For multi-column layouts use I<--rpadWidth> or I<--lpadWidth>.
+
+For column-major layouts (similar to C<ls>) use I<--vertical>.
+
+
+=head1 Options
+
+=over
+
+=item * B<--blank>
+
+Ignore blank lines (instead of stopping wrap at each).
+Only applies when I<--vertical> is off.
+
+=item * B<--fieldSep> I<regex>
+
+Use I<regex> (default I<\\s+>) as the separator to split lines into items.
+If set to "", lines will not be split (thus, they should probably be
+short already, such as having one word per line).
+
+=item * B<--free>
+
+If an item is too wide, do I<not> bump over to the next
+multiple of I<--lpadWidth> or I<--rpadWidth>. Instead, just put in a gutter
+and go on (leaving later items in the line, if any, unaligned).
+See also I<--truncate>.
+
+=item * B<--gutterWidth> I<n>
+
+Set how much space between columns (default: 1).
+
+=item * B<--gutterChar> I<c>
+
+Set what char to use between columns (default: space). Other likely
+candidates are "|" (U+007c),
+
+=item * B<--iencoding> I<e>
+
+Assume this character set for input.
+
+=item * B<--lpadWidth> I<n>
+
+Pad on the left to width I<n> (default: no pad),
+See also I<--rpadWidth> and I<--padChar>.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
+
+=item * B<--ls> or B<--vertical>
+
+Arrange items in columns like C<ls>, instead of rows.
+When this is done, the whole input is loaded at once, to measure things.
+Most useful along with I<--lpadWidth> or I<--rpadWidth>. For example:
+
+    apple           elderberry          ice_cream_beans  melon
+    banana          fig                 jujube           nectarine
+    cherry          grapefruit          key_lime         orange
+    date            honeydew            lingenberry      pear
+
+=item * B<--oencoding> I<e>
+
+Use this character set for output.
+
+=item * B<--olinends> I<t>
+
+Output M (mac), D (dos), or U (*nix, default) line-ends.
+
+=item * B<--padChar> I<c>
+
+Set the pad character (default: space; strings ok).
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--rpadWidth> I<n>
+
+Pad on the right to width I<n> (default: no pad).
+Use to make multi-column layouts line up.
+See also I<--lpadWidth> and I<--padChar>.
+
+=item * B<--stripItems>
+
+Normalize white-space in each item (following XML rules)
+before any padding. Default: on.
+
+=item * B<--truncate>
+
+If an item is too wide, discard characters from the end to make it fit
+the I<--lpadWidth> and I<--rpadWidth> constraints. See also I<--free>.
+
+=item * B<--version>
+
+Display version info and exit.
+
+=item *  B<--vertical>
+
+Synonym for I<--ls>.
+
+=item * B<--width> I<w>
+
+Wrap to fill a maximum display width of I<w>-1 characters.
+Default: environment variable $COLUMNS if set, otherwise 80.
+
+=back
+
+
+=head1 Known bugs and limitations
+
+Does not expand tabs before counting (can pipe through C<expand> first).
+
+Does not support the full range of tabular file formats available
+from C<TabularFormats.pm>; just I<--fieldSep>.
+
+I<--vertical> can set column width automatically, but horizontal can't.
+
+
+=head1 Related commands
+
+=over
+
+=item C<fold> -- insert line-breaks to keep lines down to a certain
+maximum width.
+
+=item C<align> -- adjust fields/items of each line to the same width, so they
+display in nice columns. Similar to this script, but never moves things
+across line boundaries, just adjusts them within the same line.
+
+=item C<tab2xml> -- convert CSV and similar files to XHTML or similar tables.
+
+=item C<makeHTMLtable> -- similar to C<tab2xml>, but combines corresponding
+lines of multiple files.
+
+=item C<cut> and C<paste> -- extract certain field/items
+from each line of a file,cor join two files side-by-side.
+
+=item C<ls> -- C<wrap> can get you similar wrapping to what I<ls> does by
+default.
+
+=back
+
+
+=head1 History
+
+  Written by Steven J. DeRose, 2006-08-29.
+  2007-05-31 sjd: Add $VERSION_DATE.
+  2007-12-14 sjd: -t, Getopt, --free.
+  2009-06-28 sjd: Protect from padWidth == 0.
+  2011-10-25 sjd: Clean up. Default --width to $COLUMNS if defined. Add --delim.
+Don't put gutter string after last item on line
+  2013-01-25 sjd: Add --truncate.
+  2013-04-15 sjd: Add --iencoding, --oencoding, --listEncodings, --stripItems,
+--vertical/--ls. Add $recnum. Rename --delim to --fieldSep.
+Don't limit nCols due to gutter following last col.
+  2013-10-24: Actually print the gutters. Duh.
+  2015-03-19: Hyphens.
+  2016-01-21: Avoid div0 for nCols.
+  2020-09-03: New layout. Notify waiting STDIN.
+
+
+=head1 To do
+
+  Expand tabs.
+  Pad wide items to *multiple* of pad+gutter?
+
+
+=head1 Rights
+
+Copyright 2006-08-29 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share Alike 3.0 Unported License.
+For further information on this license, see
+L<https://creativecommons.org/licenses/by-sa/3.0>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities> or
+L<https://github.com/sderose>.
+
+=cut
+
+
+###############################################################################
+# Options
+#
 my $blank         = 0;
 my $fieldSep      = "\\s+";
 my $free          = 0;
@@ -49,9 +249,6 @@ my $verbose       = 0;
 my $vertical      = 0;
 
 
-###############################################################################
-# Process options
-#
 my %getoptHash = (
     "blank!"           => \$blank,
     "fieldSep=s"        => \$fieldSep,
@@ -130,7 +327,6 @@ my $padWidth = $rpadWidth + $lpadWidth;
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 my $out     = "";
@@ -138,6 +334,10 @@ my $recnum  = 0;
 my $nBlanks = 0;
 my $gs      = substr(($gutterChar x $gutterWidth),0,$gutterWidth);
 my $nCols   = 0;
+
+if (scalar @ARGV == 0 && -t STDIN) {
+    warn("Waiting on STDIN...\n");
+}
 
 if ($vertical) {
     doVerticalLayout();
@@ -155,7 +355,6 @@ print("$out\n"); $out = ""; # show any residual buffer
 exit;
 
 
-###############################################################################
 ###############################################################################
 #
 sub doVerticalLayout {
@@ -264,7 +463,6 @@ sub doHorizontalLayout {
 
 
 ###############################################################################
-###############################################################################
 #
 sub padIt {
     my ($s) = @_;
@@ -286,181 +484,3 @@ sub padIt {
     }
     return($s);
 } # padIt
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-wrap [options]
-
-Accumulate fields from input lines,
-and re-wrap to make full lines, optionally padding for nice columns.
-
-By default:
-
-    Fields are separated by /\s+/ (see I<--fieldSep>)
-    Wraps to $COLUMNS-1 (or 79) columns (see I<--width>)
-    Doesn't wrap across blank lines (see I<--blank>)
-    Normalizes white-space runs to a single blank
-
-For multi-column layouts use I<--rpadWidth> or I<--lpadWidth>.
-
-For column-major layouts (similar to C<ls>) use I<--vertical>.
-
-
-
-=head1 Options
-
-=over
-
-=item * B<--blank>
-
-Ignore blank lines (instead of stopping wrap at each).
-Only applies when I<--vertical> is off.
-
-=item * B<--fieldSep> I<regex>
-
-Use I<regex> (default I<\\s+>) as the separator to split lines into items.
-If set to "", lines will not be split (thus, they should probably be
-short already, such as having one word per line).
-
-=item * B<--free>
-
-If an item is too wide, do I<not> bump over to the next
-multiple of I<--lpadWidth> or I<--rpadWidth>. Instead, just put in a gutter
-and go on (leaving later items in the line, if any, unaligned).
-See also I<--truncate>.
-
-=item * B<--gutterWidth> I<n>
-
-Set how much space between columns (default: 1).
-
-=item * B<--gutterChar> I<c>
-
-Set what char to use between columns (default: space).
-
-=item * B<--iencoding> I<e>
-
-Assume this character set for input.
-
-=item * B<--lpadWidth> I<n>
-
-Pad on the left to width I<n> (default: no pad),
-See also I<--rpadWidth> and I<--padChar>.
-
-=item * B<--listEncodings>
-
-Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
-
-=item * B<--ls> or B<--vertical>
-
-Arrange items in columns like C<ls>, instead of rows.
-When this is done, the whole input is loaded at once, to measure things.
-Most useful along with I<--lpadWidth> or I<--rpadWidth>. For example:
-
-    apple           elderberry          ice_cream_beans  melon
-    banana          fig                 jujube           nectarine
-    cherry          grapefruit          key_lime         orange
-    date            honeydew            lingenberry      pear
-
-=item * B<--oencoding> I<e>
-
-Use this character set for output.
-
-=item * B<--olinends> I<t>
-
-Output M (mac), D (dos), or U (*nix, default) line-ends.
-
-=item * B<--padChar> I<c>
-
-Set the pad character (default: space; strings ok).
-
-=item * B<--quiet> OR B<-q>
-Suppress most messages.
-
-=item * B<--rpadWidth> I<n>
-
-Pad on the right to width I<n> (default: no pad).
-Use to make multi-column layouts line up.
-See also I<--lpadWidth> and I<--padChar>.
-
-=item * B<--stripItems>
-
-Normalize white-space in each item (following XML rules)
-before any padding. Default: on.
-
-=item * B<--truncate>
-
-If an item is too wide, discard characters from the end to make it fit
-the I<--lpadWidth> and I<--rpadWidth> constraints. See also I<--free>.
-
-=item * B<--version>
-
-Display version info and exit.
-
-=item *  B<--vertical>
-
-Synonym for I<--ls>.
-
-=item * B<--width> I<w>
-
-Wrap to fill a maximum display width of I<w>-1 characters.
-Default: environment variable $COLUMNS if set, otherwise 80.
-
-=back
-
-
-
-=head1 Known bugs and limitations
-
-Does not expand tabs before counting (can pipe through C<expand> first).
-
-Does not support the full range of tabular file formats available
-from C<TabularFormats.pm>; just I<--fieldSep>.
-
-I<--vertical> can set column width automatically, but horizontal can't.
-
-
-
-=head1 Related commands
-
-=over
-
-=item C<fold> -- insert line-breaks to keep lines down to a certain
-maximum width.
-
-=item C<cut> and C<paste> -- extract certain field/items
-from each line of a file,cor join two files side-by-side.
-
-=item C<align> -- adjust fields/items of each line to the same width, so they
-display in nice columns. Similar to this script, but never moves things
-across line boundaries, just adjusts them within the same line.
-
-=item C<tab2xml> -- convert CSV and similar files to XHTML or similar tables.
-
-=item C<makeHTMLtable> -- similar to C<tab2xml>, but combines corresponding
-lines of multiple files.
-
-=item C<ls> -- C<wrap> can get you similar wrapping to what I<ls> does by
-default.
-
-=back
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut

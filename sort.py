@@ -66,12 +66,11 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 """
 
     try:
-        from MarkupHelpFormatter import MarkupHelpFormatter
-        formatter = MarkupHelpFormatter
+        from BlockFormatter import BlockFormatter
+        parser = argparse.ArgumentParser(
+            description=descr, formatter_class=BlockFormatter)
     except ImportError:
-        formatter = None
-    parser = argparse.ArgumentParser(
-        description=descr, formatter_class=formatter)
+        parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
         "--color",  # Don't default. See below.

@@ -1,80 +1,28 @@
 #!/usr/bin/perl -w
 #
 # Delete all lines consisting only of whitespace.
-#
 # 2006~02: Written by Steven J. DeRose.
-# 2007-05-18 sjd: Add option handler, -h, -v.
-# 2007-12-17 sjd: Getopt, -n.
-# 2010-09-10 sjd: perldoc, -w.
-# 2012-10-18 sjd: Clean up. Add -empty.
-#
-# To do:
-#     Add -ilineends?
 #
 use strict;
 use Getopt::Long;
 
-our $VERSION_DATE = "2012-10-18";
+our %metadata = (
+    'title'        => "dropBlankLines",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2006~02",
+    'modified'     => "2020-08-24",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
-my $empty     = 0;
-my $normalize = 0;
-my $quiet     = 0;
-my $verbose   = 0;
-
-
-# Process options
-#
-Getopt::Long::Configure ("ignore_case");
-my $result = GetOptions(
-    "empty|0!"          => \$empty,
-	"h|help|?"          => sub { system "perldoc $0"; exit; },
-	"n!"                => \$normalize,
-	"q|quiet!"          => \$quiet,
-	"v|verbose+"        => \$verbose,
-    "version"           => sub {
-		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
-	},
-	);
-
-($result) || die "Bad options.\n";
-
-
-###############################################################################
-###############################################################################
-# Main
-#
-my $recnum = 0;
-my $nblanks = 0;
-while (my $rec = <>) {
-	$recnum++;
-	chomp($rec);
-    if (($empty && $rec eq "") || $rec !~ m/\S/) {
-		$nblanks++;
-	}
-	else {
-		if ($normalize) {
-			$rec =~ s/\s+/ /g;
-			$rec =~ s/^\s+//;
-			$rec =~ s/\s+$//;
-		}
-		print "$rec\n";
-	}
-}
-
-($verbose) && warn "Dropped $nblanks blank lines out of $recnum.\n";
-
-exit;
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
 
 =pod
 
-=head1 Usage:
+=head1 Usage
 
 dropBlankLines [options]
 
@@ -92,6 +40,7 @@ Only drop truly empty lines (not even whitespace).
 =item * B<-n>
 
 Normalize whitespace in remaining lines.
+Whitespace is defined as Perl "\\s".
 
 =item * B<--verbose> OR B<-v>
 Report total lines and lines dropped.
@@ -103,13 +52,85 @@ Show version info and exit.
 =back
 
 
+=head1 Related Commands
 
-=head1 Ownership
+C<expand> -- expands TAB characters.
 
-This work by Steven J. DeRose is licensed under a Creative Commons 
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+C<cat -s> or my C<numberLines -s> can squeeze multiple blank lines down to one.
 
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+My C<splitAt> inserts line breaks where requested.
+
+
+=head1 History
+
+  2006~02: Written by Steven J. DeRose.
+  2007-05-18 sjd: Add option handler, -h, -v.
+  2007-12-17 sjd: Getopt, -n.
+  2010-09-10 sjd: perldoc, -w.
+  2012-10-18 sjd: Clean up. Add -empty.
+  2020-08-30: New layout.
+
+
+=head1 To do
+
+
+=head1 Rights
+
+Copyright 2006 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share Alike 3.0 Unported License.
+For further information on this license, see
+L<https://creativecommons.org/licenses/by-sa/3.0>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities> or
+L<https://github.com/sderose>.
 
 =cut
+
+
+# Options
+#
+my $empty     = 0;
+my $normalize = 0;
+my $quiet     = 0;
+my $verbose   = 0;
+
+
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "empty|0!"          => \$empty,
+    "h|help|?"          => sub { system "perldoc $0"; exit; },
+    "n|normalize!"      => \$normalize,
+    "q|quiet!"          => \$quiet,
+    "v|verbose+"        => \$verbose,
+    "version"           => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+);
+
+($result) || die "Bad options.\n";
+
+
+###############################################################################
+# Main
+#
+my $recnum = 0;
+my $nblanks = 0;
+while (my $rec = <>) {
+    $recnum++;
+    chomp($rec);
+    if (($empty && $rec eq "") || $rec !~ m/\S/) {
+        $nblanks++;
+    }
+    else {
+        if ($normalize) {
+            $rec =~ s/\s+/ /g;
+            $rec =~ s/^\s+//;
+            $rec =~ s/\s+$//;
+        }
+        print "$rec\n";
+    }
+}
+
+($verbose) && warn "Dropped $nblanks blank lines out of $recnum.\n";
+
+exit;

@@ -1,50 +1,32 @@
 #!/usr/bin/env python
 #
 # stripComments.py
-#
-# 2017-11-08: Written. Copyright by Steven J. DeRose.
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
+# 2017-11-08: Written by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys, os, argparse
 import re
-#import string
-#import math
 from subprocess import check_output
 import codecs
 from collections import namedtuple
 
-#import pudb
-#pudb.set_trace()
+from alogging import ALogger
+lg = ALogger(1)
 
-from sjdUtils import sjdUtils
-from MarkupHelpFormatter import MarkupHelpFormatter
-
-global args, su, lg
-args = su = lg = None
-
-__version__ = "2017-11-08"
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2017-11-08",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2017-11-08",
-    'src_date'     : "$LastChangedDate$",
-    'src_version'  : "$Revision$",
+    'title'        : "stripComments.py",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2017-11-08",
+    'modified'     : "2020-08-23",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
+__version__ = __metadata__['modified']
 
-DelimSet = namedtuple('DelimSet', [ 'oneLine', 'start', 'end' ])
-
-###############################################################################
-#
-def processOptions():
-    global args, su, lg
-    parser = argparse.ArgumentParser(
-        description="""
-
+descr = """
 =head1 Description
 
 Remove comments from the file, depending on the file's type.
@@ -95,9 +77,21 @@ Creative Commons Attribution-Share-alike 3.0 unported license.
 See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 
 =head1 Options
-        """,
-        formatter_class=MarkupHelpFormatter
-    )
+"""
+
+
+DelimSet = namedtuple('DelimSet', [ 'oneLine', 'start', 'end' ])
+
+###############################################################################
+#
+def processOptions():
+    try:
+        from BlockFormatter import BlockFormatter
+        parser = argparse.ArgumentParser(
+            description=descr, formatter_class=BlockFormatter)
+    except ImportError:
+        parser = argparse.ArgumentParser(description=descr)
+
     parser.add_argument(
         "--color",  # Don't default. See below.
         help='Colorize the output.')
@@ -132,19 +126,17 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    su = sjdUtils()
-    lg = su.getLogger()
     lg.setVerbose(args0.verbose)
     if (args0.color == None):
         args0.color = ("USE_COLOR" in os.environ and sys.stderr.isatty())
-    su.setColors(args0.color)
+    lg.setColors(args0.color)
     return(args0)
 
 
 ###############################################################################
 # Could add:
 #   asp aspx java jsp rb json cgi r bat csh ksh vb vbe vbs scpt
-# 
+#
 def getDelimiters(ext):
     ext = ext.strip('.')
     if   (ext in [ 'c', 'php', 'php3', 'php4', 'js',
@@ -152,16 +144,16 @@ def getDelimiters(ext):
         ds = DelimSet('//', '/\\*', '\\*/')
     elif (ext in [ 'py', 'pl', 'sh' ]):
         ds = DelimSet('#',  None, None)
-    elif (ext in [ 'html', 'htm', 'xml', 'xhtml', 'xhtml', 
+    elif (ext in [ 'html', 'htm', 'xml', 'xhtml', 'xhtml',
                    'xsl', 'xslt', 'svg', 'thml', 'rss', 'atom', ]):
-        ds = DelimSet(None, '<!--', '-->')  # FIX REGEX FOR THIS       
+        ds = DelimSet(None, '<!--', '-->')  # FIX REGEX FOR THIS
     elif (ext in [ 'el' ]):
-        ds = DelimSet(';;', None, None)        
+        ds = DelimSet(';;', None, None)
     elif (ext in [ 'sql' ]):
-        ds = DelimSet('--\\s', None, None)        
+        ds = DelimSet('--\\s', None, None)
     else:
         lg.eMsg(0, "Unsupported extension '%s'." % (ext))
-        
+
         ds = DelimSet('#',  None, None)
     return ds
 
@@ -211,7 +203,7 @@ def doOneFile(path):
         lg.error("Error (%s) reading file '%s'." %
                  (type(e), path), stat="readError")
         return
-    
+
     # This utterly fails for comment delims inside quotes, ifdefs, etc.
     # Could slightly improve via look-ahead/behind, but short of a complete
     # parse of the applicable language, forget it.
@@ -226,13 +218,12 @@ def doOneFile(path):
         data = re.sub(expr, ' ', data, 0, re.MULTILINE)
     if (args.compact):
         data = re.sub(r'\n([ \t]*\n)+', "\n", data, 0, re.MULTILINE)
-        
+
     print(data)
     fh.close()
     return
 
 
-###############################################################################
 ###############################################################################
 # Main
 #

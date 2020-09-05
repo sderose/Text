@@ -273,7 +273,7 @@ def decodeSpecialChar(text):
     try:
         c = unichr(entities.name2codepoint[text])
     except KeyError:
-        lg.eMsg(0, "Unrecognied value '%s' for E<> code." % (text))
+        lg.eMsg(0, "Unrecognized value '%s' for E<> code." % (text))
         c = "<E%s>" % (text)
     return c
 
@@ -285,12 +285,11 @@ def decodeSpecialChar(text):
 if __name__ == "__main__":
     def processOptions():
         try:
-            from MarkupHelpFormatter import MarkupHelpFormatter
-            formatter = MarkupHelpFormatter
+            from BlockFormatter import BlockFormatter
+            parser = argparse.ArgumentParser(
+                description=descr, formatter_class=BlockFormatter)
         except ImportError:
-            formatter = None
-        parser = argparse.ArgumentParser(
-            description=descr, formatter_class=formatter)
+            parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
             "--all",              action='store_true',

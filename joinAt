@@ -1,7 +1,6 @@
 #!/usr/bin/perl -w
 #
 # joinAt: join matching lines, with the next (or previous) line.
-#
 # 2014-08-31f: Written by Steven J. DeRose.
 #
 use strict;
@@ -20,8 +19,6 @@ our %metadata = (
 );
 our $VERSION_DATE = $metadata{'modified'};
 
-
-###############################################################################
 
 =pod
 
@@ -149,6 +146,7 @@ L<https://github.com/sderose>.
 
 =cut
 
+
 ###############################################################################
 # Options
 #
@@ -188,7 +186,6 @@ print "";
 binmode(STDOUT, ":encoding($oencoding)");
 
 
-###############################################################################
 ###############################################################################
 # Main
 #

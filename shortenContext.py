@@ -15,7 +15,7 @@ import argparse
 import re
 #import string
 import codecs
-import PowerWalk
+from PowerWalk import PowerWalk
 
 from alogging import ALogger
 
@@ -84,12 +84,11 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 """
 
         try:
-            from MarkupHelpFormatter import MarkupHelpFormatter
-            formatter = MarkupHelpFormatter
+            from BlockFormatter import BlockFormatter
+            parser = argparse.ArgumentParser(
+                description=descr, formatter_class=BlockFormatter)
         except ImportError:
-            formatter = None
-        parser = argparse.ArgumentParser(
-            description=descr, formatter_class=formatter)
+            parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
             "--color",  # Don't default. See below.
@@ -148,20 +147,20 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
         depth = 0
         pw = PowerWalk(args.files)
         pw.setOption('recursive', args.recursive)
-        for path, fh in pw.traverse():
-            if (fh == "DIR_END"):
+        for path0, fhOrFlag in pw.traverse():
+            if (fhOrFlag == "DIR_END"):
                 depth -= 1
                 continue
-            print("    " * depth + path)
-            if (fh == "DIR_START"):
+            print("    " * depth + path0)
+            if (fhOrFlag == "DIR_START"):
                 depth += 1
                 continue
 
             fileNum = pw.stats['itemsReturned']
             if (fileNum % args.tickInterval == 0):
                 lg.vMsg(0, "At item #%d" % (fileNum))
-            fh0 = codecs.open(fArg, "rb", encoding=args.iencoding)
-            doOneFile(fArg, fh0)
+            fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
+            doOneFile(path0, fh0)
             fh0.close()
 
     if (not args.quiet):

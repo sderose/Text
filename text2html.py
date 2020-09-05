@@ -308,12 +308,11 @@ def targetLen(regex, s, groupNum=0):
 if (__name__ == '_main_'):
     def processOptions():
         try:
-            from MarkupHelpFormatter import MarkupHelpFormatter
-            formatter = MarkupHelpFormatter
+            from BlockFormatter import BlockFormatter
+            parser = argparse.ArgumentParser(
+                description=descr, formatter_class=BlockFormatter)
         except ImportError:
-            formatter = None
-        parser = argparse.ArgumentParser(
-            description=descr, formatter_class=formatter)
+            parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
             "--iencoding",        type=str, default='utf8',

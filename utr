@@ -1,20 +1,244 @@
 #!/usr/bin/perl -w
 #
-# Make a 'tr' that works for Unicode.  
-#
+# Make a 'tr' that works for Unicode.
 # 2010-06-03: Written by Steven J. DeRose.
-# 
-# To do:
 #
 use strict;
 use Getopt::Long;
 
-our $VERSION_DATE = "2012-09-12";
+our %metadata = (
+    'title'        => "utr",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2010-06-03",
+    'modified'     => "2020-08-24",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
-my $e = ""; # error-message prefix
-my $MaxUnicode = 0xFFFD; # for now....
 
-my $complement    = 0;
+=pod
+
+=head1 Usage
+
+utr [options] [set1] [set2] file
+
+A version of C<tr> that has a clue about Unicode.
+
+You can do case-translation
+with the script either by specifying character lists, character ranges,
+character classes, or options such as C<-lc> or C<-uc>..
+
+You will get warnings for some likely-erroneous translations, such as
+translating letters to non-letters or vice-versa, or using unknown backslash
+codes.
+
+See L<http://unicode.org/Public/UNIDATA/CaseFolding.txt> for information on
+the vagaries of Unicode case-translation.
+
+=head1 The C<set1> and C<set2> arguments
+
+C<set1> specifies a sequence of characters to be translated (or with -delete,
+deleted). C<set2> specifies a list of target characters, such that the nth
+characters of C<set1> will be translated into the nth character of C<set2>.
+Characters can be specified literally, or using the following shorthands:
+
+=head2 Backslash escapes
+
+The ones in traditional C<tr>:
+    \\    backslash
+    a     audible BEL
+    b     backspace
+    f     form feed
+    n     new line
+    r     return
+    t     horizontal tab
+    v     vertical tab
+
+Additional ones supported here:
+    e     escape (not in traditional tr)
+    -     hyphen (not in traditional tr)
+    NNN   where NNN means 3 octal digits (000-777)
+    xFFFF where FFFF means 4 hex digits  (not in traditional tr)
+
+=head2 Unicode characters above xFFFF
+
+For characters above 0xFFFF, see the C<--xml> option below.
+
+=head2 Posix character classes
+
+The names listed below are supported,
+and defined with respect to Unicode. The character list for each class
+is determined on the fly (by searching the Unicode space for characters in
+the given class), so may take a few seconds each.
+
+    [:alnum:]
+    [:alpha:]
+    [:blank:]
+    [:cntrl:]
+    [:digit:]
+    [:graph:]
+    [:lower:]
+    [:print:]
+    [:punct:]
+    [:space:]
+    [:upper:]
+    [:xdigit:]
+
+C<tr> also has the following (at least, on Mac as of this writing). I haven't
+verified them yet for the current Perl:
+
+    [:ideogram:]
+    [:phonogram:]
+    [:rune:]
+    [:special:]
+    [=equiv=] (which says "Represents all characters belonging to the same
+equivalence class as equiv, ordered by their encoded values" -- but this
+does not seem clear to me).
+    [c*n] -- shorthand for n copies of c. Not supported here.
+
+Unlike C<tr>, all such classes are guaranteed to be expanded in numerical
+(code point) order. If you use an unknown name in this context, the results
+are undefined.
+
+=head2 Ranges
+
+C<char1-char2> (although C<man tr> doesn't say so, hyphen is literal if at
+the *end* of a list; here you can also backslash it).
+
+(char* and char*n not supported)
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--complement> OR B<-c>
+
+Complement set1
+
+=item * B<--delete> OR B<-d>
+
+Deletes characters in C<set1]>.
+
+=item * B<--force>
+
+Run even if some ranges do not map between
+lettes and letters, or digits and digits (anything else may be risky
+depending on the character set; then again, if it's not Unicode the script
+may not detect the problem correctly; but if it's because C<set1> and C<set1>
+got out of sync with each other, the warning may save you some trouble.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--lc>
+
+Just translate upper to lower case; other options
+are mostly ignored. This just does whatever Perl lc() does.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<-q>
+
+Suppress most messages.
+
+=item * B<--squeeze-repeats> OR B<-s>
+
+Replace each input sequence of a repeated character that is
+listed in C<set1> with a single occurrence of that character
+
+=item * B<--truncate-set1>
+
+First truncate C<set1> to length of C<set2>.
+
+=item * B<--uc>
+
+Just translate lower to upper case; other options
+are mostly ignored. This just does whatever Perl C<uc()> does.
+
+=item * B<-v>
+
+Add more messages (repeatable), including a display
+of what C<set1> and C<set1>] expanded to (after backslashing, ranges,
+octal or other numeric references, etc).
+
+=item * B<--version>
+
+Show version information and exit.
+
+=item * B<--xml>
+
+Allow XML- or HTML-style numeric character reference in C<set1>
+and C<set2>. For example, C<&#xCAFE;>.
+
+=back
+
+
+=head1 Known Bugs/Limitations
+
+Unicode has more upper than lower case characters,
+so the mapping generated here is a little weird -- [:lower:] is generated by
+retrieving all the *upper* case Unicode chars, then forcing them to lower case.
+This may or not be the result you want... (suggestions for improvement welcome).
+
+Unicode title-case characters (e.g., U01c5, U01c8, U01cb, U01f2)
+are not supported in any special way (for example, with [:lower:] and [:upper:].
+Nor is the infamous dotless 'i'. No Unicode canonical form
+normalization is done either.
+
+You can specify the start of a range (like a-z) using a backslash code or
+XML-style character reference, but you cannot do that for the end of range.
+This is annoying.
+
+
+=head1 Related commands
+
+C<tr>. Well, yeah. The main differences are:
+
+  * Unicode support here
+  * Some more backslash codes
+  * -C (complement C<set2> is not supported here.
+
+
+My C<makeUnicodedata> -- can extract a table of Unicode characters with various
+properties; handy for finding the characters you need.
+
+
+=head1 History
+
+  2010-06-03: Written by Steven J. DeRose.
+  2012-09-12.
+  2020-08-30: New layout. Add support for XML built-in named entities.
+Improve doc, esp. on diffs from *nix C<tr>.
+
+
+=head1 Rights
+
+Copyright 2010-06-03 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share Alike 3.0 Unported License.
+For further information on this license, see
+L<https://creativecommons.org/licenses/by-sa/3.0>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities> or
+L<https://github.com/sderose>.
+
+=cut
+
+
+###############################################################################
+# Options
+#
+my $complement1    = 0;
+my $complement2   = 0;
 my $delete        = 0;
 my $force         = 0;
 my $iencoding     = "";
@@ -29,12 +253,10 @@ my $uc            = 0;
 my $verbose       = 0;
 my $xml           = 0;
 
-
-###############################################################################
-#
 Getopt::Long::Configure ("ignore_case");
 my $result = GetOptions(
-    "complement!"             => \$complement,
+    "c1|complement1!"         => \$complement1,
+    "c2|complement2!"         => \$complement2,
     "delete!"                 => \$delete,
     "force!"                  => \$force,
     "h|help"                  => sub {
@@ -74,17 +296,149 @@ if ($truncate) {
 
 
 ###############################################################################
+#
+my $e = ""; # error-message prefix
+my $MaxUnicode = 0xFFFD; # for now....
+my %entityMap = {
+    "lt"        => "<",
+    "gt"        => ">",
+    "amp"       => "&",
+    "apos"      => "'",
+    "quot"      => '"',
+};
+
+
+###############################################################################
+# Interpret all the stuff that can happen inside one of the users character
+# lists, so it becomes a string of just literal characters.
+#
+sub setup {
+    my $set = $_[0];
+    ($set eq "") && return("");
+    my $buf = "";
+    for (my $i=0; $i<length($set); $i++) {
+        my $c = substr($set,$i,1);
+        my $c2 = ($i<length($set)-1)
+            ? substr($set,$i+1,1) : ""; # lookahead
+        my $rest = substr($set,$i);
+
+        if ($c eq "\\") {                    # backslash-codes
+            ($verbose) && warn "Backslash code at '$rest'\n";
+            $i++;
+            my $c2 = substr($set,$i,1);
+            if    ($c2 eq "\\") { $buf .= "\\"; }
+            elsif ($c2 eq "a")  { $buf .= chr(7); }
+            elsif ($c2 eq "b")  { $buf .= chr(8); }
+            elsif ($c2 eq "e")  { $buf .= chr(27); }
+            elsif ($c2 eq "f")  { $buf .= chr(12); }
+            elsif ($c2 eq "n")  { $buf .= chr(10); }
+            elsif ($c2 eq "r")  { $buf .= chr(13); }
+            elsif ($c2 eq "t")  { $buf .= chr(9); }
+            elsif ($c2 eq "v")  { $buf .= chr(11); }
+            elsif ($c2 eq "-")  { $buf .= chr(45); }
+            elsif (substr($set,$i) =~ m/^[0-7][0-7][0-7]/)  {
+                $buf .= substr($set,0,3);
+            }
+            else {
+                warn "Unknown code '\\$c2', treated as '$c2'.\n";
+                $buf .= $c2;
+            }
+        }
+        # ICK: this lets you specify start of range as \ or entity,
+        # but not end of range. Probably not worth fixing in short term.
+        #
+        elsif ($c eq "-") {                  # character range
+            ($verbose) && warn "Range at '$rest'\n";
+            $i++;
+            (my $last = $buf) =~ s/.*(.)$/$1/;
+            my $o = ord($last); my $o2 = ord($c2);
+            ($o2 > $o) || die "Hyphen range is out of order ($o - $o2).\n";
+            if (!(($last =~ m/[[:lower:]]/ && $c2 =~ m/[[:lower:]]/) ||
+                  ($last =~ m/[[:upper:]]/ && $c2 =~ m/[[:upper:]]/) ||
+                  ($last =~ m/[[:digit:]]/ && $c2 =~ m/[[:digit:]]/))) {
+                warn "Warning: Range not digits or uniform case:" .
+                    " '$last'-'$c2'\n";
+            }
+            for (my $i=$o+1; $i<=$o2; $i++) {
+                $buf .= chr($i);
+            }
+        }
+        elsif ($c eq "[") {                  # posix character class
+            if (substr($set,$i) =~ m/\[:([a-z]+):]/) {
+                my $members = getPosixClassMembers($1);
+                if ($members eq "") {
+                    die "Unknown Posix character class '$1'\n";
+                }
+                $buf .= $members;
+            }
+            else {
+                warn "Found '[' not starting a Posix character class ref.\n";
+                $buf .= $c;
+            }
+        }
+        elsif ($xml && $c eq "&") {          # XML-style entity
+            if (substr($set,$i) =~ m/&#x([0-9a-f]+);/i) {   # hex
+                $buf .= chr(hex($1));
+                $i += length($1)+3;
+            }
+            elsif (substr($set,$i) =~ m/&#([0-9]+);/) {     # decimal
+                $buf .= chr($1 - 0);
+                $i += length($1)+2;
+            }
+            elsif (substr($set,$i) =~ m/&(lt|gt|amp|apos|quot);/) {
+                $buf .= $entityMap{$1};
+                $i += length($1)+2;
+            }
+            # TODO: Add support for HTML 4 named references
+        }
+        else {                               # literal character
+            $buf .= $c;
+        }
+    } # for each character
+    return($buf);
+}
+
+
+###############################################################################
+# Has to be a quicker way to do this....
+# Note that Unicode upper/lower case inventories aren't 1:1.
+# makeUnicodeData shows 800 lowercase, and only 691 uppercase.
+# So we generate upper by generating lower and then translating.
+# This may or may not be what you want....
+#
+sub getPosixClassMembers {
+    my $name = $_[0];
+    my $rec = "alnum|alpha|blank|cntrl|digit|graph|lower|print|"
+        . "punct|space|upper|xdigit";
+    if ($name !~ m/^($rec)$/) { return(""); }
+    my $isLower = ($rec eq "lower") ? 1:0;
+    if ($isLower) { $rec = "upper"; } # Ensure upper/lower lists sync up.
+    my $buf = "";
+    for (my $i=1; $i<$MaxUnicode; $i++) {
+        if ($i==0xd800) { $i = 0xdfff; next; }
+        if ($i==0xFDD0) { $i = 0xFDFF; next; }
+        if (chr($i) =~ m/[[:$name:]]/) { $buf .= chr($i); }
+    }
+    if ($isLower) { $buf = lc($buf); }
+    ($verbose) && warn "Expanded Posix class '$name' into " . length($buf) .
+        " characters.\n";
+    return($buf);
+}
+
+
 ###############################################################################
 # Main
 #
 
 # Perl tr/// supports most of the 'tr' flags, so just pass then on.
+# Specifically, it supports c, d, s, and r (r returns a fresh translated
+# string rather than translating in place).
 #
 my $flags = "";
-if ($complement) { $flags .= "c"; } 
-if ($squeeze)    { $flags .= "s"; } 
+if ($complement1) { $flags .= "c"; }
+if ($squeeze)    { $flags .= "s"; }
 if ($delete)     { $flags .= "d";
-    if ($tr2 ne "") { warn "Warning: -d specified with [set2]\n"; }
+    if ($tr2 ne "") { warn "Warning: -d specified with set2\n"; }
 }
 
 if ($verbose) {
@@ -106,7 +460,7 @@ if (!$quiet) {
         if ($isAlpha1 != $isAlpha2) {
             warn sprintf("Warning: letter/non-letter translation:\n" .
                          "    set1: '%s' (x%x, d%d), set2: '%s' (x%x, d%d).\n",
-                         $c1, ord($c1), ord($c1), $c2, ord($c2), ord($c2)); 
+                         $c1, ord($c1), ord($c1), $c2, ord($c2), ord($c2));
             $mixed++;
         }
     } # for
@@ -157,6 +511,7 @@ else { }
 
 
 ###############################################################################
+# Do the translation
 #
 my $recnum = 0;
 while (my $rec = <$fh>) {
@@ -179,311 +534,3 @@ while (my $rec = <$fh>) {
 ($quiet) || warn "Done, $recnum records processed.\n";
 
 exit;
-
-
-
-###############################################################################
-###############################################################################
-# Interpret all the stuff that can happen inside one of the users character
-# lists, so it becomes a string of just literal characters.
-#
-sub setup {
-    my $set = $_[0];
-    ($set eq "") && return("");
-    my $buf = "";
-    for (my $i=0; $i<length($set); $i++) {
-        my $c = substr($set,$i,1);
-        my $c2 = ($i<length($set)-1)
-            ? substr($set,$i+1,1) : ""; # lookahead
-        my $rest = substr($set,$i);
-
-        if ($c eq "\\") {                    # backslash-codes
-            ($verbose) && warn "Backslash code at '$rest'\n";
-            $i++;
-            my $c2 = substr($set,$i,1);
-            if    ($c2 eq "\\") { $buf .= "\\"; }
-            elsif ($c2 eq "a")  { $buf .= chr(7); }
-            elsif ($c2 eq "b")  { $buf .= chr(8); }
-            elsif ($c2 eq "e")  { $buf .= chr(27); }
-            elsif ($c2 eq "f")  { $buf .= chr(12); }
-            elsif ($c2 eq "n")  { $buf .= chr(10); }
-            elsif ($c2 eq "r")  { $buf .= chr(13); }
-            elsif ($c2 eq "t")  { $buf .= chr(9); }
-            elsif ($c2 eq "v")  { $buf .= chr(11); }
-            elsif ($c2 eq "-")  { $buf .= chr(45); }
-            elsif (substr($set,$i) =~ m/^[0-7][0-7][0-7]/)  {
-                $buf .= substr($set,0,3);
-            }
-            else {
-                warn "Unknown code '\\$c2', treated as '$c2'.\n";
-                $buf .= $c2;
-            }
-        }
-        # ICK: this lets you specify start of range as \ or entity,
-        # but not end of range. Probably not worth fixing in short term.
-        #
-        elsif ($c eq "-") {                  # character range   
-            ($verbose) && warn "Range at '$rest'\n";
-            $i++;
-            (my $last = $buf) =~ s/.*(.)$/$1/;
-            my $o = ord($last); my $o2 = ord($c2);
-            ($o2 > $o) || die "Hyphen range is out of order ($o - $o2).\n";
-            if (!(($last =~ m/[[:lower:]]/ && $c2 =~ m/[[:lower:]]/) ||
-                  ($last =~ m/[[:upper:]]/ && $c2 =~ m/[[:upper:]]/) ||
-                  ($last =~ m/[[:digit:]]/ && $c2 =~ m/[[:digit:]]/))) {
-                warn "Warning: Range not digits or uniform case:" .
-                    " '$last'-'$c2'\n";
-            }
-            for (my $i=$o+1; $i<=$o2; $i++) {
-                $buf .= chr($i);
-            }
-        }
-        elsif ($c eq "[") {                  # posix character class
-            if (substr($set,$i) =~ m/\[:([a-z]+):]/) {
-                my $members = getPosixClassMembers($1);
-                if ($members eq "") {
-                    die "Unknown Posix character class '$1'\n";
-                }
-                $buf .= $members;
-            }
-            else {
-                warn "Found '[' not starting a Posix character class ref.\n";
-                $buf .= $c;
-            }
-        }
-        elsif ($xml && $c eq "&") {          # XML-style entity
-            if (substr($set,$i) =~ m/&#x([0-9a-f]+);/i) {   # hex
-                $buf .= chr(hex($1));
-                $i += length($1)+3;
-            }
-            elsif (substr($set,$i) =~ m/&#([0-9]+);/) {     # dec
-                $buf .= chr($1 - 0);
-                $i += length($1)+2;
-            }
-        }
-        else {                               # literal character
-            $buf .= $c;
-        }
-    } # for each character
-    return($buf);
-}
-
-
-###############################################################################
-# Has to be a quicker way to do this....
-# Note that Unicode upper/lower case inventories aren't 1:1. 
-# makeUnicodeData shows 800 lowercase, and only 691 uppercase.
-# So we generate upper by generating lower and then translating.
-# This may or may not be what you want....
-#
-sub getPosixClassMembers {
-    my $name = $_[0];
-    my $rec = "alnum|alpha|blank|cntrl|digit|graph|lower|print|"
-        . "punct|space|upper|xdigit";
-    if ($name !~ m/^($rec)$/) { return(""); }
-    my $isLower = ($rec eq "lower") ? 1:0;
-    if ($isLower) { $rec = "upper"; } # Ensure upper/lower lists sync up.
-    my $buf = "";
-    for (my $i=1; $i<$MaxUnicode; $i++) {
-        if ($i==0xd800) { $i = 0xdfff; next; }
-        if ($i==0xFDD0) { $i = 0xFDFF; next; }
-        if (chr($i) =~ m/[[:$name:]]/) { $buf .= chr($i); }
-    }
-    if ($isLower) { $buf = lc($buf); }
-    ($verbose) && warn "Expanded Posix class '$name' into " . length($buf) .
-        " characters.\n";
-    return($buf);
-}
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-utr [options] [set1] [set2] file
-
-A version of 'tr' that has a clue about Unicode.
-See http://unicode.org/Public/UNIDATA/CaseFolding.txt for information on
-the vagaries of Unicode case-translation (note that you can do case-translation
-with the script either by specifying character lists, character ranges,
-character classes, or just -lc/-uc (author prefers the last of those; they
-aren't all quite the same).
-
-You will get warnings for some likely-erroneous translations, such as
-translating letters to non-letters or vice-versa, or using unknown backslash
-codes.
-
-
-
-=head1 The [set1] and [set2] arguments
-
-set1 specifies a sequence of characters to be translated (or with -delete,
-deleted). set2 specifies a list of target characters, such that the nth
-characters of set1 will be translated into the nth character of list2.
-Characters can be specified literally, or using the following shorthands.
- 
-=head2 Backslash escapes
-
-(a few more than with traditional 'tr'):
-       \     backslash
-       a     audible BEL
-       b     backspace
-       e     escape (not in traditional tr)
-       f     form feed
-       n     new line
-       r     return
-       t     horizontal tab
-       v     vertical tab
-       -     hyphen (not in traditional tr)
-       NNN   where NNN means 3 octal digits (000-777)
-       xFFFF where FFFF means 4 hex digits  (not in traditional tr)
-
-=head2 Unicode characters above xFFFF
-
-For characters above 0xFFFF, see the -xml option below.
-
-
-=head2 Posix character classes
-
-The names listed below are supported,
-and defined with respect to Unicode. The character list for each class
-is determined on the fly (by searching the Unicode space for characters in
-the given class), so may take a few seconds each.
-
-       [:alnum:]
-       [:alpha:]
-       [:blank:]
-       [:cntrl:]
-       [:digit:]
-       [:graph:]
-       [:lower:]
-       [:print:]
-       [:punct:]
-       [:space:]
-       [:upper:]
-       [:xdigit:]
-
-If you use an unknown class name, the script will die.
-
-=head2 Ranges
-
-char1-char2 (although 'man tr' doesn't say so, hyphen is literal if at
-the *end* of a list; here you can also backslash it).
-
-(char* and char*n not supported)
-
-Unlike 'tr', all such classes are guaranteed to be expanded in numerical
-(code point) order.
-
-
-
-=head1 Options
-
-(prefix 'no' to negate where applicable)
-
-=over 
-
-=item B<--complement>
-
-Complement set1
-
-=item B<--delete>
-
-Deletes characters in [set1].
-
-=item B<--force>
-
-Run even if some ranges do not map between
-lettes and letters, or digits and digits (anything else may be risky
-depending on the character set; then again, if it's not Unicode the script
-may not detect the problem correctly; but if it's because set1 and set2 got
-out of sync with each other, the warning may save you some trouble. 
-
-=item B<--ilineends> I<t>
-
-Assume Unix, Dos, or Mac line-breaks for input.
-
-=item B<--lc>
-
-Just translate upper to lower case; other options
-are mostly ignored. This just does whatever Perl lc() does.
-
-=item B<--olineends> I<t>
-
-Write Unix, Dos, or Mac line-breaks for output.
-
-=item B<-q>
-
-Suppress most messages.
-
-=item B<-s> or B<--squeeze-repeats>
-replace each input sequence of a repeated character that is
-listed in SET1 with a single occurrence of that character
-
-=item B<--truncate-set1>
-
-First truncate SET1 to length of SET2
-
-=item B<--uc>
-
-Just translate lower to upper case; other options
-are mostly ignored. This just does whatever Perl uc() does.
-
-=item B<-v>
-
-Add more messages (repeatable), including a display
-of what [set1] and [set2] expanded to (after backslashing, ranges,
-octal or other numeric references).
-
-=item B<--version>
-
-Show version/license info and exit.
-
-=item B<--xml>
-
-Allow XML-style numeric character reference in set1
-and set2. For example, &#xDEADBEEF;.
-
-=back
-
-
-
-=head1 Known Bugs/Limitations
-
-Unicode has more upper than lower case characters,
-so the mapping generated here is a little weird -- [:lower:] is generated by
-retrieving all the *upper* case Unicode chars, then forcing them to lower case.
-This may or not be the result you want... (suggestions for improvement welcome).
-
-Unicode title-case characters (e.g., U01c5, U01c8, U01cb, U01f2)
-are not supported in any special way (for example, with [:lower:] and [:upper:].
-Nor is the infamous dotless 'i'. No Unicode normalization is done either.
-
-You can specify the start of a range (like a-z) using a backslash code or 
-XML-style character reference, but you cannot do that for the end of range.
-This is annoying.
-
-
-
-=head1 Related commands
-
-makeUnicodedata -- can extract a table of Unicode characters with various
-properties; handy for finding the characters you need.
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons 
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut

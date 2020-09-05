@@ -1,126 +1,24 @@
 #!/usr/bin/perl -w
 #
-# numberLines
-#
+# numberLines: Add/remove numbers from lines.
 # 2009-06-08: Written by Steven J. DeRose.
-# 2010-01-12 sjd: Add -width, -sep, -encoding, -hex, -ignore.
-# 2011-07-05 sjd: Clean up doc.
-# 2012-10-05 sjd: Cleanup, add -listEncodings.
-# 2014-09-09: -- for options.
-# 2016-10-10: Add --remove to do unnumbering.
-# 2018-09-27: Add --byLength, --suffix.
-#
-# To do:
-#     Option to colorize the number
-#     Option to count from/by increments
-#     Compare cat -n. Add --number-nonblank, show-ends, squeeze-blank, show-tabs, --show-nonprinting.
 #
 use strict;
 use Getopt::Long;
 use Encode;
 
-our $VERSION_DATE = "2018-09-27";
-
-my $byLength   = 0;
-my $delim      = " ";
-my $iencoding  = "";
-my $hex        = 0;
-my $ignore     = "";
-my $quiet      = 0;
-my $remove     = 0;
-my $suffix     = 0;
-my $verbose    = 0;
-my $width      = 6;
-
-
-###############################################################################
-#
-my %getoptHash = (
-    "byLength!"       => \$byLength,
-    "delim=s"         => \$delim,
-    "hex!"            => \$hex,
-    "h|help"          => sub { system "perldoc $0"; exit; },
-    "iencoding=s"     => \$iencoding,
-    "ignore=s"        => \$ignore,
-    "listEncodings"   => sub {
-        warn "\nEncodings available:\n";
-        my $last = ""; my $buf = "";
-        for my $k (Encode->encodings(":all")) {
-            my $cur = substr($k,0,2);
-            if ($cur ne $last) {
-                warn "$buf\n";
-                $last = $cur; $buf = "";
-            }
-            $buf .= "$k ";
-        }
-        warn "$buf\n";
-        exit;
-    },
-    "q|quiet!"        => \$quiet,
-    "remove!"         => \$remove,
-    "suffix!"         => \$suffix,
-    "v|verbose+"      => \$verbose,
-    "version"         => sub {
-        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
-    },
-	"width=i"         => \$width,
-    );
-
-Getopt::Long::Configure ("ignore_case");
-GetOptions(%getoptHash) || die("Bad options.\n");
-
-
-###############################################################################
-#
-($suffix && $remove) && die
-    "Sorry, can't combine --suffix and --remove.\n";
-if ($iencoding ne "") {
-    binmode(STDIN, ":encoding($iencoding)") ||
-	die "Binmode failed for -iencoding '$iencoding'.\n";
-    print "";
-    binmode(STDOUT,":encoding($iencoding)");
-}
-
-
-###############################################################################
-###############################################################################
-# Main
-#
-my $format = "%0$width" . ($hex ? "x":"d");
-($verbose) && warn "Format string: '$format'\n";
-
-my $recnum = 0;
-
-while (my $rec = <>) {
-    if ($ignore && $rec =~ /$ignore/) {
-        print ((" " x $width) . $delim . $rec);
-    }
-    elsif ($remove) {
-        $recnum++;
-        if ($hex) { $rec =~ s/^\s*[\da-fA-F]+$delim//; }
-        else { $rec =~ s/^\s*\d+$delim//; }
-        print $rec;
-    }
-    else {
-        $recnum++;
-        my $toInsert = ($byLength) ? length($rec) : $recnum;
-        my $num = sprintf($format, $toInsert);
-        if ($suffix) {
-            print "$rec$delim$num";
-        }
-        else {
-            print "$num$delim$rec";
-        }
-    }
-}
-($verbose) && warn "Handled $recnum (non-ignored) lines.\n";
-
-exit;
-
-
-###############################################################################
-###############################################################################
-#
+our %metadata = (
+    'title'        => "numberLines",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2009-06-08",
+    'modified'     => "2020-08-24",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
 =pod
 
@@ -141,6 +39,11 @@ insert each line's length instead of a serial number (I<--byLength>).
 
 =over
 
+=item * B<-b> OR B<--non-blank-only>
+
+Rather than numbering all lines, don't count or prefix lines contains only
+whitespace characters.
+
 =item * B<--byLength>
 
 Instead of putting serial numbers in, insert the length of each line.
@@ -150,6 +53,12 @@ Instead of putting serial numbers in, insert the length of each line.
 Delimiter string to put between number and line (default: space).
 This script does not support all the flexibility of C<deriveData> and
 C<TabularFormats> (q.v.).
+
+=item * B<--e> OR B<--ender>
+
+Append "$" to each record (including blank ones if kept), like `cat -e`.
+This is useful for seeing whether there are trailing blanks.
+You can change this from "$" to some other string with I<--enderChar s>.
 
 =item * B<--hex>
 
@@ -178,6 +87,11 @@ This only works for initial (decimal or I<--hex>) digits,
 optionally preceded by whitespace, and non-optionally followed by I<--delim>.
 Cannot be combined with I<--suffix>.
 
+=item * B<--squeeze> or B<-s>
+
+Reduce runs of blank lines to the first one, like `cat -s`.
+See also my `dropBlankLines.
+
 =item * B<--suffix>
 
 Put the numbers at the ends of lines instead of the beginning.
@@ -201,15 +115,36 @@ Zero-pad the number to at least this many digits (set C<0> for no padding).
 =head1 Related commands
 
 C<cat -n> is similar, but doesn't have I<--hex>, I<--width>, or
-support for Unicode and other encodings.
+support for Unicode and other encodings. It does have -v (similar to my
+C<showInvisibles>); -e (which i've added).
 
 C<deriveData> can insert a new field into each record of a file(s) in
 CSV, XSV, and many other roughly "tabular" file formats. The expression for what
-value to insert can make reference to (among other things) the current record number,
-and so can be used to insert line-numbers much like C<numberLines>.
+value to insert can make reference to (among other things) the current record
+number, and so can be used to insert line-numbers much like C<numberLines>.
 
 C<iota> generates serial-numbered things in many forms, but does not attach
 them to incoming data lines. These may be integrated.
+
+
+=head1 History
+
+  2009-06-08: Written by Steven J. DeRose.
+  2010-01-12 sjd: Add -width, -sep, -encoding, -hex, -ignore.
+  2011-07-05 sjd: Clean up doc.
+  2012-10-05 sjd: Cleanup, add -listEncodings.
+  2014-09-09: -- for options.
+  2016-10-10: Add --remove to do unnumbering.
+  2018-09-27: Add --byLength, --suffix.
+  2020-08-30: New layout. Add -b (like `cat`) to number just non-blank lines.
+Add -e, --enderChar, -s.
+
+
+=head1 To do
+
+  Option to colorize the number (can just use `colorstring`).
+  Option to count from/by increment, and use all bases from `iota`.
+  Compare cat -n. Add show-ends, squeeze-blank, show-tabs, --show-nonprinting.
 
 
 =head1 Ownership
@@ -222,3 +157,118 @@ For the most recent version,
 see L<http://www.derose.net/steve/utilities/>.
 
 =cut
+
+
+###############################################################################
+# Options
+#
+#
+my $nonBlankOnly = 0;
+my $byLength     = 0;
+my $delim        = " ";
+my $ender        = 0;
+my $enderChar    = "\$";
+my $iencoding    = "";
+my $hex          = 0;
+my $ignore       = "";
+my $quiet        = 0;
+my $remove       = 0;
+my $squeeze      = 0;
+my $suffix       = 0;
+my $verbose      = 0;
+my $width        = 6;
+
+my %getoptHash = (
+    "b|non-blank-only"=> \$nonBlankOnly,
+    "byLength!"       => \$byLength,
+    "delim=s"         => \$delim,
+    "e|ender!"        => \$ender,
+    "enderChar=s"     => \$enderChar,
+    "hex!"            => \$hex,
+    "h|help"          => sub { system "perldoc $0"; exit; },
+    "iencoding=s"     => \$iencoding,
+    "ignore=s"        => \$ignore,
+    "listEncodings"   => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "q|quiet!"        => \$quiet,
+    "remove!"         => \$remove,
+    "s|squeeze!"      => \$squeeze,
+    "suffix!"         => \$suffix,
+    "v|verbose+"      => \$verbose,
+    "version"         => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+	"width=i"         => \$width,
+    );
+
+Getopt::Long::Configure ("ignore_case");
+GetOptions(%getoptHash) || die("Bad options.\n");
+
+
+###############################################################################
+#
+($suffix && $remove) && die
+    "Sorry, can't combine --suffix and --remove.\n";
+if ($iencoding ne "") {
+    binmode(STDIN, ":encoding($iencoding)") ||
+	die "Binmode failed for -iencoding '$iencoding'.\n";
+    print("");
+    binmode(STDOUT,":encoding($iencoding)");
+}
+
+
+###############################################################################
+# Main
+#
+my $format = "%0$width" . ($hex ? "x":"d");
+($verbose) && warn "Format string: '$format'\n";
+
+my $recnum = 0;
+my $lastRec = my $rec = "";
+
+while ($lastRec = $rec, $rec = <>) {
+    chomp($rec);
+    if ($ignore && $rec =~ /$ignore/) {               # Ignorable
+        print ((" " x $width) . $delim . $rec . "\n");
+        next;
+    }
+    if ($rec =~ m/^\s*$/) {                           # Blank
+        if ($squeeze && ($lastRec =~ m/^\s*$/)) {
+            next;
+        }
+        print($rec . ($ender ? $enderChar:"") . "\n");
+        next;
+    }
+    if ($remove) {                                    # Remove number
+        $recnum++;
+        if ($hex) { $rec =~ s/^\s*[\da-fA-F]+$delim//; }
+        else { $rec =~ s/^\s*\d+$delim//; }
+        print("$rec\n");
+    }
+    else {                                            # Add number
+        $recnum++;
+        my $toInsert = ($byLength) ? length($rec) : $recnum;
+        my $num = sprintf($format, $toInsert);
+        if ($suffix) {
+            print($rec . ($ender ? $enderChar:"") . $delim . $num . "\n");
+        }
+        else {
+            print($num . $delim . $rec . ($ender ? $enderChar:"") . "\n");
+        }
+    }
+}
+($verbose) && warn "Handled $recnum (non-ignored) lines.\n";
+
+exit;
