@@ -1,206 +1,25 @@
 #!/usr/bin/perl -w
 #
 # splitAtMatches: Put a line break before/after/instead of each regex match.
-#
 # 2007-02-02: Written by Steven J. DeRose.
-# 2008-08-12 sjd: Doc.
-# 2010-06-23 sjd: perldoc.
-# 2010-10-12 sjd: Cleanup.
-# 2011-12-13? sjd: Cleanup. Add -iencoding.
-# 2012-05-01 sjd: Typo. Add -listEncodings. Add :encoding() for binmode.
-#     Add -ignoreCase. Unify STDIN case. Make -replace take replacement text.
-#     Make -keep default to on.
-# 2012-11-14 sjd: use Encode.
-# 2013-03-12 sjd: Fix -keep. Add -width, -spaces.
-# 2014-04-14: Drop default -expr, complain if user doesn't provide one.
-# 2014-08-31: Cleanup.
-# 2018-01-23: Add --both.
-#
-# To do:
-#     Add -bytes like C<fold>?
 #
 use strict;
 use Getopt::Long;
 use Encode;
 
-use sjdUtils;
-use alogging;
-
-our $VERSION_DATE = "2018-01-23";
-
-my $after                = 0;
-my $both                 = 0;
-my $expr                 = "";
-my $iencoding            = "";
-my $ignoreCase           = 0;
-my $indent               = 0;
-my $keepOriginalNewlines = 1;
-my $oLineends            = "U";
-my $quiet                = 0;
-my $replace              = undef;
-my $spaces               = 0;
-my $verbose              = 0;
-my $width                = 0;
-
-
-###############################################################################
-# Process options
-#
-Getopt::Long::Configure ("ignore_case");
-my $result = GetOptions(
-    "a|after!"                 => \$after,
-    "b|both!"                  => \$both,
-    "e=s"                      => \$expr,
-    "h|help|?"                 => sub { system "perldoc $0"; exit; },
-    "iencoding=s"              => \$iencoding,
-    "i|indent=i"               => \$indent,
-    "ignoreCase!"              => \$ignoreCase,
-    "listEncodings"    => sub {
-        warn "\nEncodings available:\n";
-        my $last = ""; my $buf = "";
-        for my $k (Encode->encodings(":all")) {
-            my $cur = substr($k,0,2);
-            if ($cur ne $last) {
-                warn "$buf\n";
-                $last = $cur; $buf = "";
-            }
-            $buf .= "$k ";
-        }
-        warn "$buf\n";
-        exit;
-    },
-    "keep!"                    => \$keepOriginalNewlines,
-    "olinends|olineends=s"     => \$oLineends,
-    "q|quiet!"                 => \$quiet,
-    "r|replace=s"              => \$replace,
-    "spaces!"                  => \$spaces,
-    "unicode"                  => sub { $iencoding = "utf8"; },
-    "v|verbose+"               => \$verbose,
-    "version"                  => sub {
-       die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
-    },
-    "width=o"                  => \$width,
+our %metadata = (
+    'title'        => "splitAtMatches",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2007-02-02",
+    'modified'     => "2020-09-16",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
+our $VERSION_DATE = $metadata{'modified'};
 
-($result) || die "Bad options.\n";
-
-
-###############################################################################
-# Validate and default options
-#
-($expr) || die
-    "Must provide a -expr to split at.\n";
-
-if (defined $replace) {
-    ($after) &&	die "Can't have both -a and -r.\n";
-    ($verbose) && warn "Replacement text before: '$replace'\n";
-    $replace = sjdUtils::unbackslash($replace);
-    ($verbose) && warn "Replacement text after:  '$replace'\n";
-}
-
-my $newline = "\n";
-$oLineends = uc(substr($oLineends."U",0,1));
-if    ($oLineends eq "M") { $newline = chr(13);   }
-elsif ($oLineends eq "D") { $newline = chr(13).chr(10); }
-elsif ($oLineends eq "U") { $newline = chr(10); }
-else {
-	die "Unknown output line-end type '$oLineends'.\n";
-}
-
-if ($iencoding) {
-    print "";
-    binmode(STDOUT, ":encoding($iencoding)");
-}
-
-($verbose) && warn "Expression is /$expr/" . ($ignoreCase ? "i":"") . ".\n";
-
-
-
-###############################################################################
-###############################################################################
-# Main
-#
-my $filenum = 0;
-my $recnum  = 0;
-my $istring = $newline . (" " x $indent);
-
-if (scalar @ARGV == 0) { # stdin
-    push @ARGV, "-";
-    (!$quiet && -t STDIN) && warn "Waiting on STDIN...\n";
-}
-
-foreach my $f (@ARGV) {
-    $filenum++;
-    my $fh;
-    if (!(open $fh, "<$f")) {
-        warn "Cannot open file '$f'\n";
-        next;
-    }
-    if ($iencoding) {
-        binmode($fh, ":encoding($iencoding)");
-    }
-    while (my $rec = readline($fh)) {
-        $recnum++;
-        chomp $rec;
-        if ($width && length($rec)>$width) {
-            my $buf = "";
-            while (length($rec)>$width) {
-                my $lenToBreak = $width;
-                if (!$spaces) {
-                    while ($lenToBreak>0) {
-                        (substr($rec,$lenToBreak,1) =~ m/\p{space}/) && last;
-                        $lenToBreak--;
-                    }
-                    if ($lenToBreak<=0) { $lenToBreak = $width; } # No space
-                }
-                $buf .= substr($rec,0,$lenToBreak) . "\n";
-                $rec = substr($rec, $lenToBreak);
-            }
-            $rec = $buf;
-        }
-        if ($ignoreCase) {
-            if ($both) {
-                $rec =~ s/($expr)/$istring$1$istring/gi;
-            }
-            elsif ($after) {
-                $rec =~ s/($expr)/$1$istring/gi;
-            }
-            elsif (defined $replace) {
-                $rec =~ s/($expr)/$replace/gi;
-            }
-            else {
-                $rec =~ s/($expr)/$istring$1/gi;
-            }
-        }
-        else {
-            if ($both) {
-                $rec =~ s/($expr)/$istring$1$istring/g;
-            }
-            elsif ($after) {
-                $rec =~ s/($expr)/$1$istring/g;
-            }
-            elsif (defined $replace) {
-                $rec =~ s/($expr)/$replace/g;
-            }
-            else {
-                $rec =~ s/($expr)/$istring$1/g;
-            }
-        }
-        print $rec . ($keepOriginalNewlines ? $newline:" ");
-    }
-    close $fh;
-} # for @ARGV
-
-($quiet) || warn "Done, $filenum files, $recnum records.\n";
-
-exit;
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
 
 =pod
 
@@ -211,16 +30,23 @@ splitAtMatches [options] [-e 'regex'] [files?]
 Insert a line-break before each match of I<regex>. Previous line breaks can be
 kept or dropped.
 
-You can instead insert a line-break I<--after> each match (or I<--both>),
-I<--replace> each match with something, or
-insert an I<--indent> after inserted line-breaks.
+Or, at options:
 
-Original line-breaks are kept unless you specify I<--nokeep>.
+=over
 
-Includes most of the functionality of *nix C<fold>, but has much more,
-and handles character encodings (including knowing about
-various kinds of Unicode spaces with I<-s>).
+=item * insert a line-break I<--after> each match (or I<--both>),
 
+=item * I<--replace> each match with something,
+
+=item * insert an I<--indent> after inserted line-breaks, or
+
+=item * add and remove line breaks so there is one sentence per line.
+
+Original line-breaks are kept unless you specify I<--nokeep> or I<--sentence>.
+
+Includes most of the functionality of *nix C<fold>.
+Handles character encodings (including knowing about
+various kinds of Unicode spaces with I<--spaces>).
 
 
 =head1 Options
@@ -273,9 +99,13 @@ instead of inserting a line-break before it (see also I<--after>, I<--both>).
 
 Suppress most messages.
 
+=item * B<--sentences>
+
+Attempt to rewrite the file to one sentence per line, adding and removing
+line-breaks as needed. This is imprecise, and does no fancy analysis.
+
 =item * B<--spaces> or B<-s>
 
-With I<--width>, break only at spaces (/\s/u).
 If no space can be found, this leaves a line
 wider than the specified I<--width>.
 Like C<fold>.
@@ -300,8 +130,7 @@ I<n> can be decimal, hex, or octal. See also I<--spaces>. Like C<fold>.
 =back
 
 
-
-=head1 Notes
+=head1 Known bugs and limitations
 
 If there is already a newline before the match, another is still added
 (unless I<--nokeep> is in effect).
@@ -313,7 +142,7 @@ Does not support the equivalent of C<fold -b> (bytes). You really wouldn't
 want to do that with Unicode.
 
 
-=head1 Related commands:
+=head1 Related commands
 
 =over
 
@@ -330,12 +159,210 @@ expression literally, preceded by a backslash. No '\\n', etc.
 =back
 
 
-=head1 Ownership
+=head1 History
 
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+  2007-02-02: Written by Steven J. DeRose.
+  2008-08-12 sjd: Doc.
+  2010-06-23 sjd: perldoc.
+  2010-10-12 sjd: Cleanup.
+  2011-12-13? sjd: Cleanup. Add C<--iencoding>.
+  2012-05-01 sjd: Typo. Add C<--listEncodings>. Add :encoding() for binmode.
+Add C<--ignoreCase>. Unify STDIN case. Make C<--replace> take replacement text.
+Make C<--keep> default to on.
+  2012-11-14 sjd: use Encode.
+  2013-03-12 sjd: Fix C<--keep>. Add C<--width>, C<--spaces>.
+  2014-04-14: Drop default C<--expr>, complain if user doesn't provide one.
+  2014-08-31: Cleanup.
+  2018-01-23: Add C<--both>.
+  2020-09-16: New layout. Ad C<--sentences>.
 
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=head1 To do
+
+Add --bytes like C<fold>?
+
+
+=head1 Rights
+
+Copyright 2007-02-02 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share Alike 3.0 Unported License.
+For further information on this license, see
+L<https://creativecommons.org/licenses/by-sa/3.0>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities> or
+L<https://github.com/sderose>.
 
 =cut
+
+
+###############################################################################
+# Options
+#
+my $after                = 0;
+my $both                 = 0;
+my $expr                 = "";
+my $iencoding            = "";
+my $ignoreCase           = 0;
+my $indent               = 0;
+my $keepOriginalNewlines = 1;
+my $oLineends            = "U";
+my $quiet                = 0;
+my $replace              = undef;
+my $sentences            = 0;
+my $spaces               = 0;
+my $verbose              = 0;
+my $width                = 0;
+
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "a|after!"                 => \$after,
+    "b|both!"                  => \$both,
+    "e=s"                      => \$expr,
+    "h|help|?"                 => sub { system "perldoc $0"; exit; },
+    "iencoding=s"              => \$iencoding,
+    "i|indent=i"               => \$indent,
+    "ignoreCase!"              => \$ignoreCase,
+    "listEncodings"    => sub {
+        warn "\nEncodings available:\n";
+        my $last = ""; my $buf = "";
+        for my $k (Encode->encodings(":all")) {
+            my $cur = substr($k,0,2);
+            if ($cur ne $last) {
+                warn "$buf\n";
+                $last = $cur; $buf = "";
+            }
+            $buf .= "$k ";
+        }
+        warn "$buf\n";
+        exit;
+    },
+    "keep!"                    => \$keepOriginalNewlines,
+    "olinends|olineends=s"     => \$oLineends,
+    "q|quiet!"                 => \$quiet,
+    "r|replace=s"              => \$replace,
+    "sentences!"               => \$sentences,
+    "s|spaces!"                => \$spaces,
+    "unicode"                  => sub { $iencoding = "utf8"; },
+    "v|verbose+"               => \$verbose,
+    "version"                  => sub {
+       die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    "width=o"                  => \$width,
+);
+
+($result) || die "Bad options.\n";
+
+
+###############################################################################
+# Validate and default options
+#
+($expr || $sentences) || die
+    "Must provide a --expr to split at.\n";
+
+if (defined $replace) {
+    ($after) &&	die "Can't have both -a and -r.\n";
+    ($verbose) && warn "Replacement text before: '$replace'\n";
+    $replace = sjdUtils::unbackslash($replace);
+    ($verbose) && warn "Replacement text after:  '$replace'\n";
+}
+
+my $newline = "\n";
+$oLineends = uc(substr($oLineends."U",0,1));
+if    ($oLineends eq "M") { $newline = chr(13);   }
+elsif ($oLineends eq "D") { $newline = chr(13).chr(10); }
+elsif ($oLineends eq "U") { $newline = chr(10); }
+else {
+	die "Unknown output line-end type '$oLineends'.\n";
+}
+
+if ($iencoding) {
+    print "";
+    binmode(STDOUT, ":encoding($iencoding)");
+}
+
+($verbose) && warn "Expression is /$expr/" . ($ignoreCase ? "i":"") . ".\n";
+
+
+###############################################################################
+# Main
+#
+my $filenum = 0;
+my $recnum  = 0;
+my $istring = $newline . (" " x $indent);
+
+if (scalar @ARGV == 0) { # stdin
+    push @ARGV, "-";
+    (!$quiet && -t STDIN) && warn "Waiting on STDIN...\n";
+}
+
+foreach my $f (@ARGV) {
+    $filenum++;
+    my $fh;
+    if (!(open $fh, "<$f")) {
+        warn "Cannot open file '$f'\n";
+        next;
+    }
+    if ($iencoding) {
+        binmode($fh, ":encoding($iencoding)");
+    }
+    while (my $rec = readline($fh)) {
+        $recnum++;
+        chomp $rec;
+        if ($sentences) {
+            # Consider --, :, and avoiding abbrs. Nice to also deal w/ list nums
+            $rec =~ s/(?<!Dr|Mr|Ms|Fr|rs)([.:?!])(\s+|$)?/$1\n/g;
+            print $rec;  # No newline at end.
+            next;
+        }
+        if ($width && length($rec)>$width) {
+            my $buf = "";
+            while (length($rec)>$width) {
+                my $lenToBreak = $width;
+                if (!$spaces) {
+                    while ($lenToBreak>0) {
+                        (substr($rec,$lenToBreak,1) =~ m/\p{space}/) && last;
+                        $lenToBreak--;
+                    }
+                    if ($lenToBreak<=0) { $lenToBreak = $width; } # No space
+                }
+                $buf .= substr($rec,0,$lenToBreak) . "\n";
+                $rec = substr($rec, $lenToBreak);
+            }
+            $rec = $buf;
+        }
+        if ($ignoreCase) {
+            if ($both) {
+                $rec =~ s/($expr)/$istring$1$istring/gi;
+            }
+            elsif ($after) {
+                $rec =~ s/($expr)/$1$istring/gi;
+            }
+            elsif (defined $replace) {
+                $rec =~ s/($expr)/$replace/gi;
+            }
+            else {
+                $rec =~ s/($expr)/$istring$1/gi;
+            }
+        }
+        else {
+            if ($both) {
+                $rec =~ s/($expr)/$istring$1$istring/g;
+            }
+            elsif ($after) {
+                $rec =~ s/($expr)/$1$istring/g;
+            }
+            elsif (defined $replace) {
+                $rec =~ s/($expr)/$replace/g;
+            }
+            else {
+                $rec =~ s/($expr)/$istring$1/g;
+            }
+        }
+        print $rec . ($keepOriginalNewlines ? $newline:" ");
+    }
+    close $fh;
+} # for @ARGV
+
+($quiet) || warn "Done, $filenum files, $recnum records.\n";
+
+exit;
