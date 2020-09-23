@@ -16,7 +16,7 @@ use alogging;
 use TabularFormats;
 
 our %metadata = (
-    'title'        => ".pm",
+    'title'        => "globalChange",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
@@ -149,7 +149,6 @@ This script does not have script-like capabilities like
 C<sed>, or have "hold" and "pattern" spaces,
 or do transliteration, or have "addressing" of changes. It should
 feel a lot less like programming, and (hopefully) more descriptive.
-
 
 
 =head1 Options
@@ -1091,6 +1090,9 @@ to apply (ASCII, Default, Locale-based, or Unicode).
 
 
 =head1 To do
+
+    Option to do literal, not regex, substitution.
+
     Escaping in cases like:
     "s/::\\$options\\['\(\w+\)'\\]/::x('\1')/" *
     Treat arg as -e if it has slashes.
@@ -1195,8 +1197,12 @@ my $askColor         = 'green';
 my $errorColor       = 'red';
 my $resultColor      = 'red';
 
-sub ask { print(sjdUtils::colorize($askColor, $_[0]) . "\n"); }
-sub err { print(sjdUtils::colorize($errorColor, $_[0]) . "\n"); }
+sub ask {
+    print(sjdUtils::colorize($askColor, $_[0]) . "\n");
+}
+sub err {
+    print(sjdUtils::colorize($errorColor, $_[0]) . "\n");
+}
 
 my %exprOptions = ( # Options copied into each changeExpr
     "fieldChoice"    => 0,          # Which field to look in?
@@ -1438,7 +1444,6 @@ else { }
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 my $totalItems         = 0;
@@ -1501,7 +1506,6 @@ Term::ReadKey::ReadMode 1;
 exit;
 
 
-###############################################################################
 ###############################################################################
 # Parse a regex change into from, to, and modifiers, and save it.
 #
@@ -1575,7 +1579,6 @@ sub saveChangeSpec {
 }
 
 
-###############################################################################
 ###############################################################################
 # Handle one node (file or directory).
 # Returns: Success flag.
@@ -1714,7 +1717,6 @@ sub doOneItem {
 } # doOneItem
 
 
-###############################################################################
 ###############################################################################
 # Crank through a single file doing all the changes.
 # Return the number of actual changes done in the file.
@@ -2122,6 +2124,7 @@ sub printable {
     return(sjdUtils::showInvisibles($s, 'SYM', 'SP'));
 }
 
+
 ###############################################################################
 # Maintain an output buffer so we can look back at preceding lines.
 # Mainly for --span and --pre.
@@ -2221,9 +2224,6 @@ sub dieCleanly {
 }
 
 
-
-###############################################################################
-###############################################################################
 ###############################################################################
 # A ChangeInfo object stores one s/// command and can apply it.
 #

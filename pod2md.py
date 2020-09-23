@@ -348,7 +348,7 @@ if __name__ == "__main__":
                 fdepth += 1
                 continue
 
-            fileNum = pw.stats['itemsReturned']
+            fileNum = pw.travState.stats['itemsReturned']
             fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
             doOneFile(path0, fh0)
             fh0.close()

@@ -146,6 +146,8 @@ want to do that with Unicode.
 
 =over
 
+=item C<Tokenizer.py> -- break text into words and other tokens.
+
 =item C<disaggregate> -- Break a single I<file> into many I<files> based
 on some rule (rather than breaking I<lines>).
 
@@ -310,7 +312,7 @@ foreach my $f (@ARGV) {
         chomp $rec;
         if ($sentences) {
             # Consider --, :, and avoiding abbrs. Nice to also deal w/ list nums
-            $rec =~ s/(?<!Dr|Mr|Ms|Fr|rs)([.:?!])(\s+|$)?/$1\n/g;
+            $rec =~ s/(?<!Dr|Mr|Ms|Fr|Sr|Jr|rs)([.:?!])(\s+|$)?/$1\n/g;
             print $rec;  # No newline at end.
             next;
         }
