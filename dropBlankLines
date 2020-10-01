@@ -37,9 +37,14 @@ Delete all lines consisting only of whitespace.
 
 Only drop truly empty lines (not even whitespace).
 
-=item * B<-n>
+=item * B<--multiple> I<n>
 
-Normalize whitespace in remaining lines.
+Keep at most the first I<n> blank lines within each group of blank lines.
+Default: 0.
+
+=item * B<-n> OR B<--normalize>
+
+Normalize whitespace within remaining lines.
 Whitespace is defined as Perl "\\s".
 
 =item * B<--verbose> OR B<-v>
@@ -69,7 +74,7 @@ My C<splitAt> inserts line breaks where requested.
   2010-09-10 sjd: perldoc, -w.
   2012-10-18 sjd: Clean up. Add -empty.
   2020-08-30: New layout.
-
+  2020-10-01: Add --multiple.
 
 =head1 To do
 
@@ -87,18 +92,20 @@ L<https://github.com/sderose>.
 =cut
 
 
+###############################################################################
 # Options
 #
 my $empty     = 0;
+my $multiple  = 0;
 my $normalize = 0;
 my $quiet     = 0;
 my $verbose   = 0;
-
 
 Getopt::Long::Configure ("ignore_case");
 my $result = GetOptions(
     "empty|0!"          => \$empty,
     "h|help|?"          => sub { system "perldoc $0"; exit; },
+    "multiple=i"        => \$multiple,
     "n|normalize!"      => \$normalize,
     "q|quiet!"          => \$quiet,
     "v|verbose+"        => \$verbose,
@@ -115,13 +122,17 @@ my $result = GetOptions(
 #
 my $recnum = 0;
 my $nblanks = 0;
+my $nCurrentBlanks = 0;
 while (my $rec = <>) {
     $recnum++;
     chomp($rec);
     if (($empty && $rec eq "") || $rec !~ m/\S/) {
         $nblanks++;
+        $nCurrentBlanks++;
+        if ($nCurrentBlanks<=$multiple) { print "$rec\n"; }
     }
     else {
+        $nCurrentBlanks = 0;
         if ($normalize) {
             $rec =~ s/\s+/ /g;
             $rec =~ s/^\s+//;
@@ -131,6 +142,6 @@ while (my $rec = <>) {
     }
 }
 
-($verbose) && warn "Dropped $nblanks blank lines out of $recnum.\n";
+($verbose) && warn "Dropped $nblanks blank lines out of $recnum total lines.\n";
 
 exit;

@@ -37,6 +37,7 @@ do not reliably represent word boundaries.
 For example, [arxiv.org] has PDFs for many articles, but viewing the PDF and
 selecting something (like the abstract) often produces text like:
 
+A  P A P E R  T I T L E
 Learning a distinct representation for eachsense  of  an  ambiguous  word  could  leadto  more  powerful  and  fine-grained  mod-els  of  vector-space  representations.    Yetwhile  ‘multi-sense’  methods  have  beenproposed  and  tested  on  artificial  word-similarity tasks, we don’t know if they im-prove real natural language understandingtasks.  In this paper we introduce a multi-sense embedding model based on ChineseRestaurant Processes that achieves state ofthe  art  performance  on  matching  humanword  similarity  judgments,  and  proposea pipelined  architecture  for incorporatingmulti-sense embeddings into language un-derstanding.
 
 This is a pain to fix by hand, though difficult to perfectly fix automatically.
@@ -290,7 +291,7 @@ def closeUp(mat):
 # Main
 #
 if __name__ == "__main__":
-    sample = """Learning a distinct representation for eachsense  of  an  ambiguous  word  could  leadto  more  powerful  and  fine-grained  mod-els  of  vector-space  representations.    Yetwhile  ‘multi-sense’  methods  have  beenproposed  and  tested  on  artificial  word-similarity tasks, we don’t know if they im-prove real natural language understandingtasks.  In this paper we introduce a multi-sense embedding model based on ChineseRestaurant Processes that achieves state ofthe  art  performance  on  matching  humanword  similarity  judgments,  and  proposea pipelined  architecture  for incorporatingmulti-sense embeddings into language un-derstanding."""
+    sample = """A  P A P E R  T I T L E  Learning a distinct representation for eachsense  of  an  ambiguous  word  could  leadto  more  powerful  and  fine-grained  mod-els  of  vector-space  representations.    Yetwhile  ‘multi-sense’  methods  have  beenproposed  and  tested  on  artificial  word-similarity tasks, we don’t know if they im-prove real natural language understandingtasks.  In this paper we introduce a multi-sense embedding model based on ChineseRestaurant Processes that achieves state ofthe  art  performance  on  matching  humanword  similarity  judgments,  and  proposea pipelined  architecture  for incorporatingmulti-sense embeddings into language un-derstanding."""
 
     import argparse
     def anyInt(x):

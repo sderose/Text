@@ -1,33 +1,271 @@
 #!/usr/bin/perl -w
 #
-# randomRecords
-#
-# Select n random records from a file (helpful for regression testing).
-#
+# randomRecords: Select some records at random from a file.
 # 2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
-#   converter regression testing.
-# 2010-11-01 sjd: Cleanup. Rename. iooptions. --fast, --pct.
-# 2011-12-28 sjd: Add --every.
-# 2012-07-09 sjd: Rename --every to --mod (to be same as for 'disaggregate'.
-#     Beef up encoding handling. Add $lineNumberFormat.
-# 2012-11-29 sjd: Clean up.
-# 2014-10-14: Warn if they try STDIN.
-# 2014-10-14: --. Make lineNumberFormat an option. Add --blanks, --skip.
-# 2015-09-15: Add --reservoir sampling. Add --comments.
-# 2015-01-01: Fix several things I broke last time, like reading STDIN.
-#     Explain relation of --skip and --mod in help.
-#
-# To do:
-#     Reports wrong value for $picked?
-#     Finish --reservoir.
-#     Add a partition feature (or use disaggregate)?
+# converter regression testing.
 #
 use strict;
 use Getopt::Long;
 use Encode;
 
-our $VERSION_DATE = "2016-01-01";
+our %metadata = (
+    'title'        => "randomRecords",
+    'rightsHolder' => [ "Steven J. DeRose", "[public domain]" ],
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2006-09~18",
+    'modified'     => "2020-09-24",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
+
+=pod
+
+=head1 Usage
+
+randomrecords [options] [file]
+
+Selects a certain number (I<-n>) or percentage (I<--pct>) of a file's records
+at random; or every nth record (I<--mod>).
+
+The default is to pick 10 records at random.
+
+Records are selected I<without replacement>; that is, no record will show
+up more than once in the output.
+
+The I<--reservoir> option enables "reservoir sampling", by which random
+picks can be done without knowing in advance how many records there are to
+choose from. This is especially useful if you're sampling from stdin.
+But this option is still experimental.
+
+
+=head2 Notes
+
+You can select a random list of files out of a directory like this:
+
+    ls | randomRecords -n 10 --force
+
+The script first counts the total number of records, using the
+C<wc> command (for STDIN, you must specify C<--force> because
+it must load everything into memory and then count).
+
+With I<--mod>, it just picks the right record numbers in one pass, and
+the phase can be rotated with I<--skip>.
+
+With the default (not I<--fast> or I<--reservoir>) method,
+it generates random numbers
+and adds them to a list of "chosen" record numbers. If it re-chooses a
+record number already in the list, it tries again. This is fine unless
+the percentage of records to be chosen is very high, in which case it will
+do a lot of re-tries towards the end.
+This method should get a very uniform distribution of records,
+and exactly the requested number of records.
+
+With I<--fast>, it runs through the record numbers once, and picks each one if
+a random number is under the percent requested. This is very quick, but may
+get slightly too few records (it will stop if it gets enough, so it never gets
+too many).
+
+With I<--reservoir>, it uses L<https://en.wikipedia.org/wiki/Reservoir_sampling>.
+This grabs the first I<n> records, then decides whether each later record
+should be ignored or should displace one of the previous records.
+For example, record I<n>+1 should have a 1 / (I<n>+1) chance of being in the
+result, so when it is read, it gets that change of replacing one of the
+first I<n> records. If that's the end of the file, you get a reasonable
+result; otherwise you go on, and record I<n>+2 gets a 1 / (I<n>+2) chance to
+displace a prior record. There's a bit more to it, but that's the general idea.
+This option is experimental.
+
+
+=head1 Options
+
+=over
+
+=item * B<--blanks>
+
+Don't include or even count blank (whitespace-only) lines. Unfinished.
+
+=item * B<--comments> I<regex>
+
+Disregard any lines that match I<regex>.
+For example, '^#' would discard comments in some file formats.
+B<Note>: If a large share of input lines consists of comments, it may
+adversely affect the use of I<--fast> combined with I<--pct>.
+
+=item * B<--fast>
+
+Use a different choice method: this method
+is faster especially when picking a large % of all available records.
+However, it will only pick I<at most> the requested number of records
+(it's highly unlikely to get I<many> fewer than requested).
+See also I<--reservoir>, which will be better once it's working.
+
+=item * B<--force>
+
+Allow taking input from STDIN (still experimental).
+This is special because the input is otherwise read twice (once to measure,
+once to select). Since that doesn't work for STDIN, the input is read in its
+entirety and stored. Then records are selected and printed as usual.
+
+=item * B<--iencoding> I<t>
+
+Charset to use for input.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--lineNumberFormat> I<s>
+
+Use I<s> as the sprintf format string for line numbers generated via
+I<--lineNumbers>. Default: C<%06d:\t>.
+
+=item * B<--lineNumbers>
+
+Prefix each line with its original line-number (padded to at least 6 digits),
+plus ':' and a tab.
+This is useful so you can trace records back to the original input.
+See I<--lineNumberFormat> for how to change the exact format used.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
+
+=item * B<--mod> I<n>
+
+Select every I<n>th record, instead of randomly. The first record of the file
+(record #0) is chosen; then every n-th one following. However, you can shift
+the start with I<--skip> (q.v.). See also I<--pct>.
+
+=item * B<--n> I<num>
+
+Set how many records to select. Default: 10.
+If this amounts to a large % of the input, consider the I<--fast> option.
+Not to be confused with I<--lineNumbers>, which prefixes the original line
+number to each output line.
+
+=item * B<--oencoding> I<t>
+
+Character set to use for output.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--percent> I<n> or B<--pct> I<n>
+
+Pick this percentage of the records,
+instead of a particular number of records (for which see I<--n>).
+See also I<--mod>.
+
+=item * B<-q> or B<--quiet>
+
+Suppress most messages.
+
+=item * B<--reservoir>
+
+Uses "reservoir sampling" (see above) so one always gets
+the right number (or percentage) of records.
+See L<here|"http://stackoverflow.com/questions/2218005">.
+Experimental. See also I<--fast>.
+
+=item * B<--seed> I<n>
+
+Use I<n> as the seed for random number generation. Default: I<srand()>, which
+causes Perl to choose a semi-random seed of its own.
+
+=item * B<--skip> I<n>
+
+Don't pick any of the first I<n> records (useful for avoiding headers, and
+for shifting the phase when doing round-robin selection with I<--mod>).
+
+With I<--mod>, the skipped records I<do not> count towards the record numbers
+used to decide which records are 0 modeI<n>.
+For example, if you use I<--mod 10 --skip 25>, then the first record picked
+will be (physical) record number 25 (the 26th record), instead of
+record number 0 (the first record); then record 35, 45, etc.
+
+Default: 0.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8>
+
+=item * B<--version>
+
+Display version info and exit.
+
+=back
+
+
+=head1 Related commands
+
+C<disaggregate> -- Split records from one file into multiple output files,
+dividing them up based on the value of a specified field,
+the number of fields, or round-robin (like I<--mod>), possibly with
+normalization, truncation, banding, or other manipulations.
+
+C<grepData> -- like *nix C<grep>, but looks for things in specific fields.
+
+C<splitFiles> -- Break a file into separate records, or blocks of I<n>
+successive records.
+
+
+=head1 Known bugs and limitations
+
+When reading STDIN without I<--fast> or I<--reservoir>,
+the whole input is read into memory.
+
+Except with I<--reservoir>, keeps a complete list of chosen record numbers
+in memory (though not the actual records, except as just noted).
+
+Reports wrong value for number of records picked,
+but seems to still do the sampling right (fixed?).
+
+
+=head1 History
+
+# 2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
+converter regression testing.
+# 2010-11-01 sjd: Cleanup. Rename. iooptions. --fast, --pct.
+# 2011-12-28 sjd: Add --every.
+# 2012-07-09 sjd: Rename --every to --mod (to be same as for C<disaggregate>.
+Beef up encoding handling. Add $lineNumberFormat.
+# 2012-11-29 sjd: Clean up.
+# 2014-10-14: Warn if they try STDIN.
+# 2014-10-14: --. Make lineNumberFormat an option. Add --blanks, --skip.
+# 2015-09-15: Add --reservoir sampling. Add --comments.
+# 2015-01-01: Fix several things I broke last time, like reading STDIN.
+Explain relation of --skip and --mod in help.
+# 2020-09-24: New layout. Fix another bug reading STDIN.
+
+
+=head1 To do
+
+  Reports wrong value for $picked?
+  Finish --reservoir.
+  Add a partition feature (or use C<disaggregate>)?
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose was first written for PubMedCentral at
+the L<US National Institutes of Health|http://nih.gov>,
+and thus is in the public domain.
+I have made various improvements since, and I hereby dedicate those
+improvements also to the public domain.
+
+For the most recent version, see L<here|"http://www.derose.net/steve/utilities/">.
+
+=cut
+
+
+###############################################################################
+# Process options
+#
 my $blanks           = 1;
 my $comments         = "";
 my $fast             = 0;
@@ -39,7 +277,7 @@ my $ilineends        = "U";
 my $lineNumberFormat = "%06d:\t";
 my $lineNumbers      = 0;
 my $mod              = 0;
-my $num              = 10;
+my $num              = 0;
 my $oencoding        = "";
 my $olineends        = "U";
 my $pct              = 0;
@@ -49,21 +287,18 @@ my $skip             = 0;
 my $quiet            = 0;
 my $verbose          = 0;
 
-
-# Process options
-#
 my %getoptHash = (
     "blanks!"           => \$blanks,
     "comments=s"        => \$comments,
     "fast!"             => \$fast,
     "force!"            => \$force,
-	"h|help|?"          => sub { system "perldoc $0"; exit; },
+    "h|help|?"          => sub { system "perldoc $0"; exit; },
     "iencoding=s"       => \$iencoding,
     "i|ignoreCase!"     => \$ignoreCase,
     "ignoreLines=s"     => \$ignoreLines,
     "ilineends=s"       => \$ilineends,
     "lineNumberFormat=s"=> \$lineNumberFormat,
-	"lineNumbers"       => \$lineNumbers,
+    "lineNumbers"       => \$lineNumbers,
     "listEncodings"     => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
@@ -79,31 +314,29 @@ my %getoptHash = (
         exit;
     },
     "mod=i"             => \$mod,
-	"n|num=i"           => \$num,
+    "n|num=i"           => \$num,
     "oencoding=s"       => \$oencoding,
     "olineends=s"       => \$olineends,
     "pct|percent=i"     => \$pct,
-	"q|quiet!"          => \$quiet,
-	"reservoir!"        => \$reservoir,
-	"seed=f"            => \$seed,
-	"skip=n"            => \$skip,
+    "q|quiet!"          => \$quiet,
+    "reservoir!"        => \$reservoir,
+    "seed=f"            => \$seed,
+    "skip=n"            => \$skip,
     "unicode!"          => sub { $iencoding = "utf8"; },
-	"v|verbose+"        => \$verbose,
+    "v|verbose+"        => \$verbose,
     "version"           => sub {
-		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
-	}
-	);
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    }
+    );
 Getopt::Long::Configure ("ignore_case" );
 GetOptions(%getoptHash) || die("Bad options.\n");
 
-
-###############################################################################
-# Validate and default options
-#
 ($ignoreLines) && die
     "--ignoreLines option is not yet supported.\n";
-($num>0 || $pct>0 || $mod>0) || die
-    "Must specify positive value for --pct or -n.\n";
+if ($num==0 && $pct<=0 && $mod<=0) {
+    warn "Defaulting to -num 10 (--num, --pct, or --mod not specified).\n";
+    $num = 10;
+}
 ($num > 0 && $pct > 0) && die
     "Can't specify both --pct and -n.\n";
 ($fast && $reservoir) && die
@@ -153,7 +386,6 @@ if ($seed) { srand($seed); }
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 my @everything = ();                        # Buffer all input here if necessary
@@ -170,12 +402,11 @@ if ($reservoir) {                           # No record-counting required
 elsif (!$file) {                            # Count records via 'wc'
     $totalRecords = countRecords($file);
 }
-else {                                      # Read whole file to count
+else {                                      # Read whole file or STDIN, count
     bufferWholeFile($file);
 }
 ($totalRecords > 0) || die "No records, sorry.\n";
 ($quiet) || warn "Total records in source: $totalRecords.\n";
-
 
 # Generate a list of choosen record-numbers.
 #
@@ -188,21 +419,20 @@ else {
 }
 
 if ($mod) {
-    @pickedRecNums = @{pickMod($totalRecords,$mod)};
+    @pickedRecNums = @{pickMod($totalRecords, $mod)};
 }
 elsif ($fast) {
-    @pickedRecNums = @{pickFast($totalRecords,$num)};
+    @pickedRecNums = @{pickFast($totalRecords, $num)};
 }
 else {
-    @pickedRecNums = @{pickUniform($totalRecords,$num)};
+    @pickedRecNums = @{pickUniform($totalRecords, $num)};
 }
 my $picked = 0;
 for (my $i=0; $i<scalar(@pickedRecNums); $i++) {
     if (defined $pickedRecNums[$i] && $pickedRecNums[$i]!=0) { $picked++; }
 }
 
-
-# Reports wrong value for $picked!
+# TODO: Reports wrong value for $picked!
 ($quiet) || warn
     sprintf("%d of %d records have been selected (%4.3f%%)%s. Retrieving...\n",
             $picked, $totalRecords, 100.0*$picked/$totalRecords,
@@ -216,8 +446,9 @@ if ($verbose>1) {
 }
 
 # Read the file and print only the records whose numbers are in the list.
+# For STDIN, it's all in @everything.
 #
-if ($file) {
+if (scalar @everything == 0) {
     open(IN, "<$file") || die "Can't open input file '$file'\n";
     if ($iencoding ne "") {
         binmode(IN, ":encoding($iencoding)");
@@ -253,7 +484,6 @@ else { # already loaded via bufferWholeFile()
 exit;
 
 
-###############################################################################
 ###############################################################################
 # Sample without knowing how big the source pool is.
 # Do this by grabbing the first n records, and then replacing them with later
@@ -322,13 +552,14 @@ sub bufferWholeFile {
         $recnum++;
         if ($recnum>$skip) {
             if ($comments && $rec =~ m/$commentsC/) { next; }
-            push @pickedRecNums, $rec;
+            push @everything, $rec;
         }
-        else { push @pickedRecNums, ""; }
+        else { push @everything, ""; }
     }
     close IN;
-    $totalRecords = scalar(@pickedRecNums);
+    $totalRecords = scalar(@everything);
 }
+
 
 ###############################################################################
 # Return a list of record numbers (one of several ways)
@@ -375,219 +606,3 @@ sub pickUniform {
     }
     return(\@pickedRecNums);
 }
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-randomrecords [options] [file]
-
-Selects a certain number (I<-n>) or percentage (I<--pct>) of a file's records
-at random; or every nth record (I<--mod>).
-
-The default is to pick 10 records at random.
-
-Records are selected I<without replacement>; that is, no record will show
-up more than once in the output.
-
-
-
-=head2 Notes
-
-You can select a random list of files out of a directory like this:
-
-    ls | randomRecords -n 10 --force
-
-The script first counts the total number of records, using the
-C<wc> command (for STDIN, it must load everything into memory and then count).
-Then it chooses record numbers from the available range.
-
-With I<--mod>, it just picks the right record numbers in one pass.
-
-With the default (not I<--fast> or I<--reservoir>) method,
-it generates random numbers
-and adds them to a list of "chosen" record numbers. If it re-chooses a
-record number already in the list, it tries again. This is fine unless
-the percentage of records to be chosen is very high, in which case it will
-do a lot of re-tries towards the end.
-This method should get a very uniform distribution of records,
-and exactly the requested number of records.
-
-With I<--fast>, it runs through the record numbers once, and picks each one if
-a random number is under the percent requested. This is very quick, but may
-get slightly too few records (it will stop if it gets enough, so it never gets
-too many). A fix is in progress.
-
-With I<--reservoir>, it uses L<https://en.wikipedia.org/wiki/Reservoir_sampling>.
-This grabs the first I<n> records, then decides whether each later record
-should be ignored or should displace one of the previous records.
-For example, record I<n>+1 should have a 1 / (I<n>+1) chance of being in the
-result, so when it is read, it gets that change of replacing one of the
-first I<n> records. If that's the end of the file, you get a reasonable
-result; otherwise you go on, and record I<n>+2 gets a 1 / (I<n>+2) chance to
-displace a prior record. There's a bit more to it, but that's the general idea.
-This option is not yet finished.
-
-
-=head1 Options
-
-=over
-
-=item * B<--blanks>
-
-Don't include or even count blank (whitespace-only) lines. Unfinished.
-
-=item * B<--comments> I<regex>
-
-Disregard any lines that match I<regex>.
-For example, '^#' would discard comments in some file formats.
-B<Note>: If a large share of input lines consists of comments, it may
-adversely affect the use of I<--fast> combined with I<--pct>.
-
-=item * B<--fast>
-
-Use a different choice method: this method
-is faster especially when picking a large % of all available records.
-However, it will only pick I<at most> the requested number of records
-(it's highly unlikely to get I<many> fewer than requested).
-See also I<--reservoir>, which will be better once it's working.
-
-=item * B<--force>
-
-Allow taking input from STDIN (still experimental).
-This is special because the input is otherwise read twice (once to measure,
-once to select). Since that doesn't work for STDIN, the input is read in its
-entirety and stored. Then records are selected and printed as usual.
-
-=item * B<--iencoding> I<t>
-
-Charset to use for input.
-
-=item * B<--ilineends> I<t>
-
-Assume Unix, Dos, or Mac line-breaks for input.
-
-=item * B<--lineNumberFormat> I<s>
-
-Use I<s> as the sprintf format string for line numbers generated via
-I<--lineNumbers>. Default: C<%06d:\t>.
-
-=item * B<--lineNumbers>
-
-Prefix each line with its original line-number (padded to at least 6 digits),
-plus ':' and a tab.
-This is useful so you can trace records back to the original input.
-See I<--lineNumberFormat> for how to change the exact format used.
-
-=item * B<--listEncodings>
-
-Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
-
-=item * B<--mod> I<n>
-
-Select every I<n>th record, instead of randomly. The first record of the file
-(record #0) is chosen; then every n-th one following. However, you can shift
-the start with I<--skip> (q.v.).
-
-=item * B<--n> I<num>
-
-Set how many records to select. Default: 10.
-If this amounts to a large % of the input, consider the I<--fast> option.
-Not to be confused with I<--lineNumbers>, which prefixes the original line
-number to each output line.
-
-=item * B<--oencoding> I<t>
-
-Character set to use for output.
-
-=item * B<--olineends> I<t>
-
-Write Unix, Dos, or Mac line-breaks for output.
-
-=item * B<--percent> I<n> or B<--pct> I<n>
-
-Pick this percentage of the records,
-instead of a particular number of records (for which see I<--n>).
-
-=item * B<-q> or B<--quiet>
-
-Suppress most messages.
-
-=item * B<--reservoir>
-
-Uses "reservoir sampling" (see above) so one always gets
-the right number (or percentage) of records.
-See L<here|"http://stackoverflow.com/questions/2218005">.
-Experimental. See also I<--fast>.
-
-=item * B<--seed> I<n>
-
-Use I<n> as the seed for random number generation. Default: I<srand()>, which
-causes Perl to choose a semi-random seed of its own.
-
-=item * B<--skip> I<n>
-
-Don't pick any of the first I<n> records (useful for avoiding headers).
-
-With I<--mod>, the skipped records I<do not> count towards the record numbers
-used to decide which records are 0 modeI<n>.
-For example, if you use I<--mod 10 --skip 25>, then the first record picked
-will be (physical) record number 25 (the 26th record), instead of
-record number 0 (the first record); then record 35, 45, etc.
-
-Default: 0.
-
-=item * B<--unicode>
-
-Synonym for I<--iencoding utf8>
-
-=item * B<--version>
-
-Display version info and exit.
-
-=back
-
-
-=head1 Related commands
-
-C<disaggregate> -- Split records from one file into multiple output files,
-dividing them up based on the value of a specified field,
-the number of fields, or round-robin (like I<--mod>), possibly with
-normalization, truncation, banding, or other manipulations.
-
-C<grepData> -- like *nix C<grep>, but looks for things in specific fields.
-
-C<splitFiles> -- Break a file into separate records, or blocks of I<n>
-successive records.
-
-
-=head1 Known bugs and limitations
-
-When reading STDIN without I<--fast> or I<--reservoir>,
-the whole input is read into memory.
-
-Except with I<--reservoir>, keeps a complete list of chosen record numbers
-in memory (though not the actual records, except as just noted).
-
-Reports wrong value for number of records picked,
-but seems to still do the sampling right (fixed?).
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose was first written for PubMedCentral at
-the L<US National Institutes of Health|http://nih.gov>,
-and thus is in the public domain.
-I have made various improvements since, and I hereby dedicate those
-improvements also to the public domain.
-
-For the most recent version, see L<here|"http://www.derose.net/steve/utilities/">.
-
-=cut
