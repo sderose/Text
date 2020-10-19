@@ -28,15 +28,20 @@ joinAt [options] [--expr I<regex>] [files]
 
 Remove the line-break at the end of any line matching the given I<regex>
 (or I<--previous> for the beginning instead).
+The match does not have to occur at the start or end of the line unless
+you explicitly include "^" or "$".
 
-By default, the matching text is also deleted, though see I<--keep>.
-The match does not have to occur at the start or end of the line.
+By default, the matching text is also kept. To delete it, set I<--no-keep>.
 
-The default is /=$/, which joins up lines that were split into shorter pieces
-with '=' inserted at the end of each piece, as
+The default for I<--expr> is /=$/, which joins up lines
+that were split into shorter pieces
+with '=' inserted at the end of each piece. This is a convention in MIME
+files, so that is
 part of the task of decoding "quoted-printable" mail format
 (see L<IETF RFC 2045>).
-See I<--decode> to also unescape =xx special characters.
+See I<--decode> to also unescape =xx special characters,
+and I<--mime> to skip past a standard MIME header, copying it unchanged,
+before starting normal processing.
 
 
 =head1 Options
@@ -49,6 +54,7 @@ See I<--decode> to also unescape =xx special characters.
 
 In addition, turn sequences of '=' plus 2 hex digits to the correponding
 character code point (UTF-8 may still have to be expanded after that).
+This is mainly useful for MIME headers.
 
 This is done I<before> testing whether a line matches I<--expr>.
 
@@ -65,7 +71,8 @@ Assume the input is in encoding I<e>. Output is always utf-8.
 
 =item * B<--keep>
 
-Do not delete the matched text; just the newline. Default: delete both.
+Do not delete the matched text; just the newline. Default: true
+(use I<--no-keep> to have the matched text deleted).
 
 =item * B<--mime>
 
@@ -103,6 +110,7 @@ Show version info and exit.
 
 =back
 
+
 =head1 Known Bugs and Limitations
 
 I<--decode> does not complain if it sees '=' followed by non-hex-digits.
@@ -110,17 +118,16 @@ I<--decode> does not complain if it sees '=' followed by non-hex-digits.
 After I<--decode>, any UTF-8 is not interpreted; this could be a feature or a bug.
 
 Perhaps should watch for "Content-Transfer-Encoding: quoted-printable" in MIME
-header, and use it to control whether to decode that.
+header, and use it to control where to apply I<--decode>.
 
-Would be nice to add a way to strip indentation from 2nd of joined lines.
+I<--strip> just uses Perl regex '\\s' for whitespace, which may miss cases.
 
-I<--strip> just uses Perl regex '\\s' for whitespace, which probably misses
-a lot of Unicode cases.
 
 =head1 Related commands
 
 C<splitAtMatches> -- inserts newlines before, after, or in place
 of regex matches.
+
 
 =head1 History
 
@@ -134,6 +141,7 @@ of regex matches.
 Document a few edge cases.
 
 =back
+
 
 =head1 Rights
 
@@ -152,7 +160,7 @@ L<https://github.com/sderose>.
 #
 my $decode        = 0;
 my $expr          = '=$';
-my $keep          = 0;
+my $keep          = 1;
 my $iencoding     = "";
 my $mime          = 0;
 my $oencoding     = "utf8";
@@ -189,9 +197,11 @@ binmode(STDOUT, ":encoding($oencoding)");
 ###############################################################################
 # Main
 #
+my $nRecs = my $nMatches = my $nNoMatches = 0;
 my $inMIMEHeader = ($mime) ? 1:0;
 my $pendingStrip = 0;
 while (my $rec = <>) {
+    $nRecs++;
     $rec =~ s/[\r\n]+$//;
     if ($inMIMEHeader) {
         if ($rec =~ m/^\s*$/) { $inMIMEHeader = 0; }
@@ -202,6 +212,7 @@ while (my $rec = <>) {
         $rec =~ s/=([0-9a-f][0-9a-f])/{ chr(hex($1)); }/gie;
     }
     if ($rec =~ m/$expr/) {
+        $nMatches++;
         if (!$keep) { $rec =~ s/$expr//; }
         if ($previous) {
             if ($strip) { $rec =~ s/^\s+//; }
@@ -217,6 +228,7 @@ while (my $rec = <>) {
         }
     }
     else { # Not a matching line
+        $nNoMatches++;
         if ($previous) { print "\n"; }
         if ($pendingStrip) { $rec =~ s/^\s+//; }
         print "$rec";
@@ -225,4 +237,7 @@ while (my $rec = <>) {
 }
 if ($previous) { print "\n"; }
 
+($verbose) && warn(sprintf(
+    "joinAt: %d records, %d matches, %d non-matches\n",
+    $nRecs, $nMatches, $nNoMatches));
 exit;

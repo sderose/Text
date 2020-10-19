@@ -14,7 +14,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5.18",
     'created'      => "2007-02-02",
-    'modified'     => "2020-09-16",
+    'modified'     => "2020-10-15",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -28,13 +28,27 @@ our $VERSION_DATE = $metadata{'modified'};
 splitAtMatches [options] [-e 'regex'] [files?]
 
 Insert a line-break before each match of I<regex>. Previous line breaks can be
-kept or dropped.
+kept or dropped. For example:
 
-Or, at options:
+    splitAtMatches -e '/  [A-Z]/' myFile.txt
+
+will put a line-break before each instance of 2 spaces followed by an
+ASCII capital letter. Thus
+
+    That's it.  Pretty simple.  Mostly.
+
+becomes:
+
+    That's it.
+      Pretty simple.
+      Mostly.
+
+But see C<--sentences> for a better approximation of sentence-breaking.
+Other options include:
 
 =over
 
-=item * insert a line-break I<--after> each match (or I<--both>),
+=item * insert a line-break I<--after> each match (or on I<--both> sides),
 
 =item * I<--replace> each match with something,
 
@@ -47,6 +61,8 @@ Original line-breaks are kept unless you specify I<--nokeep> or I<--sentence>.
 Includes most of the functionality of *nix C<fold>.
 Handles character encodings (including knowing about
 various kinds of Unicode spaces with I<--spaces>).
+
+=back
 
 
 =head1 Options
@@ -66,16 +82,20 @@ Takes precedence over I<--replace>.
 
 =item * B<-e> I<regex>
 
-A Perl regex to say what to split before.
+A Perl regex to say what to split before (or after or around).
+See also C<--sentences> for better support of sentence-breaking.
 
 =item * B<--iencoding> I<e>
 
-Assume the input (and output) are in character set I<e>.
+Assume the input is in character set I<e>.
 See also I<--listEncodings>.
+Unlike some of my scripts, this sets the output encoding too.
 
 =item * B<--indent> I<n>
 
 Indent after inserted newlines, by I<n> spaces (default: 0).
+This does I<not> cause existing indentation to be removed, only added.
+To remove all existing indentation, set a negative value for this option.
 
 =item * B<--keep>
 
@@ -108,7 +128,7 @@ line-breaks as needed. This is imprecise, and does no fancy analysis.
 
 If no space can be found, this leaves a line
 wider than the specified I<--width>.
-Like C<fold>.
+Like *nix C<fold>.
 
 =item * B<--unicode>
 
@@ -141,22 +161,32 @@ no spaces to be found. Then again, C<fold> doesn't even I<say> what it does.
 Does not support the equivalent of C<fold -b> (bytes). You really wouldn't
 want to do that with Unicode.
 
+C<--sentences> if simplistic. For example, it only knows a handful of
+specific abbreviations, and it separates list markers like "1. "
+
+
+=head1 To Do
+
+Change I<--keep> to allow setting what character (or none) to replace \n with.
+
+Add --bytes like C<fold>?
+
 
 =head1 Related commands
 
 =over
 
-=item C<Tokenizer.py> -- break text into words and other tokens.
+=item * C<fold> -- Break lines at certain column width.
 
-=item C<disaggregate> -- Break a single I<file> into many I<files> based
+=item * C<sed> -- Can insert newlines, but you need to put them into the sed
+expression literally, preceded by a backslash. No '\\n', etc.
+
+=item * My C<Tokenizer.py> -- break text into words and other tokens.
+
+=item * My C<disaggregate> -- Break a single I<file> into many I<files> based
 on some rule (rather than breaking I<lines>).
 
-=item C<fold> -- Break lines at certain column width.
-
-=item C<replace>, C<globalChange> -- General regex changes on a mess of files.
-
-=item C<sed> -- Can insert newlines, but you need to put them into the sed
-expression literally, preceded by a backslash. No '\\n', etc.
+=item * My C<globalChange> -- General regex changes on a mess of files.
 
 =back
 
@@ -176,12 +206,8 @@ Make C<--keep> default to on.
   2014-04-14: Drop default C<--expr>, complain if user doesn't provide one.
   2014-08-31: Cleanup.
   2018-01-23: Add C<--both>.
-  2020-09-16: New layout. Ad C<--sentences>.
-
-
-=head1 To do
-
-Add --bytes like C<fold>?
+  2020-09-16: New layout. Add C<--sentences>.
+  2020-10-15: Improve help. Support C<--indent -1> to unindent.
 
 
 =head1 Rights
@@ -290,7 +316,8 @@ if ($iencoding) {
 #
 my $filenum = 0;
 my $recnum  = 0;
-my $istring = $newline . (" " x $indent);
+my $istring = $newline;
+if ($indent > 0) { $istring .= (" " x $indent); }
 
 if (scalar @ARGV == 0) { # stdin
     push @ARGV, "-";
@@ -360,11 +387,14 @@ foreach my $f (@ARGV) {
                 $rec =~ s/($expr)/$istring$1/g;
             }
         }
+        if ($indent < 0) {
+            $rec =~ s/$newline\s+/$newline/g;
+        }
         print $rec . ($keepOriginalNewlines ? $newline:" ");
     }
     close $fh;
 } # for @ARGV
 
-($quiet) || warn "Done, $filenum files, $recnum records.\n";
+($quiet) || warn "splitAtMatches: Done, $filenum files, $recnum records.\n";
 
 exit;

@@ -1403,7 +1403,7 @@ if ($nWithMultiDest>0) {
 if ($verbose || $list) {
     hMsg(0,"List of changes in effect:");
     alogging::MsgPush();
-    my $colorSlash = sjdUtils::colorize("bold/yellow", "/");
+    my $colorSlash = sjdUtils::colorize("yellow/bold", "/");
     for (my $i=0; $i<scalar(@exprs); $i++) {
         vMsg(0, $exprs[$i]->toString($colorSlash));
     }

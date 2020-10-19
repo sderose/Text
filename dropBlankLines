@@ -142,6 +142,6 @@ while (my $rec = <>) {
     }
 }
 
-($verbose) && warn "Dropped $nblanks blank lines out of $recnum total lines.\n";
-
+($verbose) && warn
+    "dropBlankLines: Dropped $nblanks of $recnum total lines.\n";
 exit;
