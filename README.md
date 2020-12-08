@@ -1,12 +1,15 @@
 #README for "Text" repo#
 
 Utilities and data for working with text files (including Unicode, but little or
-no markup -- the notion "plain text" is, imho, barely even meaningful).
+no markup -- the notion "plain text" is, imho, barely meaningful).
+For utilities more closely involved with character set issues per se,
+see the neighboring "Charsets" repo.
 
 As with all my utilities, use "-h" to get help.
 
 
-OCR_resources/
+''OCR_resources/'' has some statistics and other information relevant to OCR
+error correction.
 
 ''addup'' --  A simple adding machine. Can also add times (hh:mm), and calculate
 hourly payments.

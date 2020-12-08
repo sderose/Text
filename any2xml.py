@@ -1,57 +1,62 @@
 #!/usr/bin/env python
 #
-# any2xml.py
-#
-# 2018-07-25: Written. Copyright by Steven J. DeRose.
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
+# any2xml.py: Convert anything to XML. Sort of.
+# 2018-07-25: Written by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys
 import argparse
-#import re
-#import string
-#import math
 import codecs
 
 from sjdUtils import sjdUtils
 from alogging import ALogger
 
-__version__ = "2018-07-25"
-__metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2018-07-25",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2018-07-25",
-}
-
 su = sjdUtils()
 lg = ALogger(1)
 
+__metadata__ = {
+    'title'        : "any2xml.py",
+    'description'  : "Convert anything to XML. Sort of.",
+    'rightsHolder' : "Steven J. DeRose",
+    'creator'      : "http://viaf.org/viaf/50334488",
+    'type'         : "http://purl.org/dc/dcmitype/Software",
+    'language'     : "Python 3.7",
+    'created'      : "2018-07-25",
+    'modified'     : "2020-12-08",
+    'publisher'    : "http://github.com/sderose",
+    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+}
+__version__ = __metadata__['modified']
 
-###############################################################################
-#
-def processOptions():
-    descr = """
-=head1 Description
+descr = """
+=Description=
 
 Convert anything to XML. Sort of.
 
-=head1 Related Commands
 
-=head1 Known bugs and Limitations
+=Known bugs and Limitations=
 
-=head1 Licensing
+The point is not that this is useful, but that conversion requires ''thought''.
+Syntax by itself is not enough.
+
+
+=Rights=
 
 Copyright 2018-07-25 by Steven J. DeRose. This script is licensed under a
 Creative Commons Attribution-Share-alike 3.0 unported license.
 See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 
-=head1 Options
+For the most recent version, see [http://www.derose.net/steve/utilities]
+or [https://github.com/sderose].
+
+
+=Options=
 """
 
+
+###############################################################################
+#
+def processOptions():
     try:
         from BlockFormatter import BlockFormatter
         parser = argparse.ArgumentParser(
@@ -87,10 +92,7 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    lg.setColors(args0.color)
-    if (args0.verbose): lg.setVerbose(args0.verbose)
     return(args0)
-
 
 
 ###############################################################################
@@ -98,7 +100,6 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 def doOneFile(path, fh):
     """Read and deal with one individual file.
     """
-    lg.vMsg(1, "Starting file '%s'." % (path))
     rec = ""
     print("""<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE lame [
@@ -116,21 +117,16 @@ def doOneFile(path, fh):
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 args = processOptions()
 
 if (len(args.files) == 0):
-    lg.error("No files specified....")
+    sys.stderr.write("No files specified....\n")
     doOneFile("[STDIN]", sys.stdin)
 else:
     for fArg in (args.files):
-        lg.bumpStat("Total Args")
         fh0 = codecs.open(fArg, "rb", encoding=args.iencoding)
         doOneFile(fArg, fh0)
         fh0.close()
 
-if (not args.quiet):
-    lg.vMsg(0,"Done.")
-    lg.showStats()

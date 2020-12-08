@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# globalChange
+# globalChange: Do lots of regex changes to lots of files.
 # 2010-08-25: Written by Steven J. DeRose.
 #
 use strict;
@@ -17,12 +17,13 @@ use TabularFormats;
 
 our %metadata = (
     'title'        => "globalChange",
+    'description'  => "Do lots of regex changes to lots of files.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5.18",
     'created'      => "2010-08-25",
-    'modified'     => "2020-08-28",
+    'modified'     => "2020-12-03",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -37,10 +38,12 @@ globalChange [options] [files]
 
 Do a global-change(s) on the named file(s). For example:
 
-    globalChange -e 's/these (\w+) is/these $1 are/g' *.txt
+    globalChange -r -e 's/these (\w+) is/these $1 are/g' *
 
-There are a lot of features. See the next section,
-L<Why globalChange instead of sed?>, for some highlights.
+There are a lot of features. A summary of files checked, files changed, lines
+changed, and total changes appear at the end (unless C<--quiet>).
+See the next section,
+L<Why globalChange instead of sed?>, for further highlights.
 
 To be queried for each change, see I<--interactive> and I<--multiDest>
 (the latter lets you choose among several replacements for each match).
@@ -103,7 +106,7 @@ For example, it:
 (see I<--listEncodings>)
 
 =item * Supports full B<Perl-style regular expressions> (as of this writing,
-C<sed> lacks a I<-P> option like some C<grep>s have)
+C<sed> at least on my machine, lacks a I<-P> option like some C<grep>s have)
 
 =item * Has I<--test> mode (aka I<--dry-run>), and
 can colorize the parts of lines that changed.
@@ -112,10 +115,9 @@ can colorize the parts of lines that changed.
 so you can choose between
 them at each match. This is especially useful when annotating some existing
 phenomenon that you can match for, but where it takes human judgement to
-decide which annotation applies to each instance
+decide which exact thing to change to in each instance
 
-=item * Can limit changes to B<certain fields>, supporting a wide range
-of flat-file formats (experimental)
+=item * Can limit changes to B<certain fields> (experimental)
 
 =item * Provides B<interactive> query-replace
 (with an interface much like C<emacs query-replace>,
@@ -181,6 +183,10 @@ You can put these signals in I<path> for special effects:
 Append "." and I<ext> to original filenames in order to make the backup
 file names.
 Default: C<bak>.
+
+=item * B<--binary>
+
+Operate even on binary (as opposed to text) files. Default: off.
 
 =item * B<--color>
 
@@ -1072,7 +1078,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
       Ditch $istr in favor of MsgPush/MsgPop. Work on --pre.
   2013-12-15ff: Clean up, @fields bug, avoid truncating temp file, fix
       --fieldChoice. Fix bug that wrote "ARRAY(...)" at top of output file.
-      Add --showMatchCounts. Change cp to avoid ---preserve and -b for BSD.
+      Add --showMatchCounts. Change cp to avoid --preserve and -b for BSD.
   2015-02-05: Hyphens. Dont' show every change with --test unless also -v.
       Better tracing/reporting. Cleaner interaction logic. Add --max.
       Drop getARecord(). Add --backupExtension, --backupDirectory.
@@ -1087,9 +1093,12 @@ to apply (ASCII, Default, Locale-based, or Unicode).
   2017-06-01: Add --sideBySide option to makeDiffLine to do side-by-side.
   2018-04-18: Allow for non-/ regex delims.
   2020-08-28: New layout.
+  2020-12-03: Add --binary.
 
 
 =head1 To do
+
+    Move to Python, on top of PowerWalk and fsplit.
 
     Option to do literal, not regex, substitution.
 
@@ -1152,6 +1161,7 @@ L<https://github.com/sderose>.
 my $backup           = 1;
 my $backupDirectory  = '';
 my $backupExtension  = "bak";
+my $binary           = 0;
 my $color            = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
 my $compileRegex     = 1;
 my $delim            = "/";
@@ -1231,6 +1241,7 @@ my %getoptHash = (
     "backup!"               => \$backup,
     "backupDirectory=s"     => \$backupDirectory,
     "backupExtension=s"     => \$backupExtension,
+    "binary!"               => \$binary,
     "color!"                => \$color,
     "sourceColor=s"         => \$sourceColor,
     "matchColor=s"          => \$matchColor,
@@ -1450,6 +1461,7 @@ my $totalItems         = 0;
 my $dirs               = 0;
 my $filesRegular       = 0;
 my $filesBackup        = 0;
+my $filesSkipped       = 0;
 my $filesMissing       = 0;
 my $totalFilesChanged  = 0;
 my $totalLinesChanged  = 0;
@@ -1546,14 +1558,14 @@ sub saveChangeSpecFromExpr {
             "    expr:  '$expr'\n" .
             "    parts: #" . join("#", @parts) . "#\n" .
             "    delim: '" . ($delim || '') . "'\n" .
-            "    s:     '" . ($theS  || '') . "'\n" .
-            "    from:  '" . ($from  || '') . "'\n" .
-            "    to:    '" . ($to    || '') . "'\n" .
-            "    mods:  '" . ($mods  || '') . "'\n" .
-            "    extra: '" . ($bogus || '') . "'\n"
+            "    1. s:     '" . ($theS  || '') . "'\n" .
+            "    2. from:  '" . ($from  || '') . "'\n" .
+            "    3. to:    '" . ($to    || '') . "'\n" .
+            "    4. mods:  '" . ($mods  || '') . "'\n" .
+            "    5. extra: '" . ($bogus || '') . "'\n"
             );
         ($problem) && dieCleanly(
-            "  Could not parse regex change, found " . (scalar(@parts)) . "parts.\n");
+            "  Could not parse regex change, found " . (scalar(@parts)) . " parts (need 3 or 4).\n");
     }
     for (my $i=0; $i<5; $i++) {
         if (!defined $parts[$i]) { $parts[$i] = ''; }
@@ -1618,7 +1630,7 @@ sub doOneItem {
         return(1);
     }
 
-    # Could check for specials (cf grep options?)
+    # Could check for special types (cf grep options)
     # -w File is writable by effective uid/gid.
     # -l File is a symbolic link.
     # -p File is a named pipe (FIFO), or Filehandle is a pipe.
@@ -1628,6 +1640,10 @@ sub doOneItem {
     # -u File has setuid bit set.
     # -g File has setgid bit set.
     # -B File is a "binary" file (opposite of -T).
+    if (!$binary && -B "$file") {
+        $filesSkipped++;
+        return(0);
+    }
 
     my $ifh;
     if (!open($ifh, "<$file")) {                  # Can't open
@@ -1688,6 +1704,7 @@ sub doOneItem {
     }
 
     my $cmd = "cp --attributes -p '$file' '$tmpFile'";
+    alogging::vMSg(1, "Running: $cmd");
     system "$cmd";
     if ($@) {
         alogging::eMsg(0, "Failed to copy permissions/attributes: $@");
@@ -1695,7 +1712,9 @@ sub doOneItem {
 
     if ($backup) {
         my $tgt = "$backupDirectory$file.$backupExtension";
-        system "mv '$file' '$tgt'";
+        my $cmd = "mv '$file' '$tgt'";
+        alogging::vMSg(1, "Running: $cmd");
+        system $cmd;
         if ($@) {
             alogging::eMsg(0,
                "Failed to mv file '$file' to backup '$tgt'");
@@ -2173,9 +2192,10 @@ sub report {
         vMsg(0,'');
         Msg("some", "Done" . ($test ? " (DRY RUN)":'') . '.');
         vMsg(0, sprintf(
-            "%d items: %d files, %d directories%s, %s, %s.",
+            "%d items: %d files, %d directories%s, %s, %s, %s.",
             $totalItems, $filesRegular, $dirs,
             ($recursive) ? "":" (skipped)",
+            "$filesSkipped files skipped",
             colorIf($filesBackup,  "$filesBackup backups"),
             colorIf($filesMissing, "$filesMissing not found")));
         vMsg(0, sjdUtils::lpadc($totalRecs) . " total lines processed.");

@@ -31,8 +31,9 @@ I<uniq -c>, etc.
 
 Can also use hex numbers (I<--hex),
 remove numbers (I<--remove>),
-insert at the end rather than the beginning (I<--suffix>), or
-insert each line's length instead of a serial number (I<--byLength>).
+insert at the end rather than the beginning (I<--suffix>),
+insert each line's length instead of a serial number (I<--byLength>),
+squeeze runs of blank lines, etc.
 
 
 =head1 Options
@@ -41,7 +42,7 @@ insert each line's length instead of a serial number (I<--byLength>).
 
 =item * B<-b> OR B<--non-blank-only>
 
-Rather than numbering all lines, don't count or prefix lines contains only
+Rather than numbering all lines, don't count or prefix lines that contain only
 whitespace characters.
 
 =item * B<--byLength>
@@ -51,14 +52,16 @@ Instead of putting serial numbers in, insert the length of each line.
 =item * B<--delim> I<s>
 
 Delimiter string to put between number and line (default: space).
-This script does not support all the flexibility of C<deriveData> and
-C<TabularFormats> (q.v.).
 
 =item * B<--e> OR B<--ender>
 
-Append "$" to each record (including blank ones if kept), like `cat -e`.
+Append "$" to each record (including blank ones), like C<cat -e>.
 This is useful for seeing whether there are trailing blanks.
-You can change this from "$" to some other string with I<--enderChar s>.
+See also I<--enderChar>.
+
+=item * B<--enderChar> I<c>
+
+Use this instead of "$" as the character to append with I<--ender>.
 
 =item * B<--hex>
 
@@ -89,7 +92,7 @@ Cannot be combined with I<--suffix>.
 
 =item * B<--squeeze> or B<-s>
 
-Reduce runs of blank lines to the first one, like `cat -s`.
+Reduce runs of blank lines to the first one, like C<cat -s>.
 See also my `dropBlankLines.
 
 =item * B<--suffix>
@@ -136,15 +139,16 @@ them to incoming data lines. These may be integrated.
   2014-09-09: -- for options.
   2016-10-10: Add --remove to do unnumbering.
   2018-09-27: Add --byLength, --suffix.
-  2020-08-30: New layout. Add -b (like `cat`) to number just non-blank lines.
+  2020-08-30: New layout. Add -b (like C<cat>) to number just non-blank lines.
 Add -e, --enderChar, -s.
 
 
 =head1 To do
 
-  Option to colorize the number (can just use `colorstring`).
-  Option to count from/by increment, and use all bases from `iota`.
-  Compare cat -n. Add show-ends, squeeze-blank, show-tabs, --show-nonprinting.
+  Option to colorize the number (can just use C<colorstring>).
+  Option to count from/by increment, and use all bases from C<iota>.
+  Compare C<cat -n>.
+  Add show-tabs, show-nonprinting?
 
 
 =head1 Ownership
@@ -210,7 +214,7 @@ my %getoptHash = (
     "version"         => sub {
         die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
-	"width=i"         => \$width,
+    "width=i"         => \$width,
     );
 
 Getopt::Long::Configure ("ignore_case");
@@ -223,7 +227,7 @@ GetOptions(%getoptHash) || die("Bad options.\n");
     "Sorry, can't combine --suffix and --remove.\n";
 if ($iencoding ne "") {
     binmode(STDIN, ":encoding($iencoding)") ||
-	die "Binmode failed for -iencoding '$iencoding'.\n";
+    die "Binmode failed for -iencoding '$iencoding'.\n";
     print("");
     binmode(STDOUT,":encoding($iencoding)");
 }
