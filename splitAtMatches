@@ -8,17 +8,18 @@ use Getopt::Long;
 use Encode;
 
 our %metadata = (
-    'title'        => "splitAtMatches",
-    'rightsHolder' => "Steven J. DeRose",
-    'creator'      => "http://viaf.org/viaf/50334488",
-    'type'         => "http://purl.org/dc/dcmitype/Software",
-    'language'     => "Perl 5.18",
-    'created'      => "2007-02-02",
-    'modified'     => "2020-10-15",
-    'publisher'    => "http://github.com/sderose",
-    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+    "title"        => "splitAtMatches",
+    "description"  => "Put a line break at each regex match.",
+    "rightsHolder" => "Steven J. DeRose",
+    "creator"      => "http://viaf.org/viaf/50334488",
+    "type"         => "http://purl.org/dc/dcmitype/Software",
+    "language"     => "Perl 5.18",
+    "created"      => "2007-02-02",
+    "modified"     => "2020-10-15",
+    "publisher"    => "http://github.com/sderose",
+    "license"      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
-our $VERSION_DATE = $metadata{'modified'};
+our $VERSION_DATE = $metadata{"modified"};
 
 
 =pod

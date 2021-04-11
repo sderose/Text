@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 #
 # annotsToHTML.py
-#
-# 2018-07-16: By Steven J. DeRose.
-#
-# To do:
+# 2018-07-16: Written by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys, os
@@ -12,23 +9,27 @@ import argparse
 import re
 import codecs
 
-__version__ = "2018-07-16"
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2018-07-16",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2018-07-16",
+    "title"        : "annotsToHTML.py",
+    "description"  : "Get rid of IOBxyz notation.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2018-07-16",
+    "modified"     : "2021-03-03",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
+__version__ = __metadata__["modified"]
 
-###############################################################################
-#
-def processOptions():
-    descr = """
-=head1 Description
 
-Recode a sometimes-used NLP / text annotation convention (such as for marking
-Named Entities that have been found in a text), to be viewable in
-HTML in whatever browser. Namely:
+descr = """
+=Description=
+
+Recode a sometimes-used but endlessly-variable NLP / text annotation convention
+know by similarly-varying names starting or permuting "IOB" , to be viewable in
+HTML in whatever browser. The input is expected to be faintly like:
 
     One token per line
     A space and status flag is appended to each line:
@@ -65,14 +66,26 @@ The "XX" value from B-XX goes on the class attribute. You can edit the output
 to add styles for different categories of annotations, or use the
 I<--cssURL> option to generate a link to a stylesheet that does so.
 
-=head1 Related Commands
+=Related Commands=
 
-=head1 Known bugs and Limitations
+=To do=
+
+  Switch to use PowerWalk.py.
 
 
-=head1 Options
+=History=
+
+  2018-07-16: Written by Steven J. DeRose.
+  2021-03-03: New layout.
+
+
+=Options=
 """
 
+
+###############################################################################
+#
+def processOptions():
     try:
         from BlockFormatter import BlockFormatter
         parser = argparse.ArgumentParser(
@@ -99,9 +112,6 @@ I<--cssURL> option to generate a link to a stylesheet that does so.
     parser.add_argument(
         "--iencoding",        type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
-    parser.add_argument(
-        "--ignoreCase", "-i", action='store_true',
-        help='Disregard case distinctions.')
     parser.add_argument(
         "--oencoding",        type=str, metavar='E',
         help='Use this character set for output files.')

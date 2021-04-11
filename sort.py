@@ -1,70 +1,74 @@
 #!/usr/bin/env python
 #
 # sort.py
-#
-# 2018-07-18: Written. Copyright by Steven J. DeRose.
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
+# 2018-07-18: Written by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys, os
 import argparse
 import re
-#import string
-#import math
-#import subprocess
 import codecs
-#import gzip
-#from collections import defaultdict
 
-#import pudb
-#pudb.set_trace()
-
-#from sjdUtils import sjdUtils
 from alogging import ALogger
-
-__version__ = "2018-07-18"
-__metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2018-07-18",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2018-07-18",
-}
-
-#su = sjdUtils()
 lg = ALogger(1)
 
+__metadata__ = {
+    "title"        : "sort.py",
+    "description"  : "Do a really, really plain sort.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2018-07-18",
+    "modified"     : "2021-03-03",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
+}
+__version__ = __metadata__["modified"]
 
-###############################################################################
-#
-def processOptions():
-    descr = """
+
+descr = """
 =head1 Description
 
-*nix C<sort> is too lame, so do something I can make work.
+*nix C<sort> is a little weird, so do something straughtforward, without locale.
+
 
 =head1 Related Commands
 
-=head1 Known bugs and Limitations
+`msort`
 
-Nothing special for locale.
+
+=head1 Known bugs and Limitations
 
 Can't specify *parts* of fields or multiple fields.
 
 Limited to memory size.
 
 
-=head1 Licensing
+=History=
 
-Copyright 2015 by Steven J. DeRose. This script is licensed under a
+  2018-07-18: Written by Steven J. DeRose.
+  2021-03-03: New layout.
+
+
+=Rights=
+
+Copyright %DATE% by Steven J. DeRose. This work is licensed under a
 Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
+For further information on this license, see
+[https://creativecommons.org/licenses/by-sa/3.0].
+
+For the most recent version, see [http://www.derose.net/steve/utilities]
+or [https://github.com/sderose].
+
 
 =head1 Options
 """
 
+
+###############################################################################
+#
+def processOptions():
     try:
         from BlockFormatter import BlockFormatter
         parser = argparse.ArgumentParser(
@@ -161,7 +165,7 @@ def getKeyLower(rec):
     except IndexError:
         return '_'
 
-###############################################################################
+
 ###############################################################################
 # Main
 #

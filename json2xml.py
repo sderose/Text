@@ -1,15 +1,19 @@
 #!/usr/bin/env python
 #
-# json2xml.py, by Steven J. DeRose.
+# json2xml.py: Convert JSON to XML or other forms.
+# Written 2012-12-04 by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys
 import os
 import re
-import argparse
-
+import codecs
 import json
 #import pyxser  # https://sourceforge.net/projects/pyxser/
+
+from PowerWalk import PowerWalk, PWType
+from alogging import ALogger
+lg = ALogger(1)
 
 __metadata__ = {
     'title'        : "json2xml.py",
@@ -18,23 +22,34 @@ __metadata__ = {
     'type'         : "http://purl.org/dc/dcmitype/Software",
     'language'     : "Python 3.7",
     'created'      : "2012-12-04",
-    'modified'     : "2020-04-17",
+    'modified'     : "2020-20-09",
     'publisher'    : "http://github.com/sderose",
     'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__['modified']
+
 
 descr = """
 =Usage=
 
 json2xml.py [options] [files]
 
-Simple but thorough conversion. Can load from JSON, or import this script
-and call `mySerialize()` on most any Python object, whether it came from
-JSON or not.
+Simple but thorough conversion of JSON, or of pretty much any Python data,
+to XML syntax. It's smart enough to represent not only the list vs. dict
+distinction which comes naturally to JSON, but
 
-=head2 Notes
+You can run this from the command line
+to load and convert a JSON file(s). Or you can use this from Python code
+by calling `serialize2xml()` on most any Python object (whether it came from
+JSON or not).
 
+By default, it converts (losslessly, I hope) from JSON to XML. But use the
+`--oformat` option to choose other output formats (specifying `--oformat json`
+will get you pretty-printing).
+
+==Notes==
+
+There are 3 data models in play here: JSON, XML, and Python.
 The `json` decoder library produces exactly these Python types:
 
     JSON          -- Python
@@ -48,7 +63,91 @@ The `json` decoder library produces exactly these Python types:
     false         -- False
     null          -- None
 
-Thus, these are the only Python types passed to the XML serializer.
+There are also differences such as that JSON dict keys can only be strings,
+and JSON files can of course have multiple entries with the same key (the
+result of which is not necessarily consistent across JSON tools).
+
+Thus, these are the only Python types passed to the XML serializer for data
+that was loaded by JSON. However, this package handles other Python types.
+
+
+==Example==
+
+    [{
+        "atom01":        1,
+        "atom03":        3.14,
+        "atom04":        true,
+        "atom06":        null,
+        "atom07":        "",
+        "atom09":        "token",
+        "atom10":       "a\nbc\t ",
+        "atom11":       " < & ]]> \" \n \r \t \\",
+        "list1_Ints":   [ 1, 22, 3333 ],
+        "list2":        [ 9.0, false, "aardvark", [ 2, 3 ], [] ],
+        "list5_Hashes":  [
+            { "h1a":"aardvark",  "h1b": "boar" },
+            { "h2a" :"cat",      "h2b" : "dog" },
+            { "h3a"
+            :
+            "elephant"
+            ,
+            "h3b"            :       4.2 },
+            {}
+        ]
+    }]
+
+becomes (by default) this:
+
+    <list>
+        <dict>
+            <ditem key="atom01"><i v="1"/></ditem>
+            <ditem key="atom03"><f v="3.140000"/></ditem>
+            <ditem key="atom04"><i v="1"/></ditem>
+            <ditem key="atom06"><None/></ditem>
+            <ditem key="atom07"><u></u></ditem>
+            <ditem key="atom09"><u>token</u></ditem>
+            <ditem key="atom10"><u>a
+bc	 </u></ditem>
+            <ditem key="atom11"><u> &lt; &amp; ]]> "
+         </u></ditem>
+            <ditem key="list1_Ints">
+                <list>
+                    <i v="1"/>
+                    <i v="22"/>
+                    <i v="3333"/></list></ditem>
+            <ditem key="list2">
+                <list>
+                    <f v="9.000000"/>
+                    <i v="0"/>
+                    <u>aardvark</u>
+
+                    <list>
+                        <i v="2"/>
+                        <i v="3"/></list>
+
+                    <list></list></list></ditem>
+            <ditem key="list5_Hashes">
+                <list>
+
+                    <dict>
+                        <ditem key="h1a"><u>aardvark</u></ditem>
+                        <ditem key="h1b"><u>boar</u></ditem>
+                    </dict>
+
+                    <dict>
+                        <ditem key="h2a"><u>cat</u></ditem>
+                        <ditem key="h2b"><u>dog</u></ditem>
+                    </dict>
+
+                    <dict>
+                        <ditem key="h3a"><u>elephant</u></ditem>
+                        <ditem key="h3b"><f v="4.200000"/></ditem>
+                    </dict>
+
+                    <dict>
+                    </dict></list></ditem>
+        </dict></list>
+
 
 =Options=
 
@@ -72,9 +171,18 @@ Delete the "type" attributes from the XML output (this would mainly be
 useful in environments that don't care, such as many scripting languages,
 or JSON data such as this script deals with).
 
-* '''--pad''' I<n>
+* '''--oformat''' `f`
 
-Left-pad integers with spaces, to a minimum of I<n> columns.
+Choose what form to write out. Choices include:
+
+** 'xml': the default, as described above.
+** 'json': just gets pretty-printing)
+** 'report': a summary report, as produced by my `alogging.ALogger.formatRec()`.
+** ...more to be added, such as Python and Perl dcls, maybe HTML list layout.
+
+* '''--pad''' `n`
+
+Left-pad integers with spaces, to a minimum of `n` columns.
 (incomplete -- presently just puts a tab on each side instead).
 
 * '''--quiet''' OR '''-q'''
@@ -88,11 +196,12 @@ Add more detailed messages (doesn't do much at the moment).
 
 Display version info and exit.
 
+
 =Related Commands=
 
-`xml2json.py` -- essentially the opposite. But these don't exactly round-trip,
-because what they convert ''to'', is conditioned heavily by the input language.
-There should be an exact round-tripping feature added to both.
+My `xml2json.py` -- essentially the opposite. But these don't exactly
+round-trip, because what they convert ''to'', is conditioned heavily by
+the input language. There should be an exact round-tripping feature added to both.
 
 `json` -- built-in Python package for JSON support.
 
@@ -100,7 +209,7 @@ There should be an exact round-tripping feature added to both.
 to serialize any Python object as XML. [https://github.com/dmw/pyxser].
 I used this at first, but had some problems, so rolled my own.
 
-`formatRec()` in my `alogging.py`, which formats fairly arbitrary Python structures for
+`formatRec()` in my `alogging.py` formats fairly arbitrary Python structures for
 nice debugging display, and will likey add HTML and XML output options.
 
 
@@ -126,11 +235,17 @@ datatype, or even to be atomic or homogeneous or interconvertible.
 ** You can't tell hashes apart from actual objects, or from other things you'd have to
 represent using them in JSON (Python namedtuple, C struct, etc.)
 
-Of course a particular JSON user can add invent their own personal conventions
-for anything on top.
-But this all means that JSON ends up more verbose than other languages
-(all those quotes add up), and less informative (if dicts and objects are "the same",
-then you've lost the ability to reconstruct the right one on re-load).
+Of course a JSON user can add invent conventions for anything on top, at
+some cost in verbosity, effective portability, and/or clarity.
+
+
+=To do=
+
+* Test with non-string dict keys.
+* Add support for changing the XML tags to use.
+* Add more --oformat choices, such as Python and Perl dcls.
+* Finish support for homogeneous collections.
+* Add a loader for round-tripping straight into Python structures.
 
 
 =Rights=
@@ -142,6 +257,7 @@ this license, see [http://creativecommons.org/licenses/by-sa/3.0].
 For the most recent version, see [http://www.derose.net/steve/utilities] or
 [http://github.com/sderose].
 
+
 =History=
 
 * 2012-12-04: Written by Steven J. DeRose.
@@ -150,21 +266,21 @@ For the most recent version, see [http://www.derose.net/steve/utilities] or
 * 2020-04-17: Various bugs. Fix output escaping. Start handling "objects" as
 distinct from "dicts", even though JSON doesn't know. Write out subclasses
 (even though they won't show up for data that was really JSON).
+* 2020-12-09: Clean up. Add --oformat, integrate PowerWalk and alogging.
 
 
 =To do=
 
-* Fix -pad.
+* Fix --pad.
 * Option to move scalar named items to parent attributes, or not to tag scalars.
 * Option to number items in lists, put len on collections
 * Option to optimize sparse lists (say, where item is same as prev, gen:
     <repeat n="200"/>
 
+
 =Options=
 """
 
-def warn(lvl, msg):
-    if (args.verbose >= lvl): sys.stderr.write(msg+"\n")
 
 # What to map various troublesome strings to.
 #
@@ -198,14 +314,14 @@ class Str:
     def __init__(self, **entries):
         self.__dict__.update(entries)
 
-def mySerialize(pyObject, istring='    ', depth=0):
+def serialize2xml(pyObject, istring='    ', depth=0):
     """Return an XML serialization of the object (recursive).
     Typically we expect JSON, but it doesn't have to be.
     """
     # Collection types
     #
     buf = ""
-    if (isinstance(pyObject, tuple)):
+    if (isinstance(pyObject, tuple)):                   # TUPLE
         if (istring): buf += "\n" + (istring * depth)
         if (type(pyObject).__name__ != 'tuple'):
             buf += '<tuple class="%s">' % (type(pyObject).__name__)
@@ -214,12 +330,13 @@ def mySerialize(pyObject, istring='    ', depth=0):
         depth += 1
         for k, v in pyObject.items():
             if (istring): buf += "\n" + (istring * depth)
-            buf += "<item>%s</item>" % (mySerialize(v, istring=istring,depth=depth))
+            buf += "<item>%s</item>" % (
+                serialize2xml(v, istring=istring,depth=depth))
         depth -= 1
         buf += "</tuple>"
         return buf
 
-    elif (isinstance(pyObject, dict)):
+    elif (isinstance(pyObject, dict)):                   # DICT
         if (istring): buf += "\n" + (istring * depth)
         if (type(pyObject).__name__ != 'dict'):
             buf += '<dict class="%s">' % (type(pyObject).__name__)
@@ -229,13 +346,13 @@ def mySerialize(pyObject, istring='    ', depth=0):
         for k, v in pyObject.items():
             if (istring): buf += "\n" + (istring * depth)
             buf += "<ditem key=\"%s\">%s</ditem>" % (
-                k, mySerialize(v, istring=istring,depth=depth+1))
+                k, serialize2xml(v, istring=istring,depth=depth+1))
         depth -= 1
         if (istring): buf += "\n" + (istring * depth)
         buf += "</dict>"
         return buf
 
-    elif (isinstance(pyObject, list)):
+    elif (isinstance(pyObject, list)):                   # LIST
         if (istring): buf += "\n" + (istring * depth)
         if (type(pyObject).__name__ != 'list'):
             buf += '<list class="%s">' % (type(pyObject).__name__)
@@ -244,13 +361,13 @@ def mySerialize(pyObject, istring='    ', depth=0):
         depth += 1
         for v in pyObject:
             if (istring): buf += "\n" + (istring * depth)
-            #buf += "<item>%s</item>" % (mySerialize(v, istring=istring, depth=depth))
-            buf += mySerialize(v, istring=istring, depth=depth)
+            #buf += "<item>%s</item>" % (serialize2xml(v, istring=istring, depth=depth))
+            buf += serialize2xml(v, istring=istring, depth=depth)
         depth -= 1
         buf += "</list>"
         return buf
 
-    # Scalar types
+    # Scalar types (order of testing matters)
     #
     elif (isinstance(pyObject, int)):
         return '<i v="%d"/>' % (pyObject)
@@ -284,24 +401,24 @@ def mySerialize(pyObject, istring='    ', depth=0):
             if (callable(v)): continue
             if (k.startswith('__')): continue
             if (istring): buf += "\n" + (istring * depth)
-            buf += "<item>%s</item>" % (mySerialize(v, istring=istring,depth=depth))
+            buf += "<item>%s</item>" % (
+                serialize2xml(v, istring=istring,depth=depth))
         depth -= 1
         buf += "</object>"
         return buf
 
     else:
-        warn(0, "Unknown type for export: %s." % (type(pyObject)))
+        lg.vMsg(0, "Unknown type for export: %s." % (type(pyObject)))
 
 
 ###############################################################################
 # Test whether two collections are miscible. The details differ by type,
-# but generally the have to have the same size, same named members (if any),
+# but generally they must have the same size, same named members (if any),
 # and (optionally) same types for corresponding members.
 #
-# This gives a decent shot at telling JSON actual, dicts from objects -- objects
-# should have a consistent set of items, and typically their datatypes.
-# Similarly, you probably only want to use sparse-array techniques for homogeneous
-# lists.
+# This gives a decent shot at telling actual dicts from objects -- objects
+# should have a consistent set of items, and typically consistent datatypes.
+# Similar for homogeneous lists.
 #
 # TODO: Should they also be the exact same (sub) class?
 #
@@ -341,7 +458,8 @@ def listsMatch(l1, l2, checkValueTypes=True, checkLengths=True):
 def objectsMatch(o1, o2, checkValueTypes=True, checkExactClass=True):
     assert (isinstance(o1, object))
     assert (isinstance(o2, object))
-    if (checkExactClass and type(o1).__name__ != type(o2).__name__): return False
+    if (checkExactClass and type(o1).__name__ != type(o2).__name__):
+        return False
     keySeq1 = sorted(o1.__dict__.keys())
     keySeq2 = sorted(o2.__dict__.keys())
     if (keySeq1 != keySeq2): return False
@@ -372,75 +490,112 @@ def isListHomogeneous(l1):
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
-def processOptions():
-    try:
-        from BlockFormatter import BlockFormatter
-        parser = argparse.ArgumentParser(
-            description=descr, formatter_class=BlockFormatter)
-    except ImportError:
-        parser = argparse.ArgumentParser(description=descr)
+if __name__ == "__main__":
+    import argparse
 
-    parser.add_argument(
-        "--istring",      type=str, default='    ',
-        help='Repeat this string to indent the output.')
-    parser.add_argument(
-        "--noprop",       action='store_true',
-        help='Untag the "pyxs:prop" element surrounding data atoms.')
-    parser.add_argument(
-        "--nonamespaces", action='store_true',
-        help='Delete the "pyxs:" namespace prefix.')
-    parser.add_argument(
-        "--nosize",       action='store_true',
-        help='Delete the "size" attribute everywhere.')
-    parser.add_argument(
-        "--notype",       action='store_true',
-        help='Delete the "type" attribute everywhere.')
-    parser.add_argument(
-        "--pad",          type=int,
-        help='Left-pad integers to this many columns.')
-    parser.add_argument(
-        "--quiet", "-q",  action='store_true',
-        help='Suppress most messages.')
-    parser.add_argument(
-        "--verbose",      action='count', default=0,
-        help='Add more messages (repeatable).')
-    parser.add_argument(
-        "--version",      action='version', version='Version of '+__version__)
+    def processOptions():
+        try:
+            from BlockFormatter import BlockFormatter
+            parser = argparse.ArgumentParser(
+                description=descr, formatter_class=BlockFormatter)
+        except ImportError:
+            parser = argparse.ArgumentParser(description=descr)
 
-    parser.add_argument(
-        'files',         nargs=argparse.REMAINDER,
-        help='Path(s) to input file(s).')
+        parser.add_argument(
+            "--iencoding",        type=str, metavar='E', default="utf-8",
+            help='Assume this character coding for input. Default: utf-8.')
+        parser.add_argument(
+            "--istring", type=str, default='    ',
+            help='Repeat this string to indent the output.')
+        parser.add_argument(
+            "--noprop", action='store_true',
+            help='Untag the "pyxs:prop" element surrounding data atoms.')
+        parser.add_argument(
+            "--nonamespaces", action='store_true',
+            help='Delete the "pyxs:" namespace prefix.')
+        parser.add_argument(
+            "--nosize", action='store_true',
+            help='Delete the "size" attribute everywhere.')
+        parser.add_argument(
+            "--notype", action='store_true',
+            help='Delete the "type" attribute everywhere.')
+        parser.add_argument(
+            "--oformat", type=str, default='xml',
+            choices=[ 'xml', 'json', 'report' ],
+            help='Write the output to this form. Default: xml.')
+        parser.add_argument(
+            "--pad", type=int,
+            help='Left-pad integers to this many columns.')
+        parser.add_argument(
+            "--quiet", "-q", action='store_true',
+            help='Suppress most messages.')
+        parser.add_argument(
+            "--sortkeys", "--sort_keys", "--sort-keys", action='store_true',
+            help='Delete the "type" attribute everywhere.')
+        parser.add_argument(
+            "--verbose", action='count', default=0,
+            help='Add more messages (repeatable).')
+        parser.add_argument(
+            "--version", action='version', version='Version of '+__version__)
 
-    args0 = parser.parse_args()
+        parser.add_argument(
+            'files', nargs=argparse.REMAINDER,
+            help='Path(s) to input file(s).')
 
-    if (os.environ["PYTHONIOENCODING"] != "utf_8"):
-        print("Warning: PYTHONIOENCODING is not utf_8.")
-    return args0
+        args0 = parser.parse_args()
+
+        lg.setVerbose(args0.verbose)
+        if (os.environ["PYTHONIOENCODING"] != "utf_8"):
+            lg.vMsg(0, "Warning: PYTHONIOENCODING is not utf_8.")
+        return args0
 
 
-args = processOptions()
+    def doOneFile(path):
+        """Read and deal with one individual file.
+        """
+        if (not path):
+            if (sys.stdin.isatty()): print("Waiting on STDIN...")
+            fh = sys.stdin
+        else:
+            try:
+                fh = codecs.open(path, "rb", encoding=args.iencoding)
+            except IOError as e:
+                lg.vMsg(0, "Cannot open '%s':\n    %s" % (e))
+                return 0
 
-if (len(args.files) == 0):
-    fh = sys.stdin
-elif (not os.path.isfile(args.files[0])):
-    warn(0, "Can't find file '" + args.files[0] + "'.")
-    sys.exit(0)
-else:
-    fh = open(args.files[0], "r")
+        try:
+            pyObject0 = json.load(fh)
+        except json.decoder.JSONDecodeError as e:
+            lg.vMsg(0, "JSON load failed for %s:\n    %s" % (path, e))
+            sys.exit()
 
-# Load the JSON and make a Python Object.
-#
-try:
-    pyObject0 = json.load(fh)
-except json.decoder.JSONDecodeError as e:
-    warn(0, "JSON load failed:\n    %s" % (e))
-    sys.exit()
+        if (args.oformat == 'xml'):
+            buf = serialize2xml(pyObject0, istring=args.istring)
+        elif (args.oformat == 'json'):
+            buf = json.dumps(pyObject0,
+                sort_keys=args.sortkeys, indent=len(args.istring))
+        elif (args.oformat == 'report'):
+            buf = lg.formatRec(pyObject0)
+        else:
+            lg.vMsg(-1, "Unknown --oformat value '%s'." % (args.oformat))
 
-theXml0 = mySerialize(pyObject0, istring=args.istring)
+        print(buf)
+        return
 
-print(theXml0)
 
-sys.exit(0)
+    ###########################################################################
+    #
+    args = processOptions()
+
+    if (len(args.files) == 0):
+        lg.vMsg(0, "json2xml.py: No files specified....")
+        doOneFile(None)
+    else:
+        pw = PowerWalk(args.files, open=False, close=False,
+            encoding=args.iencoding)
+        pw.setOptionsFromArgparse(args)
+        for path0, fh0, what0 in pw.traverse():
+            if (what0 != PWType.LEAF): continue
+            doOneFile(path0)

@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 #
 # text2html.py
+# Written 2018-07-21 by Steven J. DeRose
 #
 from __future__ import print_function
-import sys, os
+import sys
 import argparse
 import re
 import codecs
@@ -12,29 +13,20 @@ import XmlOutput
 from alogging import ALogger
 
 __metadata__ = {
-    'title'        : "text2html.py",
-    'rightsHolder' : "Steven J. DeRose",
-    'creator'      : "http://viaf.org/viaf/50334488",
-    'type'         : "http://purl.org/dc/dcmitype/Software",
-    'language'     : "Python 3.7",
-    'created'      : "2018-07-21",
-    'modified'     : "2020-03-04",
-    'publisher'    : "http://github.com/sderose",
-    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
-    'description'  :
-        'Simple formatter class for Python argparse.',
+    "title"        : "text2html.py",
+    "description"  : "Convert simple text layouts to HTML.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2018-07-21",
+    "modified"     : "2020-03-04",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/",
 }
-__version__ = __metadata__['modified']
+__version__ = __metadata__["modified"]
 
 lg = ALogger(1)
-
-PY2 = sys.version_info[0] == 2
-PY3 = sys.version_info[0] == 3
-if PY2:
-    string_types = basestring
-else:
-    string_types = str
-    def unichr(n): return chr(n)
 
 descr = """
 =Description=
@@ -135,22 +127,22 @@ class marker:
     """See https://developer.mozilla.org/en-US/docs/Web/CSS/list-style-type
     """
     bulletChars = u"""*-+=o""" + "".join([
-        unichr(0x2022),  # BULLET
-        unichr(0x2023),  # TRIANGULAR BULLET
-        unichr(0x2043),  # HYPHEN BULLET
-        unichr(0x204c),  # BLACK LEFTWARDS BULLET
-        unichr(0x204d),  # BLACK RIGHTWARDS BULLET
-        unichr(0x2219),  # BULLET OPERATOR
-        unichr(0x25d8),  # INVERSE BULLET
-        unichr(0x25e6),  # WHITE BULLET
-        unichr(0x2619),  # REVERSED ROTATED FLORAL HEART BULLET
-        unichr(0x2765),  # ROTATED HEAVY BLACK HEART BULLET
-        unichr(0x2767),  # ROTATED FLORAL HEART BULLET
-        unichr(0x29be),  # CIRCLED WHITE BULLET
-        unichr(0x29bf),  # CIRCLED BULLET
+        chr(0x2022),  # BULLET
+        chr(0x2023),  # TRIANGULAR BULLET
+        chr(0x2043),  # HYPHEN BULLET
+        chr(0x204c),  # BLACK LEFTWARDS BULLET
+        chr(0x204d),  # BLACK RIGHTWARDS BULLET
+        chr(0x2219),  # BULLET OPERATOR
+        chr(0x25d8),  # INVERSE BULLET
+        chr(0x25e6),  # WHITE BULLET
+        chr(0x2619),  # REVERSED ROTATED FLORAL HEART BULLET
+        chr(0x2765),  # ROTATED HEAVY BLACK HEART BULLET
+        chr(0x2767),  # ROTATED FLORAL HEART BULLET
+        chr(0x29be),  # CIRCLED WHITE BULLET
+        chr(0x29bf),  # CIRCLED BULLET
     ])
     for u in range(0x2701, 0x2753):
-        bulletChars += unichr(u)
+        bulletChars += chr(u)
 
     basicNameList = """decimal decimal-leading-zero
 lower-alpha lower-greek lower-latin lower-roman
@@ -166,10 +158,11 @@ myanmar oriya persian simp-chinese-formal simp-chinese-informal tamil
 telugu thai tibetan trad-chinese-formal trad-chinese-informal upper-armenian"""
 
     markerTypes = {}
-    for i, name in enumerate(re.split(r'\s+', basicNameList)):
+    for i, name in enumerate(re.split(r"\s+", basicNameList)):
         markerTypes[name] = i
 
     def __init__(self, text=""):
+        self.text = text
         return
 
     def getMarkerType(self, s):
@@ -177,11 +170,11 @@ telugu thai tibetan trad-chinese-formal trad-chinese-informal upper-armenian"""
         There must be no punctuation or space, that should already be gone.
         """
 
-        if (re.match(r'\d+', s)): return 'decimal'
-        if (re.match(r'[ivxlcm]{2,}$', s)): return 'lower-roman'
-        if (re.match(r'[IVXLCM]{2,}$', s)): return 'upper-roman'
-        if (re.match(r'[A-Z]', s)): return 'upper-latin'  # But 'I'
-        if (re.match(r'[a-z]', s)): return 'lower-latin'  # But 'i'
+        if (re.match(r"\d+", s)): return "decimal"
+        if (re.match(r"[ivxlcm]{2,}$", s)): return "lower-roman"
+        if (re.match(r"[IVXLCM]{2,}$", s)): return "upper-roman"
+        if (re.match(r"[A-Z]", s)): return "upper-latin"  # But "I"
+        if (re.match(r"[a-z]", s)): return "lower-latin"  # But "i"
 
 
 ###############################################################################
@@ -199,7 +192,7 @@ class blockify:
         return len(self.recs)
 
     def loadString(self, s):
-        self.recs = re.split(r'\r\n?|\n', s)
+        self.recs = re.split(r"\r\n?|\n", s)
         return len(self.recs)
 
     def interpret(self):
@@ -230,36 +223,36 @@ def doOneFile(path, fh):
         rec = recs[i].rstrip("\r\n")
         rec = rec.expandtabs(args.tabs)
         stripped = rec.strip()
-        isBlank = (stripped == '')
+        isBlank = (stripped == "")
 
         # Extract some basic characteristics
-        indent = targetLen(r'^(\s+)', rec)
-        allCaps = hasTarget(r'\w', rec) and hasTarget(r'^[^a-z]*$', rec)
-        bulleted = hasTarget(r'^[*-=+]', stripped)
-        numbered = hasTarget(r'^(\d+|[A-Z]|[IVXL]+)([):.])?\s', stripped)
+        indent = targetLen(r"^(\s+)", rec)
+        allCaps = hasTarget(r"\w", rec) and hasTarget(r"^[^a-z]*$", rec)
+        bulleted = hasTarget(r"^[*-=+]", stripped)
+        numbered = hasTarget(r"^(\d+|[A-Z]|[IVXL]+)([):.])?\s", stripped)
 
         # Now decide what we're dealing with
         if (isBlank):
-            xo.closeAllOfThese('p li')
+            xo.closeAllOfThese("p li")
             nBlankLines += 1
         elif (indent > lastIndent):
-            if (numbered): xo.openElement('ol')
-            elif (bulleted): xo.openElement('ul')
-            else: xo.openElement('div')
-            xo.openElement('li')
+            if (numbered): xo.openElement("ol")
+            elif (bulleted): xo.openElement("ul")
+            else: xo.openElement("div")
+            xo.openElement("li")
         elif (indent < lastIndent):
-            if (numbered): xo.openElement('ol')
-            elif (bulleted): xo.openElement('ul')
-            else: xo.openElement('div')
-            xo.closeElementIfOpen('li')
-            if (xo.getCurrentElementName() in [ 'ul', 'ol', 'div' ]):
+            if (numbered): xo.openElement("ol")
+            elif (bulleted): xo.openElement("ul")
+            else: xo.openElement("div")
+            xo.closeElementIfOpen("li")
+            if (xo.getCurrentElementName() in [ "ul", "ol", "div" ]):
                 xo.closeElement()
         else:  # non-blank, same indent
             pass
 
         xo.makeText(rec)
 
-        # Make new line 'previous'
+        # Make new line "previous"
         lastIndent = indent
         if (not isBlank): nBlankLines = 0
         #lastRec = rec
@@ -305,7 +298,7 @@ def targetLen(regex, s, groupNum=0):
 ###############################################################################
 # Main
 #
-if (__name__ == '_main_'):
+if (__name__ == "_main_"):
     def processOptions():
         try:
             from BlockFormatter import BlockFormatter
@@ -315,28 +308,28 @@ if (__name__ == '_main_'):
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--iencoding",        type=str, default='utf8',
-            help='Assume utf-8 for input files.')
+            "--iencoding",        type=str, default="utf8",
+            help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--quiet", "-q",      action='store_true',
-            help='Suppress most messages.')
+            "--quiet", "-q",      action="store_true",
+            help="Suppress most messages.")
         parser.add_argument(
-            "--tabs",        type=int, default='4',
-            help='Tab interval. Default 4.')
+            "--tabs",        type=int, default=4,
+            help="Tab interval. Default 4.")
         parser.add_argument(
-            "--unicode",          action='store_const',  dest='iencoding',
-            const='utf8', help='Assume utf-8 for input files.')
+            "--unicode",          action="store_const",  dest="iencoding",
+            const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--verbose", "-v",    action='count',       default=0,
-            help='Add more messages (repeatable).')
+            "--verbose", "-v",    action="count",       default=0,
+            help="Add more messages (repeatable).")
         parser.add_argument(
-            "--version", action='version', version=__version__,
-            help='Display version information, then exit.')
+            "--version", action="version", version=__version__,
+            help="Display version information, then exit.")
 
         parser.add_argument(
-            'files',             type=str,
+            "files",             type=str,
             nargs=argparse.REMAINDER,
-            help='Path(s) to input file(s)')
+            help="Path(s) to input file(s)")
 
         args0 = parser.parse_args()
         if (args0.verbose): lg.setVerbose(args0.verbose)

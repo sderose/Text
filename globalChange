@@ -23,7 +23,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5.18",
     'created'      => "2010-08-25",
-    'modified'     => "2020-12-03",
+    'modified'     => "2021-02-24",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -355,6 +355,11 @@ v=item * B<--ilineends> I<t>
 
 Assume Unix, Dos, or Mac line-breaks for input.
 
+=item * B<--include> I<regex>
+
+Ignore files whose name does not match I<regex> (directories are
+not tested for this).
+
 =item * B<--instance> I<n>, B<--instanceBegin> I<n>, B<--instanceEnd> I<n> (sticky)
 
 Chooses which particular matches to an expression, among those on a given line,
@@ -532,8 +537,8 @@ changes, but not as a line changed. I<string> is run through
 C<sjdUtils::unbackslash()>, so you can include special characters using any
 of the usual Perl backslash codes (\n, \r, \xFF, \x{FFFF}, etc.).
 
-B<Note>: There is no option for appending something to the end of all files. This
-can be done easily with C<cat> or C<echo> and the ">>" operator
+B<Note>: There is no option for appending something to the end of all files.
+This can be done easily with C<cat> or C<echo> and the ">>" operator
 (if you do this before globalChange rather than after, the added lines will
 also be subject to change):
 
@@ -547,7 +552,8 @@ and I<--nofileStart>).
 
 =item * B<--recursive>
 
-Modify files in a whole subtree (experimental). See also I<--iString>.
+Modify files in a whole subtree (experimental). See also I<--iString>
+and I<--include>
 
 =item * B<--showChanges>
 
@@ -555,9 +561,7 @@ Display all lines that actually change. See also I<-v> (use twice to show
 individual changes), I<--test>, and I<--vSep>.
 
 At startup, an C<Add> line will appear for each change requested.
-This helps especially for seeing the effect of shell quoting, backslashing,
-and so on.
-Each C<Add> message includes a sequential number assigned to that change.
+This helps show the effect of shell quoting, backslashing, etc.
 See also section L<#Backslashing your regexes>.
 
 With I<--showChanges> (or I<--test>) actual changes are displayed like this:
@@ -566,25 +570,18 @@ With I<--showChanges> (or I<--test>) actual changes are displayed like this:
 
     ******* Starting file 'searchController.php'
     Line 173: changed by expressions [1]:
-    Z<< < >>    public function makeTabBar($category) {
-    Z<< > >>    public function makeTabBar($category)\n    {
-    Z<<<< >>> >>>> 1 change(s) in file 'searchController.php' (DRY RUN)
+      <     public function makeTabBar($category) {
+      >     public function makeTabBar($category)\n    {
+      >>> 1 change(s) in file 'searchController.php' (DRY RUN)
 
-As globalChange starts processing each input file, a notice is displayed.
-
-For each changed line, a list appears showing the line number
-and how many times each expression
-affected the line. Position in the bracketed list corresponds to the
+Position in the bracketed list corresponds to the
 numbers shown in the C<Add> messages at the beginning.
 
-The before and after lines show the original and final form
-of the line. However, they are modified to make
+The original and final form
+of the line are shown, but modified to make
 whitespace, control, and other special characters visible,
-and to highlight the part of the line that changed (that is, from the
-first differing character to the last).
-This uses C<sjdUtils::showInvisibles($x, 'SYM', 'SP')>
-and C<sjdUtils::colorize()>,
-and requires Unicode and ANSI color support by your terminal program.
+and to highlight the part of the line from the
+first differing character to the last.
 
 The total number of changes in each file is also reported.
 However, it can be inaccurate (see L<#Known bugs and limitations>).
@@ -977,37 +974,37 @@ their subpattern matches, negative when it fails.
 
 =over
 
-=item * B<< (?=pattern) >>
+=item * " (?=pattern) "
 
 A zero-width positive look-ahead assertion. For example,
 C</\w+(?=\t)/> matches a word only when followed by a tab,
 without including the tab in $& .
 
-=item * B<< (?!pattern) >>
+=item * " (?!pattern) "
 
 A zero-width negative look-ahead assertion. For example
-C</foo(?!bar)/> matches any "foo" that isn't followed by "bar".
+"/foo(?!bar)/" matches any "foo" that isn't followed by "bar".
 You cannot use this for look-behind.
 
 If you are looking for a "bar" that isn't preceded by a "foo",
-C</(?!foo)bar/> will not do what you want. That's because the (?!foo)
+"/(?!foo)bar/" will not do what you want. That's because the (?!foo)
 is just saying that the next thing cannot be "foo"--and it's not,
 it's a "bar", so "foobar" will match. Use look-behind instead (see below).
 
-=item * B<< (?<=pattern) \K >>
+=item * " (?<=pattern) \K "
 
 A zero-width positive look-behind assertion. For example,
-C</(?<=\t)\w+/> matches a word that follows a tab, without including
+"/(?<=\t)\w+/" matches a word that follows a tab, without including
 the tab in $& . Works only for fixed-width look-behind.
 
 A special form, \K , "keeps" everything it had matched prior
 to the \K and does not include it in $& . This effectively provides
 variable-length look-behind.
 
-=item * B<< (?<!pattern) >>
+=item * " (?<!pattern) "
 
 A zero-width negative look-behind assertion. For example
-C</(?<!bar)foo/> matches any "foo" that does not follow
+"/(?<!bar)foo/" matches any "foo" that does not follow
 "bar". Works only for fixed-width look-behind (that is, you can't
 use repetition operators).
 
@@ -1016,13 +1013,14 @@ use repetition operators).
 (there are additional regex operators)
 
 
-=head2 B<Regex Modifiers>
+=head2 "egex Modifiers
 
 (see also L<http://perldoc.perl.org/perlre.html#Modifiers>)
 
 =over
 
-=item * B<i> ignore case distinctions for matching (see also C<\\L>, C<\\U>,
+=item * B<i> ignore case distinctions for matching (see also
+C<\\L>, C<\\U>,
 etc. within regexes).
 
 =item * B<g> global change, instead of just the first instance per line.
@@ -1053,39 +1051,39 @@ to apply (ASCII, Default, Locale-based, or Unicode).
   2011-11-07 sjd: Debugging last set of changes.... Implement --optPersistent.
   2012-01-04 sjd: Improve --test and --verbose. sjdUtils. Drop --color.
   2012-03-14ff sjd: Add --color back, I miss it. vMsg.
-      Add --interactive. Ditch optX args in favor of usual regex syntax.
-      Drop --from/-to. Start --fieldChoice. Add makeDiffLine(). Use eval() to
-      support regex modifiers and RHS backrefs.
+Add --interactive. Ditch optX args in favor of usual regex syntax.
+Drop --from/-to. Start --fieldChoice. Add makeDiffLine(). Use eval() to
+support regex modifiers and RHS backrefs.
   2012-03-22 sjd: Ditch --bdir, --bext, just use 'cp -b'. Do changes outbound
-      instead of copy out and change back. Don't touch unchanged files at all.
-      Add ReadKey for --interactive. Add --zero.
+instead of copy out and change back. Don't touch unchanged files at all.
+Add ReadKey for --interactive. Add --zero.
   2012-04-04 sjd: Copy and truncate the temp file, so permissions copy.
   2012-05-30 sjd: Add --recursive, report more detailed stats.
   2012-07-09 sjd: Sync with TabularFormats.
   2012-10-01 sjd: Support STDIN. Simplify ChangeInfo use and discard several
-      functions. Clean up regex apply, pre-compile, add --compileRegex option.
-      Add --global. Finish hooking up TabularFormats. Rest of modifiers.
+functions. Clean up regex apply, pre-compile, add --compileRegex option.
+Add --global. Finish hooking up TabularFormats. Rest of modifiers.
   2012-10-08 sjd: Better problem reporting. Off-by-one in makeDiffLine.
-      Make /g work (not compilable with qr//). \n in RHS. Add --perfile.
-      Fix/clean stats logic and names.
+Make /g work (not compilable with qr//). \n in RHS. Add --perfile.
+Fix/clean stats logic and names.
   2012-12-03 sjd: Update color handling for sjdUtils changes. Add --iString.
   2013-02-06 sjd: Group persistent options into %exprOptions.
-      Let -f files set options via lines starting with "-". Rest of messages
-      to STDERR where they belong. Add output buffering via outputALine().
+Let -f files set options via lines starting with "-". Rest of messages
+to STDERR where they belong. Add output buffering via outputALine().
   2013-05-13ff: Fix various bugs in -r. Support backslashed delims in -e.
   2013-06-27f: Add finalize() to write buffered output lines at EOF.
-      Get rid of spurious output. Fix $ofh. Make apply() take \@fields.
-      Ditch $istr in favor of MsgPush/MsgPop. Work on --pre.
+Get rid of spurious output. Fix $ofh. Make apply() take \@fields.
+Ditch $istr in favor of MsgPush/MsgPop. Work on --pre.
   2013-12-15ff: Clean up, @fields bug, avoid truncating temp file, fix
-      --fieldChoice. Fix bug that wrote "ARRAY(...)" at top of output file.
-      Add --showMatchCounts. Change cp to avoid --preserve and -b for BSD.
+--fieldChoice. Fix bug that wrote "ARRAY(...)" at top of output file.
+Add --showMatchCounts. Change cp to avoid --preserve and -b for BSD.
   2015-02-05: Hyphens. Dont' show every change with --test unless also -v.
-      Better tracing/reporting. Cleaner interaction logic. Add --max.
-      Drop getARecord(). Add --backupExtension, --backupDirectory.
-      File handling. Set up apply's eval() strings in constructor, not loop.
+Better tracing/reporting. Cleaner interaction logic. Add --max.
+Drop getARecord(). Add --backupExtension, --backupDirectory.
+File handling. Set up apply's eval() strings in constructor, not loop.
   2015-02-25ff: Work on backreferences. Spit out setupRegex. Handle escaping
-      for more cases of weirdness in requested regex changes. Add --multiDest.
-      Avoid copying to dest at start, by switching to "cp --attributes -p".
+for more cases of weirdness in requested regex changes. Add --multiDest.
+Avoid copying to dest at start, by switching to "cp --attributes -p".
   2015-08-15: Add --maxLinesChanged. Start 'contig' command.
   2016-07-11: Add --firstPerFile, --lastPerFile, --prepend.
   2016-08-26: Much better --dry-run and --showChanges reporting.
@@ -1094,6 +1092,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
   2018-04-18: Allow for non-/ regex delims.
   2020-08-28: New layout.
   2020-12-03: Add --binary.
+  2021-02-24: Add --include.
 
 
 =head1 To do
@@ -1174,6 +1173,7 @@ my $force            = 0;
 my $hiliteResults    = 0;
 my $iencoding        = '';
 my $ilineends        = '';
+my $include          = '';
 my $instanceBegin    = 0;
 my $instanceEnd      = 0;
 
@@ -1260,6 +1260,7 @@ my %getoptHash = (
     "hiliteResults!"        => \$hiliteResults,
     "iencoding=s"           => \$iencoding,
     "ilineends=s"           => \$ilineends,
+    "include=s"             => \$include,
     "interactive!"          => \$interactive,
     "iString=s"             => \$iString,
     "list!"                 => \$list,
@@ -1628,6 +1629,11 @@ sub doOneItem {
         alogging::MsgPop();
         closedir($theDir);
         return(1);
+    }
+
+    if ($include && $file !~ m/$include/) {       # --include?
+        $filesSkipped++;
+        return(0);
     }
 
     # Could check for special types (cf grep options)
@@ -2195,7 +2201,7 @@ sub report {
             "%d items: %d files, %d directories%s, %s, %s, %s.",
             $totalItems, $filesRegular, $dirs,
             ($recursive) ? "":" (skipped)",
-            "$filesSkipped files skipped",
+            "$filesSkipped files skipped (-B, --include)",
             colorIf($filesBackup,  "$filesBackup backups"),
             colorIf($filesMissing, "$filesMissing not found")));
         vMsg(0, sjdUtils::lpadc($totalRecs) . " total lines processed.");

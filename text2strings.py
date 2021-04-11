@@ -1,28 +1,66 @@
 #!/usr/bin/env python
 #
 # text2strings.py Quote up a file to make Python string init.
-#
-# 2018-11-05: Written. Copyright by Steven J. DeRose.
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
+# 2018-11-05: Written by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys
 import argparse
-#import re
-#import string
 import codecs
 import PowerWalk
 
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2018-11-05",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2018-11-05",
+    "title"        : "text2strings.py",
+    "description"  : "Turn a text file into a Python array of strings",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2018-11-05",
+    "modified"     : "2021-03-03",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
-__version__ = __metadata__['version_date']
+__version__ = __metadata__["modified"]
+
+
+descr = """
+=Description=
+
+Turn a text file into a Python array of strings.
+
+Each line is escaped and then double-quoted, and a comma is added.
+The whole file is enclosed in square brackets.
+
+Lines beginning with "#" are treated as comments. You can change this
+via the `--comment` option, for example setting it to "//" or "".
+
+
+=Known bugs and Limitations=
+
+Should add an option to set the indentation level, and/or to put the opening
+quote after any leading space.
+
+
+=History=
+
+2018-11-05: Written by Steven J. DeRose.
+2021-03-03: New layout.
+
+
+=Rights=
+
+Copyright 2018-11-05 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share-alike 3.0 unported license.
+For further information on this license, see
+[https://creativecommons.org/licenses/by-sa/3.0].
+
+For the most recent version, see [http://www.derose.net/steve/utilities]
+or [https://github.com/sderose].
+
+
+=Options=
+"""
 
 
 ###############################################################################
@@ -57,37 +95,10 @@ def doOneFile(path, fh):
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 if __name__ == "__main__":
     def processOptions():
-        descr = """
-=head1 Description
-
-Turn a text file into a Python array of strings.
-
-Each line is escaped and then double-quoted, and a comma is added.
-The whole file is enclosed in square brackets.
-
-Lines beginning with '#' are treated as comments (you can change this
-via the I<--comment> option, for example setting it to "//" or "".
-
-=head1 Related Commands
-
-=head1 Known bugs and Limitations
-
-Should add an option to set the indentation level, and/or to put the opening
-quote after any leading space.
-
-=head1 Licensing
-
-Copyright 2018-11-05 by Steven J. DeRose. This script is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
-
-=head1 Options
-"""
         try:
             from BlockFormatter import BlockFormatter
             parser = argparse.ArgumentParser(
@@ -134,6 +145,7 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
         args0 = parser.parse_args()
         return(args0)
 
+
     ###########################################################################
     #
     args = processOptions()
@@ -154,7 +166,7 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
                 depth += 1
                 continue
 
-            fileNum = pw.stats['itemsReturned']
+            fileNum = pw.travState.stats['itemsReturned']
             fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
             doOneFile(path0, fh0)
             fh0.close()

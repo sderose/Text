@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
-# pod2md.py: Convert perldoc-tsyle "POD" markup, to MarkDown.
-# Written 2019-02-19 by Steven J. DeRose
+# pod2md.py: Convert perldoc-style POD markup to MarkDown-ish.
+# Written 2019-02-19 by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys
@@ -21,22 +21,21 @@ if PY2:
 else:
     string_types = str
     from html import entities
-    def cmp(a, b): return  ((a > b) - (a < b))
     def unichr(n): return chr(n)
-    def unicode(s, encoding='utf-8', errors='strict'): return str(s, encoding, errors)
 
 __metadata__ = {
-    'title'        : "pod2md.py",
-    'rightsHolder' : "Steven J. DeRose",
-    'creator'      : "http://viaf.org/viaf/50334488",
-    'type'         : "http://purl.org/dc/dcmitype/Software",
-    'language'     : "Python 3.7",
-    'created'      : "2019-02-19",
-    'modified'     : "2020-10-01",
-    'publisher'    : "http://github.com/sderose",
-    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+    "title"        : "pod2md.py",
+    "description"  : "Convert perldoc-style POD markup to MarkDown-ish.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2019-02-19",
+    "modified"     : "2020-10-01",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
-__version__ = __metadata__['modified']
+__version__ = __metadata__["modified"]
 
 descr = """
 =Description=
@@ -196,10 +195,10 @@ def escapeXmlContent(s):  # From sjdUtils.py
     """
     if (s is None): return("")
     if (not isinstance(s, string_types)): s = str(s)
-    s = s = re.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f]', "", s)
-    s = re.sub(r'&',   "&amp;",  s)
-    s = re.sub(r'<',   "&lt;",   s)
-    s = re.sub(r']]>', "]]&gt;", s)
+    s = s = re.sub(r"[\x01-\x08\x0b\x0c\x0e-\x1f]", "", s)
+    s = re.sub(r"&",   "&amp;",  s)
+    s = re.sub(r"<",   "&lt;",   s)
+    s = re.sub(r"]]>", "]]&gt;", s)
     return(s)
 
 
@@ -228,7 +227,7 @@ def doOneFile(path, fh):
         recnum += 1
 
         rec = rec.rstrip()
-        mat = re.match(r'^(\s*)(.*)', rec)
+        mat = re.match(r"^(\s*)(.*)", rec)
         indentSpace = mat.group(1)
         rec = mat.group(2)
 
@@ -244,6 +243,8 @@ def doOneFile(path, fh):
             continue
         elif (rec.startswith("=encoding")):
             encoding = rec[9:].strip()
+            if (encoding != args.iencoding):
+                lg.error0("=encoding '%s' not supported." % (encoding))
             continue
         elif (rec.startswith("=head")):
             hLevel = int(rec[5]) + 0
@@ -257,13 +258,13 @@ def doOneFile(path, fh):
             depth -= 1
             continue
         elif (rec.startswith("=item")):
-            rec = ("*" * depth) + re.sub(r'=item\s*[*+-o\d]*', '', rec)
+            rec = ("*" * depth) + re.sub(r"=item\s*[*+-o\d]*", "", rec)
         else:  # it's just text...
             #print("*** text line, indentSpace '%s'." % (indentSpace))
             rec = indentSpace + rec
 
         # Concert POD inline markup
-        rec = re.sub(r'\b(\w)<([^>]*)>', fixInline, rec)
+        rec = re.sub(r"\b(\w)<([^>]*)>", fixInline, rec)
 
         if (args.verbose):
             print("%4d: %s" % (recnum, rec))
@@ -275,15 +276,14 @@ def doOneFile(path, fh):
         print("Never saw '=pod'. Did you mistakenly set --justPOD?")
     return(recnum)
 
-
 def makeHeading(txt, level=1):
-    if (args.outputFormat=='md'):
-        flag = '#' * level
+    if (args.outputFormat=="md"):
+        flag = "#" * level
         return (flag+txt+flag)
-    elif (args.outputFormat=='mediawiki'):
-        flag = '=' * level
+    elif (args.outputFormat=="mediawiki"):
+        flag = "=" * level
         return (flag+txt+flag)
-    elif (args.outputFormat=='html'):
+    elif (args.outputFormat=="html"):
         return "<h%d>%s</h%d>" % (level, txt, level)
     return txt
 
@@ -291,19 +291,19 @@ def makeHeading(txt, level=1):
 #
 codeMap = {
     #POD    MD+      MD-    MWiki+  MWiki-  HTML
-    'B': [ "''",    "''",   "**",   "**",   "b",   ],   # bold
-    'I': [ "'''",   "'''",  "*",    "*",    "i",   ],   # italic
-    # 'U': [ "",      "",     "__",   "__",   "u",   ],   # underscore
+    "B": [ "''",    "''",   "**",   "**",   "b",   ],   # bold
+    "I": [ "'''",   "'''",  "*",    "*",    "i",   ],   # italic
+    # "U": [ "",      "",     "__",   "__",   "u",   ],   # underscore
 
-    'C': [ "`",     "`",    "",     "",   "tt",  ],  # command
-    'F': [ "`",     "`",    "",     "",   "tt",  ],  # filename
+    "C": [ "`",     "`",    "",     "",   "tt",  ],  # command
+    "F": [ "`",     "`",    "",     "",   "tt",  ],  # filename
 
-    #'E': [ "''",    "''",   "",     "",   "",    ],   # special ch
+    #"E": [ "''",    "''",   "",     "",   "",    ],   # special ch
 
-    'L': [ "[",     "]",    "",     "",   "a",   ],   # link           ??
-    'S': [ "''",    "''",   "",     "",   "", ],   # no-break       special?
-    'X': [ "''",    "''",   "",     "",   "idx", ],   # index entry    ???
-    'Z': [ "",      "",     "",     "",   "",    ],   # No POD
+    "L": [ "[",     "]",    "",     "",   "a",   ],   # link           ??
+    "S": [ "''",    "''",   "",     "",   "", ],   # no-break       special?
+    "X": [ "''",    "''",   "",     "",   "idx", ],   # index entry    ???
+    "Z": [ "",      "",     "",     "",   "",    ],   # No POD
 }
 
 def fixInline(mat):
@@ -313,11 +313,11 @@ def fixInline(mat):
     if (code == "E"):
         return decodeSpecialChar(txt)
     elif (code in codeMap):
-        if (args.outputFormat == 'md'):
+        if (args.outputFormat == "md"):
             return codeMap[code][0] + txt + codeMap[code][1]
-        elif (args.outputFormat == 'mediawiki'):
+        elif (args.outputFormat == "mediawiki"):
             return codeMap[code][2] + txt + codeMap[code][3]
-        elif (args.outputFormat == 'html'):
+        elif (args.outputFormat == "html"):
             return "<%s>%s</%s>" % (
                 codeMap[code][4], escapeXmlContent(txt), codeMap[code][4])
     else:
@@ -333,7 +333,7 @@ def decodeSpecialChar(text):
     if (text == "sol"):    return "/"
     if (text.startswith("0x")):  return chr(int(text[2:], 16))
     if (text.startswith("0")):   return chr(int(text[1:], 8))
-    if (re.match(r'\d+$',text)): return chr(int(text[1:], 10))
+    if (re.match(r"\d+$",text)): return chr(int(text[1:], 10))
     try:
         c = unichr(entities.name2codepoint[text])
     except KeyError:
@@ -355,41 +355,41 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--extract-to", "--extractTo", type=str, metavar='F', default="",
-            dest="extractTo", help='Write a copy to this file.')
+            "--extract-to", "--extractTo", type=str, metavar="F", default="",
+            dest="extractTo", help="Write a copy to this file.")
         parser.add_argument(
-            "--iencoding",        type=str, metavar='E', default="utf-8",
-            help='Assume this character set for input files. Default: utf-8.')
+            "--iencoding",        type=str, metavar="E", default="utf-8",
+            help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--justPOD",              action='store_true',
+            "--justPOD",              action="store_true",
             help='Wait for "=pod" line to start.')
         parser.add_argument(
-            "--oencoding",        type=str, metavar='E', default="utf-8",
-            help='Use this character set for output files.')
+            "--oencoding",        type=str, metavar="E", default="utf-8",
+            help="Use this character set for output files.")
         parser.add_argument(
-            "--outputFormat",     type=str, metavar='F', default="mediawiki",
-            choices=[ 'md', 'mediawiki', 'html' ],
-            help='Assume this character set for input files. Default: utf-8.')
+            "--outputFormat",     type=str, metavar="F", default="mediawiki",
+            choices=[ "md", "mediawiki", "html" ],
+            help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--quiet", "-q",      action='store_true',
-            help='Suppress most messages.')
+            "--quiet", "-q",      action="store_true",
+            help="Suppress most messages.")
         parser.add_argument(
-            "--test",             action='store_true',
-            help='Test on some fixed sample data.')
+            "--test",             action="store_true",
+            help="Test on some fixed sample data.")
         parser.add_argument(
-            "--unicode",          action='store_const',  dest='iencoding',
-            const='utf8', help='Assume utf-8 for input files.')
+            "--unicode",          action="store_const",  dest="iencoding",
+            const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--verbose", "-v",    action='count',       default=0,
-            help='Add more messages (repeatable).')
+            "--verbose", "-v",    action="count",       default=0,
+            help="Add more messages (repeatable).")
         parser.add_argument(
-            "--version", action='version', version=__version__,
-            help='Display version information, then exit.')
+            "--version", action="version", version=__version__,
+            help="Display version information, then exit.")
 
         parser.add_argument(
-            'files',             type=str,
+            "files",             type=str,
             nargs=argparse.REMAINDER,
-            help='Path(s) to input file(s)')
+            help="Path(s) to input file(s)")
 
         args0 = parser.parse_args()
         if (args0.verbose): lg.setVerbose(args0.verbose)
@@ -451,13 +451,9 @@ S<no-break> and X<index entry> and Z<No I<POD> in here>.
     else:
         pw = PowerWalk.PowerWalk(
             args.files, open=True, close=True, encoding=args.oencoding)
-        pw.setOption('recursive', False)
+        pw.setOption("recursive", False)
         for path0, fh0, typ in pw.traverse():
             if (typ != PowerWalk.PWType.LEAF): continue
-            #fileNum = pw.travState.stats['itemsReturned']
-            #fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
             doOneFile(path0, fh0)
-            #fh0.close()
 
     if (xfh): xfh.close()
-

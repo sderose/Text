@@ -1,143 +1,40 @@
 #!/usr/bin/perl -w
 #
-# Insert a string or another file, at a given line and offset in stdin.
-#
+# insertAt: Insert a string or file, at a given place in stdin.
 # Written ~2006 by Steven J. DeRose.
-# 2007-02-05 sjd: Add -e.
-# 2008-02-11 sjd: Add -indent. Getopt.
-# 2011-10-04 sjd: Fix ARGV to _ in GetOpt.
-# 2018-09-17: Add --expr.
 #
 use strict;
 use Getopt::Long;
 
-our $VERSION_DATE = "2018-09-17";
-
-my $doEdit     = 0;
-my $expr       = 0;
-my $indent     = 0;
-my $insertion  = "<HERE/>";
-my $newlines   = 0;
-my $quiet      = 0;
-my $targetline = 1;
-my $targetcol  = 1;
-my $verbose    = 0;
-
-
-# Process options
-#
-Getopt::Long::Configure ("ignore_case");
-my $result = GetOptions(
-	"c|column=i"        => \$targetcol,
-	"e|edit!"           => \$doEdit,
-	"expr=s"            => \$expr,
-	"f|file=s"          => sub { $insertion = `cat $_[1]`; },
-	"h|help|?"          => sub { system "perldoc $0"; exit; },
-	"i|indent!"         => \$indent,
-	"l|line=i"          => \$targetline,
-	"m|message=s"       => \$insertion,
-	"n|newlines!"       => \$newlines,
-	"q|quiet!"          => \$quiet,
-	"v|verbose+"        => \$verbose,
-    "version"           => sub {
-		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
-	}
-	);
-
-($result) || die "Bad options.\n";
-
-# Validate and default options
-#
-if ($targetline < 1) {
-	warn "Bad -l (line) value '$targetline'.\n";
-	system "perldoc $0";
-	exit;
-}
-if ($targetcol < 1) {
-	warn "Bad -c (column) value '$targetcol'.\n";
-	system "perldoc $0";
-	exit;
-}
-
-if ($newlines) {
-	$insertion = "\n$insertion\n";
-	($verbose) && warn "Putting newlines around the message.\n";
-}
-
-if ($indent) { $doEdit = 1; }
-
-my $tfile = "";
-my $fh;
-if ($doEdit) {
-	$tfile = "/tmp/insertat_" . int(rand(100000));
-    open $fh, ">$tfile";
-}
-else {
-	$fh = "--";
-}
-
-# warn "$targetline, $targetcol, '$insertion'.\n";
-
-
-###############################################################################
-#
-my $didit = 0;
-my $recnum = 0;
-while (<>) {
-	my $rec = $_;
-    $recnum++;
-    if ($recnum == $targetline ||
-        (!$didit && $expr && $rec =~ m/$expr/)) {
-        vMsg(1, "Inserting at line $recnum.");
-        if ($targetcol < length($rec)) {
- 		   print $fh substr($rec,0,$targetcol-1);
-           print $fh $insertion;
-		   print $fh substr($rec,$targetcol-1);
-		}
-		else {
- 		   print $fh $rec;
-			   print $fh $insertion;
-		}
-		$didit = 1;
-    }
-	else {
-		print $fh $rec;
-    }
-}
-
-($didit) || warn "\nNever reached insertion point, total lines = $recnum.\n";
-
-($quiet) || warn "Inserted '$insertion'.\n";
-
-if ($doEdit) {
-	if ($indent) {
-		my $tfile2 = "$tfile" . "_indent";
-		system "indent $tfile >$tfile2";
-		system "mv $tfile2 $tfile";
-	}
-	system "$ENV{EDITOR} $tfile &";
-	system "sleep 5s";
-	system "rm $tfile";
-}
-
-exit;
-
-
-###############################################################################
-#
+our %metadata = (
+    'title'        => "insertAt.pm",
+    'description'  => "Insert a string or file, at a given place in stdin.",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2006",
+    'modified'     => "2021-02-06",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
 =pod
 
 =head1 Usage
 
-insertat [-l line] [-expr 'regex'] [-c column] [-m 'msg'] [-f path] [-q]
+    insertat [-l line] [-expr 'regex'] [-c column] [-m 'msg'] [-f path] [-q]
 
 Inserts a message or the content of a file, at a certain point in the
 input. The point can be a given
 line number and column, or the first line matching a given regex.
 
-Good for inserting error message where they apply.
 If neither I<-m> nor I<-f> is given, inserts '<HERE/>'.
+
+This can be use to insert error messages at the lines where they apply,
+but remember to do them in reverse order, since inserting them changes
+following line numbers.
 
 
 =head1 Options
@@ -146,7 +43,7 @@ If neither I<-m> nor I<-f> is given, inserts '<HERE/>'.
 
 =item * B<--column> I<n> OR B<-c>
 
-What column to insert at (default 1).
+What column to insert before (default 1 (aka 0)).
 
 =item * B<--edit> OR B<-e>
 
@@ -187,7 +84,20 @@ Print version info and exit.
 =back
 
 
+=head1 To do
+
+Perhaps support inserting multiple things in one pass, crossing them off as
+it goes along.
+
+Support inserting at all matches, not just first.
+
+Options to insert before/replacing/after the match, like splitAt. Or just
+move this functionality in there.
+
+
 =head1 Related commands
+
+C<splitAt> -- similar but inserts line-breaks.
 
 
 =head1 Ownership
@@ -200,3 +110,107 @@ this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
 For the most recent version, see L<http://www.derose.net/steve/utilities/>.
 
 =cut
+
+
+###############################################################################
+# Options
+#
+my $doEdit     = 0;
+my $expr       = 0;
+my $indent     = 0;
+my $insertion  = "<HERE/>";
+my $newlines   = 0;
+my $quiet      = 0;
+my $targetline = 1;
+my $targetcol  = 1;
+my $verbose    = 0;
+
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+	"c|column=i"        => \$targetcol,
+	"e|edit!"           => \$doEdit,
+	"expr=s"            => \$expr,
+	"f|file=s"          => sub { $insertion = `cat $_[1]`; },
+	"h|help|?"          => sub { system "perldoc $0"; exit; },
+	"i|indent!"         => \$indent,
+	"l|line=i"          => \$targetline,
+	"m|message=s"       => \$insertion,
+	"n|newlines!"       => \$newlines,
+	"q|quiet!"          => \$quiet,
+	"v|verbose+"        => \$verbose,
+    "version"           => sub {
+		die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+	}
+	);
+
+($result) || die "Bad options.\n";
+
+
+if ($targetline < 1) {
+	warn "Bad -l (line) value '$targetline'.\n";
+	system "perldoc $0";
+	exit;
+}
+if ($targetcol < 1) {
+	warn "Bad -c (column) value '$targetcol'.\n";
+	system "perldoc $0";
+	exit;
+}
+
+if ($newlines) {
+	$insertion = "\n$insertion\n";
+	($verbose) && warn "Putting newlines around the message.\n";
+}
+
+if ($indent) { $doEdit = 1; }
+
+my $tfile = "";
+my $fh;
+if ($doEdit) {
+	$tfile = "/tmp/insertat_" . int(rand(100000));
+    open $fh, ">$tfile";
+}
+else {
+	$fh = "--";
+}
+
+# warn "$targetline, $targetcol, '$insertion'.\n";
+
+
+###############################################################################
+#
+my $didit = 0;
+my $recnum = 0;
+while (my $rec = <>) {
+    $recnum++;
+    if ($recnum == $targetline ||
+        (!$didit && $expr && $rec =~ m/$expr/)) {
+        vMsg(1, "Inserting at line $recnum.");
+        if ($targetcol < length($rec)) {
+ 		   print $fh substr($rec,0,$targetcol-1)
+ 		       . $insertion . substr($rec,$targetcol-1);
+		}
+		else {
+ 		   print $fh $rec. $insertion;
+		}
+		$didit = 1;
+    }
+	else {
+		print $fh $rec;
+    }
+}
+
+($didit) || warn "\nNever reached insertion point, total lines = $recnum.\n";
+
+($quiet) || warn "Inserted '$insertion'.\n";
+
+if ($doEdit) {
+	if ($indent) {
+		my $tfile2 = "$tfile" . "_indent";
+		system "indent $tfile >$tfile2";
+		system "mv $tfile2 $tfile";
+	}
+	system "$ENV{EDITOR} $tfile &";
+	system "sleep 5s";
+	system "rm $tfile";
+}

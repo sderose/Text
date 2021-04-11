@@ -247,7 +247,8 @@ Explain relation of --skip and --mod in help.
 
   Reports wrong value for $picked?
   Finish --reservoir.
-  Add a partition feature (or use C<disaggregate>)?
+  Add a partition feature (or use C<disaggregate>), for doing train/test/dev
+  splits, n-way cross-validation splits, etc.
 
 
 =head1 Ownership

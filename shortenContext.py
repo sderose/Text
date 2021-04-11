@@ -1,35 +1,73 @@
 #!/usr/bin/env python
 #
-# shortenContext.py: Trim long lines to just a limited around surrounding a
-# given regex match.
-#
+# shortenContext.py: Trim lines to just the surrounding of a regex match.
 # 2018-09-10: Written. Copyright by Steven J. DeRose.
-# Creative Commons Attribution-Share-alike 3.0 unported license.
-# See http://creativecommons.org/licenses/by-sa/3.0/.
-#
-# To do:
 #
 from __future__ import print_function
-import sys, os
+import sys
 import argparse
 import re
-#import string
 import codecs
+
 from PowerWalk import PowerWalk
 
-from alogging import ALogger
-
 __metadata__ = {
-    'creator'      : "Steven J. DeRose",
-    'cre_date'     : "2018-09-10",
-    'language'     : "Python 2.7.6",
-    'version_date' : "2018-09-10",
+    "title"        : "shortenContext.py",
+    "description"  : "Trim lines to just the surrounding of a regex match.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2018-09-10",
+    "modified"     : "2021-02-23",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
-__version__ = __metadata__['version_date']
+__version__ = __metadata__["modified"]
 
-lg = ALogger(1)
 
-def doOneFile(path, fh):
+descr = """
+=Description=
+
+Trim long lines to just a limited around surrounding a
+given regex match.
+
+This is useful, for example, if you are getting `grep` hits in files with
+very long lines, and you want more than just the matched string, but less
+then the entire lines.
+
+
+=Related Commands=
+
+C<grep>
+
+
+=Known bugs and Limitations=
+
+Unfinished....
+
+
+=History=
+
+  2018-09-10: Written by Steven J. DeRose.
+  2021-02-23: New layout.
+
+
+=Rights=
+
+Copyright 2018-09-10 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share-alike 3.0 unported license.
+For further information on this license, see
+[https://creativecommons.org/licenses/by-sa/3.0].
+
+For the most recent version, see [http://www.derose.net/steve/utilities]
+or [https://github.com/sderose].
+
+
+=Options=
+"""
+
+def doOneFile(_path, fh):
     for rec in fh.readlines():
         if (len(rec) < args.maxLength):
             print(rec)
@@ -51,38 +89,10 @@ def getContext(rec, mat):
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 if __name__ == "__main__":
     def processOptions():
-        descr = """
-=head1 Description
-
-Trim long lines to just a limited around surrounding a
-given regex match.
-
-This is useful, for example, if you are getting C<grep> hits in files with
-very long lines, and you want more than just the matched string, but less
-then the entire lines.
-
-=head1 Related Commands
-
-C<grep>
-
-=head1 Known bugs and Limitations
-
-Unfinished....
-
-=head1 Licensing
-
-Copyright 2018-09-10 by Steven J. DeRose. This script is licensed under a
-Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
-
-=head1 Options
-"""
-
         try:
             from BlockFormatter import BlockFormatter
             parser = argparse.ArgumentParser(
@@ -90,9 +100,6 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
         except ImportError:
             parser = argparse.ArgumentParser(description=descr)
 
-        parser.add_argument(
-            "--color",  # Don't default. See below.
-            help='Colorize the output.')
         parser.add_argument(
             "--iencoding",        type=str, metavar='E', default="utf-8",
             help='Assume this character set for input files. Default: utf-8.')
@@ -130,18 +137,15 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
             help='Path(s) to input file(s)')
 
         args0 = parser.parse_args()
-        if (args0.color == None):
-            args0.color = ("USE_COLOR" in os.environ and sys.stderr.isatty())
-        lg.setColors(args0.color)
-        if (args0.verbose): lg.setVerbose(args0.verbose)
         return(args0)
+
 
     ###########################################################################
     #
     args = processOptions()
 
     if (len(args.files) == 0):
-        if (sys.stdin.isatty): lg.error("No files specified....")
+        if (sys.stdin.isatty): sys.stderr.write("Waiting on stdin...\n")
         doOneFile("[STDIN]", sys.stdin)
     else:
         depth = 0
@@ -156,13 +160,7 @@ See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
                 depth += 1
                 continue
 
-            fileNum = pw.stats['itemsReturned']
-            if (fileNum % args.tickInterval == 0):
-                lg.vMsg(0, "At item #%d" % (fileNum))
+            fileNum = pw.travState.stats['itemsReturned']
             fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
             doOneFile(path0, fh0)
             fh0.close()
-
-    if (not args.quiet):
-        lg.vMsg(0,"Done.")
-        lg.showStats()

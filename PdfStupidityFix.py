@@ -9,23 +9,22 @@ import codecs
 import re
 from time import time
 
-#import PowerWalk
-
 PY2 = sys.version_info[0] == 2
 PY3 = sys.version_info[0] == 3
 
 __metadata__ = {
-    'title'        : "PdfStupidityFix.py",
-    'rightsHolder' : "Steven J. DeRose",
-    'creator'      : "http://viaf.org/viaf/50334488",
-    'type'         : "http://purl.org/dc/dcmitype/Software",
-    'language'     : "Python 3.7",
-    'created'      : "2020-09-25",
-    'modified'     : "2020-09-30",
-    'publisher'    : "http://github.com/sderose",
-    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+    "title"        : "PdfStupidityFix.py",
+    "description"  : "Make spacing, hyphenation, etc. better.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2020-09-25",
+    "modified"     : "2020-09-30",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
-__version__ = __metadata__['modified']
+__version__ = __metadata__["modified"]
 
 
 descr = """
@@ -47,7 +46,7 @@ selecting something often produces text such as shown below
 
 ==="Raw" version===
 
-This is edited to have line-breaks, hyphenation, and spacing comparable to
+This is edited to show line-breaks, hyphenation, and spacing comparable to
 what you actually see:
 
   SENSE2VEC - A FAST AND ACCURATE METHOD
@@ -107,7 +106,7 @@ Neural word representations have proven useful in Natural Language Processing (N
 ===Chrome 86.0.4240.75 ===
 
 Chrome seems better at removing soft hyphens and excess space.
-It keeps more line breaks that Safari, some of which seem odd (it seems to
+It keeps more line breaks than Safari, some of which seem odd. It seems to
 think if the previous visual lines ends with a non-letter, or the next begins
 with a non-letter, that's a paragraph break? For example, after "8%" and
 before a quotation mark. But still, why not join up "the\\napplication"?
@@ -159,7 +158,7 @@ average error reduction in unlabeled attachment scores across 6 languages.
 ===Acrobat Reader===
 
 Similar to Chrome, but drops braces from author email address list, and
-inserts 'g' before the @ (?). They also break lines quite differently
+inserts "g" before the @ (?). They also break lines quite differently
 
 SENSE2VEC - A FAST AND ACCURATE METHOD
 FOR WORD SENSE DISAMBIGUATION IN
@@ -245,8 +244,8 @@ forms, etc., but has (e.g.):
     undetected
     undetectible
 
-(Note missing 'detects', 'detected', 'detecting'; and it counts dropping final
-'e' as regular, since 'placing' is not included).
+(Note missing "detects", "detected", "detecting"; and it counts dropping final
+"e" as regular, since "placing" is not included).
 
 * It does, however, have 5540 -ing forms. Possibly these are ones that
 the source dictionary considered significant enough to have main entries.
@@ -257,7 +256,7 @@ the source dictionary considered significant enough to have main entries.
 =Known bugs and Limitations=
 
 The rule that hyphens are removed if either side is not a word, is not
-sufficient. For example, both 'mod' (or at least 'Mod') and 'els' are in `/usr/share/dict/words`, so 'mod-els' won't have the hyphen removed.
+sufficient. For example, both "mod" (or at least "Mod") and "els" are in `/usr/share/dict/words`, so "mod-els" won't have the hyphen removed.
 
 Tokens with multiple issues, like "incorporatingmulti-sense" are not fixed.
 
@@ -278,11 +277,14 @@ My `Text/wordPartTable.py`.
 
 =To do=
 
+Improve cases like "corefer-ence", where neither then big word nor either of
+the parts is known. Maybe keep as hyphenated word?
+
 Add an option to disable some or all of the word-form handling, in case
 people want to use this with alternative dictionaries that include forms.
 
 Add code to degeminate double consonants before -ed or -ing, as in
-'stopped' or 'referring' (this depends on syllable count, final stress,
+"stopped" or "referring" (this depends on syllable count, final stress,
 having one but not two vowels before the doublet, etc.,
 and still has exceptions.
 
@@ -314,20 +316,20 @@ def warn(lvl, msg):
 
 bullets = {
     # Bullets per se
-    u"\u2022": 'BULLET',
-    u"\u2023": 'TRIANGULAR BULLET',
-    u"\u2043": 'HYPHEN BULLET',
-    u"\u204c": 'BLACK LEFTWARDS BULLET',
-    u"\u204d": 'BLACK RIGHTWARDS BULLET',
-    u"\u2219": 'BULLET OPERATOR',
-    u"\u25ce": 'BULLSEYE',
-    u"\u25d8": 'INVERSE BULLET',
-    u"\u25e6": 'WHITE BULLET',
-    u"\u2619": 'REVERSED ROTATED FLORAL HEART BULLET',
-    u"\u2765": 'ROTATED HEAVY BLACK HEART BULLET',
-    u"\u2767": 'ROTATED FLORAL HEART BULLET',
-    u"\u29be": 'CIRCLED WHITE BULLET',
-    u"\u29bf": 'CIRCLED BULLET',
+    u"\u2022": "BULLET",
+    u"\u2023": "TRIANGULAR BULLET",
+    u"\u2043": "HYPHEN BULLET",
+    u"\u204c": "BLACK LEFTWARDS BULLET",
+    u"\u204d": "BLACK RIGHTWARDS BULLET",
+    u"\u2219": "BULLET OPERATOR",
+    u"\u25ce": "BULLSEYE",
+    u"\u25d8": "INVERSE BULLET",
+    u"\u25e6": "WHITE BULLET",
+    u"\u2619": "REVERSED ROTATED FLORAL HEART BULLET",
+    u"\u2765": "ROTATED HEAVY BLACK HEART BULLET",
+    u"\u2767": "ROTATED FLORAL HEART BULLET",
+    u"\u29be": "CIRCLED WHITE BULLET",
+    u"\u29bf": "CIRCLED BULLET",
 }
 
 lex = {}
@@ -353,7 +355,7 @@ class Lexicon(dict):
         the Lexicon. This over-accepts, because it tries regular endings even
         though they might not be correct. For example, "zebraing" counts.
 
-        '' and single characters also count as True.
+        "" and single characters also count as True.
         """
         if (len(w)<=1):
             return True
@@ -361,16 +363,16 @@ class Lexicon(dict):
             return True
         lw = w.lower()
         if (lw in self): return True
-        if (lw.endswith('s')   and lw[0:-1] in self):
+        if (lw.endswith("s")   and lw[0:-1] in self):
             return True
-        if (lw.endswith('es')  and lw[0:-2] in self):
+        if (lw.endswith("es")  and lw[0:-2] in self):
             return True
-        if (lw.endswith('ies') and (lw[0:-3] + 'y') in self):
+        if (lw.endswith("ies") and (lw[0:-3] + "y") in self):
             return True
-        if (lw.endswith('ed')  and lw[0:-2] in self):
+        if (lw.endswith("ed")  and lw[0:-2] in self):
             return True
-        if (lw.endswith('ing') and
-            (lw[0:-3] in self or lw[0:-3]+'e' in self)):
+        if (lw.endswith("ing") and
+            (lw[0:-3] in self or lw[0:-3]+"e" in self)):
             return True
         return False
 
@@ -391,7 +393,7 @@ def doAllFiles(pathlist):
             doOneFile(path)
 
 def closeup(mat):
-    return re.sub(' ', '', mat.group(1))
+    return re.sub(" ", "", mat.group(1))
 
 def doOneFile(path):
     """Read and deal with one individual file.
@@ -409,11 +411,11 @@ def doOneFile(path):
 
     for rec in fh.readlines():
         buf = ""
-        rec = re.sub(r'\b((\w ){4,})', closeUp, rec)  # Spaced-out titles
-        tokens = re.split(r'([-\w]+)', rec)
+        rec = re.sub(r"\b((\w ){4,})", closeUp, rec)  # Spaced-out titles
+        tokens = re.split(r"([-\w]+)", rec)
         warn(2, "Tokens: %s" % ("|".join(tokens)))
         for token in tokens:
-            if (not re.match(r'\w', token)):          # punct, space, etc.
+            if (not re.match(r"\w", token)):          # punct, space, etc.
                 buf += token
                 continue
             if (token.isupper()):                     # Acronym
@@ -425,25 +427,25 @@ def doOneFile(path):
                 token = "\n" + token
             elif ("-" in token):                      # Hyphenated
                 warn(2, "hyphen: '%s'" % (token))
-                mat = re.match(r'(.*)-(.*)', token)
+                mat = re.match(r"(.*)-(.*)", token)
                 if (lex.isWord(mat.group(1)+mat.group(2))):
                     token = mat.group(1)+mat.group(2)
                 elif (not lex.isWord(mat.group(1)) or
                     not lex.isWord(mat.group(2))):
-                    token = mat.group(1) + ' ' + mat.group(2)
+                    token = mat.group(1) + " " + mat.group(2)
             elif (not lex.isWord(lToken)):            # Mystery word
                 warn(2, "non-word: '%s'" % (lToken))
                 for j in range(1, len(lToken)):
                     p1 = lToken[0:j]
                     p2 = lToken[j:]
                     if (lex.isWord(p1) and lex.isWord(p2)):
-                        token = token[0:j] + ' ' + token[j:]
+                        token = token[0:j] + " " + token[j:]
                         break
             buf += token
-        print(re.sub(r'\s\s+', ' ', buf))
+        print(re.sub(r"\s\s+", " ", buf))
 
 def closeUp(mat):
-    return re.sub(r'(\S) ', "\\1", mat.group(1))
+    return re.sub(r"(\S) ", "\\1", mat.group(1))
 
 
 ###############################################################################
@@ -465,35 +467,35 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--dictionary",       type=str, metavar='D',
+            "--dictionary",       type=str, metavar="D",
             default="/usr/share/dict/words",
-            help='Dictionary to use.')
+            help="Dictionary to use.")
         parser.add_argument(
-            "--iencoding",        type=str, metavar='E', default="utf-8",
-            help='Assume this character set for input files. Default: utf-8.')
+            "--iencoding",        type=str, metavar="E", default="utf-8",
+            help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--ignoreCase", "-i", action='store_true',
-            help='Disregard case distinctions.')
+            "--ignoreCase", "-i", action="store_true",
+            help="Disregard case distinctions.")
         parser.add_argument(
-            "--quiet", "-q",      action='store_true',
-            help='Suppress most messages.')
+            "--quiet", "-q",      action="store_true",
+            help="Suppress most messages.")
         parser.add_argument(
-            "--test",             action='store_true',
-            help='Run a demo/test on some fixed sample text.')
+            "--test",             action="store_true",
+            help="Run a demo/test on some fixed sample text.")
         parser.add_argument(
-            "--unicode",          action='store_const',  dest='iencoding',
-            const='utf8', help='Assume utf-8 for input files.')
+            "--unicode",          action="store_const",  dest="iencoding",
+            const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--verbose", "-v",    action='count',       default=0,
-            help='Add more messages (repeatable).')
+            "--verbose", "-v",    action="count",       default=0,
+            help="Add more messages (repeatable).")
         parser.add_argument(
-            "--version", action='version', version=__version__,
-            help='Display version information, then exit.')
+            "--version", action="version", version=__version__,
+            help="Display version information, then exit.")
 
         parser.add_argument(
-            'files',             type=str,
+            "files",             type=str,
             nargs=argparse.REMAINDER,
-            help='Path(s) to input file(s)')
+            help="Path(s) to input file(s)")
 
         args0 = parser.parse_args()
         return(args0)

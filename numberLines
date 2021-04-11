@@ -33,7 +33,7 @@ Can also use hex numbers (I<--hex),
 remove numbers (I<--remove>),
 insert at the end rather than the beginning (I<--suffix>),
 insert each line's length instead of a serial number (I<--byLength>),
-squeeze runs of blank lines, etc.
+squeeze or just not number runs of blank lines, etc.
 
 
 =head1 Options
