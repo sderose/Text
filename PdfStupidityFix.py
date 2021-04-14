@@ -35,6 +35,23 @@ do not reliably represent word boundaries.
 This is a pain to fix by hand, though difficult to fix automatically.
 This script makes a valiant if imperfect effort.
 
+==Basic rules for this script==
+
+* Chains of alternating spaces and letters will be closed up, as in
+"I N T R O D U C T I O N".
+
+* Hyphens are removed when the strings they join are not both words, but the joined form is.
+
+* A word is split up when it is not in the dictionary,
+but it can be split at some point such that both resulting parts are.
+
+* Line-breaks are inserted before various bullet characters.
+
+* Whitespace is normalized.
+
+Lookups are done against a dictionary, and try rudimentary suffix-stripping, ignoring case, etc.
+See below re. the default word-list.
+
 
 ==Examples==
 
@@ -186,23 +203,6 @@ embeddings on neural dependency parsing, yielding a greater than 8%
 average error reduction in unlabeled attachment scores across 6 languages.
 
 
-==Basic rules for this script==
-
-* A bunch of alternating spaces and letters will be closed up, as in
-"I N T R O D U C T I O N".
-
-* Hyphens are removed when the strings they join are not both words, but the joined form is.
-
-* A word is split up when it is not in the dictionary,
-but it can be split at some point such that both resulting parts are.
-
-* Line-breaks are inserted before various bullet characters.
-
-* Whitespace is normalized.
-
-* Lookups are done against a dictionary, and try rudimentary suffix-stripping, ignoring case, etc. See below re. the default word-list.
-
-
 =The Lexicon=
 
 Correctly joining and splitting requires checking whether you have
@@ -253,6 +253,11 @@ the source dictionary considered significant enough to have main entries.
 * It lacks many recent terms.
 
 
+=Related commands=
+
+My `Text/wordPartTable.py`.
+
+
 =Known bugs and Limitations=
 
 The rule that hyphens are removed if either side is not a word, is not
@@ -264,28 +269,26 @@ The usual *nix dictionary, and the workarounds for it here, are limited.
 
 Why doesn't "ChineseRestaurant" get fixed?
 
-
-=Related commands=
-
-My `Text/wordPartTable.py`.
+Misses cases with terminal punctuation (partial fix in).
 
 
 =History=
 
 * 2020-09-25: Written by Steven J. DeRose.
+* 2021-04-14: Add --bullets, --asterisks, --stars.
 
 
 =To do=
 
-Improve cases like "corefer-ence", where neither then big word nor either of
+Improve cases like "corefer-ence", where neither the big word nor either of
 the parts is known. Maybe keep as hyphenated word?
 
 Add an option to disable some or all of the word-form handling, in case
 people want to use this with alternative dictionaries that include forms.
 
-Add code to degeminate double consonants before -ed or -ing, as in
-"stopped" or "referring" (this depends on syllable count, final stress,
-having one but not two vowels before the doublet, etc.,
+Add code to deduplicate consonants before -ed or -ing, as in
+"stopped" or "referring". Won't be perfect, since this depends on syllable count,
+final stress, having one but not two vowels before the doublet, etc. --
 and still has exceptions.
 
 Measure the coverage of `/usr/share/dict/words` against Google ngrams by era,
@@ -293,6 +296,7 @@ and use that to inform a replacement(s).
 
 Recover correct inflections via Wiktionary or various other means, and make
 a better word-list.
+
 
 =Rights=
 
@@ -315,25 +319,97 @@ def warn(lvl, msg):
     if (lvl < 0): sys.exit()
 
 bullets = {
+    # Common chars used as bullets
+    "*": "ASTERISK",
+    # "o": "LATIN SMALL LETTER O",  # except splitting on it might be too aggressive (make optional?)
+    # "+": "PLUS",
     # Bullets per se
-    u"\u2022": "BULLET",
-    u"\u2023": "TRIANGULAR BULLET",
-    u"\u2043": "HYPHEN BULLET",
-    u"\u204c": "BLACK LEFTWARDS BULLET",
-    u"\u204d": "BLACK RIGHTWARDS BULLET",
-    u"\u2219": "BULLET OPERATOR",
-    u"\u25ce": "BULLSEYE",
-    u"\u25d8": "INVERSE BULLET",
-    u"\u25e6": "WHITE BULLET",
-    u"\u2619": "REVERSED ROTATED FLORAL HEART BULLET",
-    u"\u2765": "ROTATED HEAVY BLACK HEART BULLET",
-    u"\u2767": "ROTATED FLORAL HEART BULLET",
-    u"\u29be": "CIRCLED WHITE BULLET",
-    u"\u29bf": "CIRCLED BULLET",
+    chr(0x2022): "BULLET",
+    chr(0x2023): "TRIANGULAR BULLET",
+    chr(0x2043): "HYPHEN BULLET",
+    chr(0x204c): "BLACK LEFTWARDS BULLET",
+    chr(0x204d): "BLACK RIGHTWARDS BULLET",
+    chr(0x2219): "BULLET OPERATOR",
+    chr(0x25ce): "BULLSEYE",
+    chr(0x25d8): "INVERSE BULLET",
+    chr(0x25e6): "WHITE BULLET",
+    chr(0x2619): "REVERSED ROTATED FLORAL HEART BULLET",
+    chr(0x2765): "ROTATED HEAVY BLACK HEART BULLET",
+    chr(0x2767): "ROTATED FLORAL HEART BULLET",
+    chr(0x29be): "CIRCLED WHITE BULLET",
+    chr(0x29bf): "CIRCLED BULLET",
+}
+
+asterisks = {
+    chr(0x02042): "ASTERISM",
+    chr(0x0204e): "LOW ASTERISK",
+    chr(0x02051): "TWO ASTERISKS ALIGNED VERTICALLY",
+    chr(0x02217): "ASTERISK OPERATOR",
+    chr(0x0229b): "CIRCLED ASTERISK OPERATOR",
+    chr(0x02722): "FOUR TEARDROP-SPOKED ASTERISK",
+    chr(0x02723): "FOUR BALLOON-SPOKED ASTERISK",
+    chr(0x02724): "HEAVY FOUR BALLOON-SPOKED ASTERISK",
+    chr(0x02725): "FOUR CLUB-SPOKED ASTERISK",
+    chr(0x02731): "HEAVY ASTERISK",
+    chr(0x02732): "OPEN CENTRE ASTERISK",
+    chr(0x02733): "EIGHT SPOKED ASTERISK",
+    chr(0x0273a): "SIXTEEN POINTED ASTERISK",
+    chr(0x0273b): "TEARDROP-SPOKED ASTERISK",
+    chr(0x0273c): "OPEN CENTRE TEARDROP-SPOKED ASTERISK",
+    chr(0x0273d): "HEAVY TEARDROP-SPOKED ASTERISK",
+    chr(0x02743): "HEAVY TEARDROP-SPOKED PINWHEEL ASTERISK",
+    chr(0x02749): "BALLOON-SPOKED ASTERISK",
+    chr(0x0274a): "EIGHT TEARDROP-SPOKED PROPELLER ASTERISK",
+    chr(0x0274b): "HEAVY EIGHT TEARDROP-SPOKED PROPELLER ASTERISK",
+    chr(0x029c6): "SQUARED ASTERISK",
+    chr(0x02a6e): "EQUALS WITH ASTERISK",
+    chr(0x0a673): "SLAVONIC ASTERISK",
+    chr(0x0fe61): "SMALL ASTERISK",
+    chr(0x0ff0a): "FULLWIDTH ASTERISK",
+    chr(0x1f7af): "LIGHT FIVE SPOKED ASTERISK",
+    chr(0x1f7b0): "MEDIUM FIVE SPOKED ASTERISK",
+    chr(0x1f7b1): "BOLD FIVE SPOKED ASTERISK",
+    chr(0x1f7b2): "HEAVY FIVE SPOKED ASTERISK",
+    chr(0x1f7b3): "VERY HEAVY FIVE SPOKED ASTERISK",
+    chr(0x1f7b4): "EXTREMELY HEAVY FIVE SPOKED ASTERISK",
+    chr(0x1f7b5): "LIGHT SIX SPOKED ASTERISK",
+    chr(0x1f7b6): "MEDIUM SIX SPOKED ASTERISK",
+    chr(0x1f7b7): "BOLD SIX SPOKED ASTERISK",
+    chr(0x1f7b8): "HEAVY SIX SPOKED ASTERISK",
+    chr(0x1f7b9): "VERY HEAVY SIX SPOKED ASTERISK",
+    chr(0x1f7ba): "EXTREMELY HEAVY SIX SPOKED ASTERISK",
+    chr(0x1f7bb): "LIGHT EIGHT SPOKED ASTERISK",
+    chr(0x1f7bc): "MEDIUM EIGHT SPOKED ASTERISK",
+    chr(0x1f7bd): "BOLD EIGHT SPOKED ASTERISK",
+    chr(0x1f7be): "HEAVY EIGHT SPOKED ASTERISK",
+    chr(0x1f7bf): "VERY HEAVY EIGHT SPOKED ASTERISK",
+}
+
+stars = {
+    chr(0x02726): "BLACK FOUR POINTED STAR",
+    chr(0x02727): "WHITE FOUR POINTED STAR",
+    chr(0x02729): "STRESS OUTLINED WHITE STAR",
+    chr(0x0272a): "CIRCLED WHITE STAR",
+    chr(0x0272b): "OPEN CENTRE BLACK STAR",
+    chr(0x0272c): "BLACK CENTRE WHITE STAR",
+    chr(0x0272d): "OUTLINED BLACK STAR",
+    chr(0x0272e): "HEAVY OUTLINED BLACK STAR",
+    chr(0x0272f): "PINWHEEL STAR",
+    chr(0x02730): "SHADOWED WHITE STAR",
+    chr(0x02734): "EIGHT POINTED BLACK STAR",
+    chr(0x02735): "EIGHT POINTED PINWHEEL STAR",
+    chr(0x02736): "SIX POINTED BLACK STAR",
+    chr(0x02737): "EIGHT POINTED RECTILINEAR BLACK STAR",
+    chr(0x02738): "HEAVY EIGHT POINTED RECTILINEAR BLACK STAR",
+    chr(0x02739): "TWELVE POINTED BLACK STAR",
+    chr(0x02742): "CIRCLED OPEN CENTRE EIGHT POINTED STAR",
+    chr(0x029e6): "GLEICH STARK",
+    chr(0x02b50): "WHITE MEDIUM STAR",
+    chr(0x02b51): "BLACK SMALL STAR",
+    chr(0x02b52): "WHITE SMALL STAR",
 }
 
 lex = {}
-fileCount = dirCount = 0
 
 
 ###############################################################################
@@ -341,6 +417,7 @@ fileCount = dirCount = 0
 #
 class Lexicon(dict):
     def __init__(self, path, ignoreCase=True):
+        self.ignoreCase = ignoreCase
         startTime = time()
         with codecs.open(path, "rb", encoding="utf-8") as d:
             for w in d.readlines():
@@ -380,16 +457,13 @@ class Lexicon(dict):
 ###############################################################################
 #
 def doAllFiles(pathlist):
-    global dirCount, fileCount
     for path in pathlist:
         if (os.path.isdir(path)):
-            dirCount += 1
             if (not args.recursive): continue
             children = os.listdir(path)
             for ch in children:
                 doAllFiles(ch)
         else:
-            fileCount += 1
             doOneFile(path)
 
 def closeup(mat):
@@ -423,8 +497,11 @@ def doOneFile(path):
                 continue
 
             lToken = token.lower()
-            if (token in bullets):                    # List item?
+            lToken2 = re.sub(r"\W*(.*?)\W*$", "\\1", lToken)
+
+            if (token in listMarkers):                # List item?
                 token = "\n" + token
+
             elif ("-" in token):                      # Hyphenated
                 warn(2, "hyphen: '%s'" % (token))
                 mat = re.match(r"(.*)-(.*)", token)
@@ -433,14 +510,17 @@ def doOneFile(path):
                 elif (not lex.isWord(mat.group(1)) or
                     not lex.isWord(mat.group(2))):
                     token = mat.group(1) + " " + mat.group(2)
-            elif (not lex.isWord(lToken)):            # Mystery word
-                warn(2, "non-word: '%s'" % (lToken))
-                for j in range(1, len(lToken)):
-                    p1 = lToken[0:j]
-                    p2 = lToken[j:]
+
+            elif (not lex.isWord(lToken2)):           # Mystery word
+                warn(2, "non-word: '%s' (->'%s')" % (lToken, lToken2))
+                for j in range(1, len(lToken2)):
+                    p1 = lToken2[0:j]
+                    p2 = lToken2[j:]
                     if (lex.isWord(p1) and lex.isWord(p2)):
-                        token = token[0:j] + " " + token[j:]
+                        token = re.sub(r"(\W*)(.*?)(\W*)$", "\\1"+p1+" "+p2+"\\2", token)
+                        #token = token[0:j] + " " + token[j:]
                         break
+
             buf += token
         print(re.sub(r"\s\s+", " ", buf))
 
@@ -467,6 +547,12 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
+            "--asterisks", action="store_true",
+            help="Break before various asterisk characters.")
+        parser.add_argument(
+            "--bullets", action="store_true",
+            help="Break before various bullet characters.")
+        parser.add_argument(
             "--dictionary",       type=str, metavar="D",
             default="/usr/share/dict/words",
             help="Dictionary to use.")
@@ -474,11 +560,11 @@ if __name__ == "__main__":
             "--iencoding",        type=str, metavar="E", default="utf-8",
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--ignoreCase", "-i", action="store_true",
-            help="Disregard case distinctions.")
-        parser.add_argument(
             "--quiet", "-q",      action="store_true",
             help="Suppress most messages.")
+        parser.add_argument(
+            "--stars", action="store_true",
+            help="Break before various star characters..")
         parser.add_argument(
             "--test",             action="store_true",
             help="Run a demo/test on some fixed sample text.")
@@ -502,8 +588,11 @@ if __name__ == "__main__":
 
     ###########################################################################
     #
-    fileCount = 0
     args = processOptions()
+    listMarkers = {}
+    if (args.bullets): listMarkers.update(bullets)
+    if (args.asterisks): listMarkers.update(asterisks)
+    if (args.stars): listMarkers.update(stars)
 
     lex = Lexicon(args.dictionary)
 
@@ -519,6 +608,3 @@ if __name__ == "__main__":
         doOneFile(None)
     else:
         doAllFiles(args.files)
-
-    if (not args.quiet):
-        warn(0, "Done, %d files.\n" % (fileCount))

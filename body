@@ -2,6 +2,7 @@
 #
 # body: Like 'head' and 'tail', but grab any range, given
 #    starting and ending line, column, pattern, etc.
+# 2006-03-23: Written by Steven J. DeRose.
 #
 use strict;
 use Getopt::Long;
@@ -13,6 +14,7 @@ use alogging;
 
 our %metadata = (
     'title'        => "body",
+    'description'  => "Like 'head' and 'tail', but grab any range.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
@@ -325,6 +327,8 @@ Add a way to partition file(s) into multiple, such as extracting all the
 n-level <div>s from HTML, all the classes from Python, etc.
 
 Should add I<--fbyte>, I<--lbyte>, I<--nchars>, I<--nbytes>.
+
+Way to get all but the last N lines?
 
 Allow counting by tokens?
 
