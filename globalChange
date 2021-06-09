@@ -1710,7 +1710,7 @@ sub doOneItem {
     }
 
     my $cmd = "cp --attributes -p '$file' '$tmpFile'";
-    alogging::vMSg(1, "Running: $cmd");
+    alogging::vMsg(1, "Running: $cmd");
     system "$cmd";
     if ($@) {
         alogging::eMsg(0, "Failed to copy permissions/attributes: $@");
@@ -1719,7 +1719,7 @@ sub doOneItem {
     if ($backup) {
         my $tgt = "$backupDirectory$file.$backupExtension";
         my $cmd = "mv '$file' '$tgt'";
-        alogging::vMSg(1, "Running: $cmd");
+        alogging::vMsg(1, "Running: $cmd");
         system $cmd;
         if ($@) {
             alogging::eMsg(0,

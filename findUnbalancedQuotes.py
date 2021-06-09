@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# findUnbalancedQuotes.py
+# findUnbalancedQuotes.py: Report lines with odd quotation patterns.
 #
 from __future__ import print_function
 import sys, os, argparse
@@ -18,6 +18,7 @@ if PY3:
 
 __metadata__ = {
     'title'        : "findUnbalancedQuotes.py",
+    "description"  : "Report lines with odd quotation patterns.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
     'type'         : "http://purl.org/dc/dcmitype/Software",
@@ -120,41 +121,6 @@ pairedQuotes = [
 
 ###############################################################################
 #
-def processOptions():
-    parser = argparse.ArgumentParser(
-        description=descr, formatter_class=MarkupHelpFormatter)
-
-    parser.add_argument(
-        "--iencoding",        type=str, metavar='E', default="utf-8",
-        help='Assume this character set for input files. Default: utf-8.')
-    parser.add_argument(
-        "--oencoding",        type=str, metavar='E',
-        help='Use this character set for output files.')
-    parser.add_argument(
-        "--quiet", "-q",      action='store_true',
-        help='Suppress most messages.')
-    parser.add_argument(
-        "--unicode",          action='store_const',  dest='iencoding',
-        const='utf8', help='Assume utf-8 for input files.')
-    parser.add_argument(
-        "--verbose", "-v",    action='count',       default=0,
-        help='Add more messages (repeatable).')
-    parser.add_argument(
-        "--version", action='version', version=__version__,
-        help='Display version information, then exit.')
-
-    parser.add_argument(
-        'files',             type=str,
-        nargs=argparse.REMAINDER,
-        help='Path(s) to input file(s)')
-
-    args0 = parser.parse_args()
-    lg.setVerbose(args0.verbose)
-    return(args0)
-
-
-###############################################################################
-#
 def tryOneItem(path):
     """Try to open a file (or directory, if -r is set).
     """
@@ -238,9 +204,41 @@ def report(recnum, msg, rec):
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
+def processOptions():
+    parser = argparse.ArgumentParser(
+        description=descr, formatter_class=MarkupHelpFormatter)
+
+    parser.add_argument(
+        "--iencoding",        type=str, metavar='E', default="utf-8",
+        help='Assume this character set for input files. Default: utf-8.')
+    parser.add_argument(
+        "--oencoding",        type=str, metavar='E',
+        help='Use this character set for output files.')
+    parser.add_argument(
+        "--quiet", "-q",      action='store_true',
+        help='Suppress most messages.')
+    parser.add_argument(
+        "--unicode",          action='store_const',  dest='iencoding',
+        const='utf8', help='Assume utf-8 for input files.')
+    parser.add_argument(
+        "--verbose", "-v",    action='count',       default=0,
+        help='Add more messages (repeatable).')
+    parser.add_argument(
+        "--version", action='version', version=__version__,
+        help='Display version information, then exit.')
+
+    parser.add_argument(
+        'files',             type=str,
+        nargs=argparse.REMAINDER,
+        help='Path(s) to input file(s)')
+
+    args0 = parser.parse_args()
+    lg.setVerbose(args0.verbose)
+    return(args0)
+
+
 args = processOptions()
 
 if (len(args.files) == 0):
