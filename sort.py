@@ -28,17 +28,17 @@ __version__ = __metadata__["modified"]
 
 
 descr = """
-=head1 Description
+=Description=
 
 *nix C<sort> is a little weird, so do something straughtforward, without locale.
 
 
-=head1 Related Commands
+=Related Commands=
 
 `msort`
 
 
-=head1 Known bugs and Limitations
+=Known bugs and Limitations=
 
 Can't specify *parts* of fields or multiple fields.
 
@@ -62,7 +62,7 @@ For the most recent version, see [http://www.derose.net/steve/utilities]
 or [https://github.com/sderose].
 
 
-=head1 Options
+=Options=
 """
 
 

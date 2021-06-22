@@ -13,13 +13,8 @@ import PowerWalk
 from alogging import ALogger
 lg = ALogger(1)
 
-PY2 = sys.version_info[0] == 2
 PY3 = sys.version_info[0] == 3
-if PY2:
-    string_types = basestring
-    import htmlentitydefs as entities
-else:
-    string_types = str
+if PY3:
     from html import entities
     def unichr(n): return chr(n)
 
@@ -132,7 +127,7 @@ You can put these changes into a file and apply them all with my
 `globalChange` script.
 
 
-=head1 Known bugs and limitations
+=Known bugs and limitations=
 
 `--outputFormat` is unfinished. It mainly just does 'mediawiki', but 'html'
 should work for inline markup and for headings.
@@ -194,7 +189,7 @@ def escapeXmlContent(s):  # From sjdUtils.py
     This escaping is appropriate for XML text content.
     """
     if (s is None): return("")
-    if (not isinstance(s, string_types)): s = str(s)
+    if (not isinstance(s, str)): s = str(s)
     s = s = re.sub(r"[\x01-\x08\x0b\x0c\x0e-\x1f]", "", s)
     s = re.sub(r"&",   "&amp;",  s)
     s = re.sub(r"<",   "&lt;",   s)
@@ -321,7 +316,7 @@ def fixInline(mat):
             return "<%s>%s</%s>" % (
                 codeMap[code][4], escapeXmlContent(txt), codeMap[code][4])
     else:
-        lg.eMsg(0, "Bad inline POD code '%s' with text '%s'." % (code, txt))
+        lg.error(0, "Bad inline POD code '%s' with text '%s'." % (code, txt))
         txt = mat.group()
     return txt
 
@@ -337,7 +332,7 @@ def decodeSpecialChar(text):
     try:
         c = unichr(entities.name2codepoint[text])
     except KeyError:
-        lg.eMsg(0, "Unrecognized value '%s' for E<> code." % (text))
+        lg.error(0, "Unrecognized value '%s' for E<> code." % (text))
         c = "<E%s>" % (text)
     return c
 
@@ -358,36 +353,36 @@ if __name__ == "__main__":
             "--extract-to", "--extractTo", type=str, metavar="F", default="",
             dest="extractTo", help="Write a copy to this file.")
         parser.add_argument(
-            "--iencoding",        type=str, metavar="E", default="utf-8",
+            "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--justPOD",              action="store_true",
+            "--justPOD", action="store_true",
             help='Wait for "=pod" line to start.')
         parser.add_argument(
-            "--oencoding",        type=str, metavar="E", default="utf-8",
+            "--oencoding", type=str, metavar="E", default="utf-8",
             help="Use this character set for output files.")
         parser.add_argument(
-            "--outputFormat",     type=str, metavar="F", default="mediawiki",
+            "--outputFormat", type=str, metavar="F", default="mediawiki",
             choices=[ "md", "mediawiki", "html" ],
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--quiet", "-q",      action="store_true",
+            "--quiet", "-q", action="store_true",
             help="Suppress most messages.")
         parser.add_argument(
-            "--test",             action="store_true",
+            "--test", action="store_true",
             help="Test on some fixed sample data.")
         parser.add_argument(
-            "--unicode",          action="store_const",  dest="iencoding",
+            "--unicode", action="store_const", dest="iencoding",
             const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--verbose", "-v",    action="count",       default=0,
+            "--verbose", "-v", action="count", default=0,
             help="Add more messages (repeatable).")
         parser.add_argument(
             "--version", action="version", version=__version__,
             help="Display version information, then exit.")
 
         parser.add_argument(
-            "files",             type=str,
+            "files", type=str,
             nargs=argparse.REMAINDER,
             help="Path(s) to input file(s)")
 
@@ -398,29 +393,29 @@ if __name__ == "__main__":
     sample = """
 =pod
 
-=head1 Usage
+=Usage=
 
     pod2md.py [options] [files]
 
-=head2 The options
+==The options==
 
 =over
 
-=item * Aardvark
+* Aardvark
 
-=item * Basilisk
+* Basilisk
 
-=item * Cats
+* Cats
 
 =over
 
-=item * Lions
+* Lions
 
-=item * Tigers
+* Tigers
 
 =back
 
-=item * And not Bears, oh my.
+* And not Bears, oh my.
 
 =back
 
@@ -431,6 +426,7 @@ S<no-break> and X<index entry> and Z<No I<POD> in here>.
 
 =cut
 """
+
     ###########################################################################
     #
     args = processOptions()
