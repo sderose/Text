@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# findUnbalancedQuotes.py: Scan for suspicious quoting.
+# findUnbalancedQuotes.py: Report lines with odd quotation patterns.
 # 2017-07-03: Written by Steven J. DeRose.
 #
 from __future__ import print_function
@@ -17,7 +17,7 @@ if PY3:
 
 __metadata__ = {
     'title'        : "findUnbalancedQuotes.py",
-    'description'  : "Scan for suspicious quoting.",
+    "description"  : "Report lines with odd quotation patterns.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
     'type'         : "http://purl.org/dc/dcmitype/Software",

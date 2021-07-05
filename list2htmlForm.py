@@ -47,7 +47,7 @@ Add more detailed messages (doesn't do much at the moment).
 * B<--version>
 Display version info and exit.
 
-=head Related Commands
+=Related Commands=
 
 =Known bugs and limitations=
 

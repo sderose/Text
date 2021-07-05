@@ -27,7 +27,7 @@ __metadata__ = {
 __version__ = __metadata__['modified']
 
 descr = """
-=head1 Description
+=Description=
 
 Remove comments from the file, depending on the file's type.
 
@@ -38,14 +38,14 @@ This knows about several common languages, but is based on regular expressions,
 and is not smart enough
 to allow for cases like comment-delimiters inside of quotes, etc.
 
-=head1 Related Commands
+=Related Commands=
 
 For C, C++, and their kin, you might try:
     gcc -fpreprocessed -dD -E myFile.c
 
 See L<https://stackoverflow.com/questions/2394017>.
 
-=head1 Known bugs and Limitations
+=Known bugs and Limitations=
 
 Do not pipe data in, because then we don't know its extension,
 so cannot determine the right comment delimiters to look for.
@@ -57,26 +57,26 @@ delimiters that occur in special places. For example:
 
 =over
 
-=item * Comment start obviated by one-liner:  // hello /*
+* Comment start obviated by one-liner:  // hello /*
 
-=item * Quoted comment delimiters:  $ = "//eh?"
+* Quoted comment delimiters:  $ = "//eh?"
 
-=item * The C preprocessor:   #ifdef 0... /*... #endif
+* The C preprocessor:   #ifdef 0... /*... #endif
 
-=item * XML, HTML, etc. support doesn't handle '--' inside comments,
+* XML, HTML, etc. support doesn't handle '--' inside comments,
 comments inside processing instructions, CDATA marked sections, etc.
 
-=item * Python conventional comment at start of functions
+* Python conventional comment at start of functions
 
 =back
 
-=head1 Licensing
+=Licensing=
 
 Copyright 2015 by Steven J. DeRose. This script is licensed under a
 Creative Commons Attribution-Share-alike 3.0 unported license.
 See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 
-=head1 Options
+=Options=
 """
 
 
