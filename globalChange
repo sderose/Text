@@ -440,6 +440,13 @@ If you use this with I<--interactive>, the results are,
 unfortunately, undefined for the moment.
 See also I<--firstPerFile>, I<--perFile>, I<--maxChanges>, I<--maxLinesChanged>.
 
+=item * B<--linux>
+
+Inform the script that you're on Linux. At the moment, all this does is
+add the C<--attributes> option to the initial C<cp> command for a file,
+to save actually copying it if we don't have to. That option doesn't seem to
+be available in BSD/MacOS C<cp>.
+
 =item * B<--listEncodings>
 
 Show the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
@@ -1093,7 +1100,9 @@ Avoid copying to dest at start, by switching to "cp --attributes -p".
   2020-08-28: New layout.
   2020-12-03: Add --binary.
   2021-02-24: Add --include.
-
+  2021-04-16: Warn on \\x01 etc. on RHS of regexes. Better display of invis chars.
+Take out --attributes that was added 2015-02-25, since it's only available on Linix,
+not BSD.
 
 =head1 To do
 
@@ -1140,6 +1149,22 @@ Avoid copying to dest at start, by switching to "cp --attributes -p".
     \Q for balanced quoted string?
     \p{Po} etc.
 
+  Perhaps add some vars to test or substitute, such as in `awk`:
+    CONVFMT  conversion format used when converting numbers (default %.6g).
+    ENVIRON  array of environment variables; subscripts are names.
+    FILENAME the name of the current input file.
+    FNR      ordinal number of the current record in the current file.
+    FS       regular expression used to separate fields; also settable by option -Ffs.
+    NF       number of fields in the current record.
+    NR       ordinal number of the current record.
+    OFMT     output format for numbers (default %.6g).
+    OFS      output field separator (default space).
+    ORS      output record separator (default newline).
+    RLENGTH  the length of a string matched by match.
+    RS       input record separator (default newline), or '' or regex
+    RSTART   the start position of a string matched by match.
+    SUBSEP   separates multiple subscripts (default 034).
+
 
 =head1 Rights
 
@@ -1180,6 +1205,7 @@ my $instanceEnd      = 0;
 my $interactive      = 0;
 my $iString          = "  ";
 my $lastPerFile      = 0;
+my $linux            = 0;
 my $list             = 0;
 my $maxChanges       = 0;
 my $maxLinesChanged  = 0;
@@ -1263,6 +1289,7 @@ my %getoptHash = (
     "include=s"             => \$include,
     "interactive!"          => \$interactive,
     "iString=s"             => \$iString,
+    "linux!"                => \$linux,
     "list!"                 => \$list,
     "listEncodings"         => sub {
         warn "\nEncodings available:\n";
@@ -1554,6 +1581,10 @@ sub saveChangeSpecFromExpr {
 
     my $problem = (scalar(@parts)<3 || scalar(@parts)>4) ? 1:0;
     my ($theS, $from, $to, $mods, $bogus) = @parts;
+    if ($to =~ m/[\x01-\x08]/) {
+        warn "***** Char from 0 to 8 in /to/ -- did you do \\1 instead of \\\\n?\n";
+        $problem = 1;
+    }
     if ($problem || $verbose>=2) {
         hMsg(0,"Expression #" . scalar(@exprs) . " parse:\n" .
             "    expr:  '$expr'\n" .
@@ -1709,8 +1740,14 @@ sub doOneItem {
         return(1);
     }
 
-    my $cmd = "cp --attributes -p '$file' '$tmpFile'";
-    alogging::vMSg(1, "Running: $cmd");
+    my $cmd = "";
+    if ($linux) {
+        $cmd ="cp -attributes -a -p '$file' '$tmpFile'";
+    }
+    else {
+        $cmd ="cp -a -p '$file' '$tmpFile'";
+    }
+    alogging::vMsg(1, "Running: $cmd");
     system "$cmd";
     if ($@) {
         alogging::eMsg(0, "Failed to copy permissions/attributes: $@");
@@ -1719,7 +1756,7 @@ sub doOneItem {
     if ($backup) {
         my $tgt = "$backupDirectory$file.$backupExtension";
         my $cmd = "mv '$file' '$tgt'";
-        alogging::vMSg(1, "Running: $cmd");
+        alogging::vMsg(1, "Running: $cmd");
         system $cmd;
         if ($@) {
             alogging::eMsg(0,
@@ -2146,7 +2183,7 @@ sub makeDiffLine {
 # Factor out so we always do the exact same conversion.
 sub printable {
     my ($s) = @_;
-    return(sjdUtils::showInvisibles($s, 'SYM', 'SP'));
+    return(sjdUtils::showInvisibles($s, 'SYM', 'U'));
 }
 
 

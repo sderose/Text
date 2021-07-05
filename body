@@ -61,7 +61,7 @@ support Unicode (recent versions of C<gawk> do).
 Gets lines 100 through 204 from the file.
 This is similar to the following C<awk> script:
 
-    $ awk 'LN >= 100 && LN <= 204 { print $0 }'
+    $ awk 'NR >= 100 && NR <= 204 { print $0 }'
 
 
 =item * body --fchar 0xBEEF --nlines 100 foo.txt

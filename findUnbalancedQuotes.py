@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #
-# findUnbalancedQuotes.py
+# findUnbalancedQuotes.py: Scan for suspicious quoting.
+# 2017-07-03: Written by Steven J. DeRose.
 #
 from __future__ import print_function
 import sys, os, argparse
@@ -8,8 +9,6 @@ import re
 import codecs
 
 from alogging import ALogger
-from MarkupHelpFormatter import MarkupHelpFormatter
-
 lg = ALogger()
 
 PY3 = sys.version_info[0] == 3
@@ -18,16 +17,18 @@ if PY3:
 
 __metadata__ = {
     'title'        : "findUnbalancedQuotes.py",
+    'description'  : "Scan for suspicious quoting.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
     'type'         : "http://purl.org/dc/dcmitype/Software",
     'language'     : "Python 3.7",
     'created'      : "2017-07-03",
-    'modified'     : "2020-03-04",
+    'modified'     : "2020-04-21",
     'publisher'    : "http://github.com/sderose",
     'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
 }
 __version__ = __metadata__['modified']
+
 
 descr = """
 =Description=
@@ -40,7 +41,9 @@ multi-line quotations, here documents, etc.
 
 With ''--unicode'', checks for various curly quote pairs, though not perfectly.
 
+
 =Related Commands=
+
 
 =Known bugs and Limitations=
 
@@ -56,13 +59,20 @@ Could usefully add parenthesis balancing.
 
 Add option to colorize the quotes or quoted portions?
 
-=History=
-
-2017-07-03: Written by Steven J. DeRose (port from bash script).
 
 =To do=
 
 * Really count ins and outs and types....
+* Track {} brace vs. indentation, at least when braces are line-final.
+Add expandTabs for that.
+* Allow excluding '"', "'", "`", \\w's\\b,....
+
+
+=History=
+
+2017-07-03: Written by Steven J. DeRose (port from bash script).
+2020-04-21: Start indentation-tracking.
+
 
 =Rights=
 
@@ -73,6 +83,7 @@ For more information on this license, see L<here|"https://creativecommons.org">.
 
 For the most recent version, see L<http://www.derose.net/steve/utilities/> or
 L<http://github/com/sderose>.
+
 
 =Options=
 """
@@ -120,41 +131,6 @@ pairedQuotes = [
 
 ###############################################################################
 #
-def processOptions():
-    parser = argparse.ArgumentParser(
-        description=descr, formatter_class=MarkupHelpFormatter)
-
-    parser.add_argument(
-        "--iencoding",        type=str, metavar='E', default="utf-8",
-        help='Assume this character set for input files. Default: utf-8.')
-    parser.add_argument(
-        "--oencoding",        type=str, metavar='E',
-        help='Use this character set for output files.')
-    parser.add_argument(
-        "--quiet", "-q",      action='store_true',
-        help='Suppress most messages.')
-    parser.add_argument(
-        "--unicode",          action='store_const',  dest='iencoding',
-        const='utf8', help='Assume utf-8 for input files.')
-    parser.add_argument(
-        "--verbose", "-v",    action='count',       default=0,
-        help='Add more messages (repeatable).')
-    parser.add_argument(
-        "--version", action='version', version=__version__,
-        help='Display version information, then exit.')
-
-    parser.add_argument(
-        'files',             type=str,
-        nargs=argparse.REMAINDER,
-        help='Path(s) to input file(s)')
-
-    args0 = parser.parse_args()
-    lg.setVerbose(args0.verbose)
-    return(args0)
-
-
-###############################################################################
-#
 def tryOneItem(path):
     """Try to open a file (or directory, if -r is set).
     """
@@ -186,13 +162,14 @@ def doOneFile(path):
         return(0)
     lg.bumpStat("totalFiles")
 
-    recnum = 0
-    rec = ""
     try:
         fh = codecs.open(path, mode='r', encoding=args.iencoding)
     except IOError as e:
         lg.error("Can't open '%s'." % (path), stat="CantOpen")
         return(0)
+    recnum = 0
+    rec = ""
+    indentStack = [ 0 ]
     while (True):
         try:
             rec = fh.readline()
@@ -205,9 +182,22 @@ def doOneFile(path):
         rec = rec.rstrip()
         if (re.match(r'\s*$',rec)):                    # Blank record
             continue
+
+        newIndent = len(rec) - len(rec.lstrip())       # Not happy w/ tabs.
+        if (newIndent < indentStack[-1]):
+            if (newIndent not in indentStack):
+                report(recnum, "Indent decreasing from %d to %d, unattested." %
+                    (indentStack[-1], newIndent), rec)
+            while (indentStack[-1] > newIndent):
+                indentStack.pop()
+        if (newIndent > indentStack[-1]):
+            indentStack.append(newIndent)
+
         ###
         # Per-record processing goes here
         ###
+        if (args.singlesok):
+            rec = re.sub(r"""('"'|"'"|'`'|"`")""", "", rec)
         n = countChar(rec, "'")
         if (n % 2):
             report(recnum, "Odd number of single quotes (%s)" % (n), rec)
@@ -238,9 +228,48 @@ def report(recnum, msg, rec):
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
+def processOptions():
+    try:
+        from BlockFormatter import BlockFormatter
+        parser = argparse.ArgumentParser(
+            description=descr, formatter_class=BlockFormatter)
+    except ImportError:
+        parser = argparse.ArgumentParser(description=descr)
+
+    parser.add_argument(
+        "--iencoding", type=str, metavar='E', default="utf-8",
+        help='Assume this character set for input files. Default: utf-8.')
+    parser.add_argument(
+        "--oencoding", type=str, metavar='E',
+        help='Use this character set for output files.')
+    parser.add_argument(
+        "--quiet", "-q", action='store_true',
+        help='Suppress most messages.')
+    parser.add_argument(
+        "--singlesok", action='store_true',
+        help='Discard things like: <<"\'">>.')
+    parser.add_argument(
+        "--unicode", action='store_const', dest='iencoding',
+        const='utf8', help='Assume utf-8 for input files.')
+    parser.add_argument(
+        "--verbose", "-v", action='count', default=0,
+        help='Add more messages (repeatable).')
+    parser.add_argument(
+        "--version", action='version', version=__version__,
+        help='Display version information, then exit.')
+
+    parser.add_argument(
+        'files', type=str,
+        nargs=argparse.REMAINDER,
+        help='Path(s) to input file(s)')
+
+    args0 = parser.parse_args()
+    lg.setVerbose(args0.verbose)
+    return(args0)
+
+
 args = processOptions()
 
 if (len(args.files) == 0):

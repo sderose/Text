@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# text2html.py
+# text2html.py: Convert simple text layouts to HTML.
 # Written 2018-07-21 by Steven J. DeRose
 #
 from __future__ import print_function
@@ -11,6 +11,7 @@ import codecs
 
 import XmlOutput
 from alogging import ALogger
+lg = ALogger(1)
 
 __metadata__ = {
     "title"        : "text2html.py",
@@ -26,7 +27,6 @@ __metadata__ = {
 }
 __version__ = __metadata__["modified"]
 
-lg = ALogger(1)
 
 descr = """
 =Description=
@@ -99,7 +99,9 @@ Layout:
 
 `BlockFormatter.py`, and `MarkupHelpFormatter.py`.
 
+
 =Known bugs and Limitations=
+
 
 =Rights=
 
@@ -111,11 +113,12 @@ For more information on this license, see [here|"https://creativecommons.org"].
 For the most recent version, see [http://www.derose.net/steve/utilities] or
 [http://github/com/sderose].
 
+
 =History=
 
 * 2018-07-21: Written by Steven J. DeRose.
-
 * 2020-03-04: New layout. lint.
+
 
 =Options=
 """
@@ -294,7 +297,6 @@ def targetLen(regex, s, groupNum=0):
     return len(mat.group(groupNum))
 
 
-###############################################################################
 ###############################################################################
 # Main
 #

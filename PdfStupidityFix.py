@@ -58,7 +58,8 @@ See below re. the default word-list.
 The result varies depending on the PDF viewer in use.
 [arxiv.org] has PDFs for many articles, where viewing the PDF and
 selecting something often produces text such as shown below
-(from Li and Jurafsky 2015 [DOI 10.18653/v1/D15-1200], as found at [https://arxiv.org/pdf/1511.06388.pdf]).
+(from Li and Jurafsky 2015 [DOI 10.18653/v1/D15-1200], as found at
+[https://arxiv.org/pdf/1511.06388.pdf]).
 
 
 ==="Raw" version===
@@ -119,6 +120,24 @@ Nashville, TN 37212, USA {andrew.trask,phil.michalak,john.liu}@digitalreasoning.
 ABSTRACT
 Neural word representations have proven useful in Natural Language Processing (NLP) tasks due to their ability to efficiently model complex semantic and syn- tactic word relationships. However, most techniques model only one representa- tion per word, despite the fact that a single word can have multiple meanings or ”senses”. Some techniques model words by using multiple vectors that are clus- tered based on context. However, recent neural approaches rarely focus on the application to a consuming NLP algorithm. Furthermore, the training process of recent word-sense models is expensive relative to single-sense embedding pro- cesses. This paper presents a novel approach which addresses these concerns by modeling multiple embeddings for each word based on supervised disambigua- tion, which provides a fast and accurate way for a consuming NLP model to select a sense-disambiguated embedding. We demonstrate that these embeddings can disambiguate both contrastive senses such as nominal and verbal senses as well as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disam- biguated embeddings on neural dependency parsing, yielding a greater than 8% average error reduction in unlabeled attachment scores across 6 languages.
 
+However, this is inconsistent. A US Patent document I loaded, gets all spaces
+removed (except ones for end-of-line, even when there's a line-ending hyphen,
+which it drops). It also drops brackets around the leading number, and 2 close
+quotes and a comma. I haven't even tried to fix this yet (Acrobat gets the
+spacing rights, but loses all the same punctuation):
+
+0015 Thepresentdescriptionandclaimsmaymakeuseof theterms“a,”“atleastoneof
+and“oneormoreof with regardtoparticularfeaturesandelementsoftheilustrative
+embodiments.Itshouldbeappreciatedthatthesetermsand
+phrasesareintendedtostatethatthereisatleastoneofthe
+particularfeatureorelementpresentintheparticularilustra
+tiveembodiment,butthatmorethanonecanalsobepresent.
+Thatis,theseterms/phrasesarenotintendedtolimitthe description or claims to a
+single feature/element being
+presentorrequirethatapluralityofsuchfeatures/elementsbe
+present.Tothecontrary,theseterms/phrasesonlyrequireat
+leastasinglefeature/elementwiththeposibilityofaplural
+ityofsuchfeatures/elementsbeingwithinthescopeofthe descriptionandclaims.
 
 ===Chrome 86.0.4240.75 ===
 
@@ -201,6 +220,32 @@ disambiguate both contrastive senses such as nominal and verbal senses as well
 as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated
 embeddings on neural dependency parsing, yielding a greater than 8%
 average error reduction in unlabeled attachment scores across 6 languages.
+
+==Apple Preview (11.0)==
+
+SENSE2VEC - A FAST AND ACCURATE METHOD FOR WORD SENSE DISAMBIGUATION
+IN NEURAL WORD EMBEDDINGS. Andrew Trask & Phil Michalak & John Liu
+Digital Reasoning Systems, Inc. Nashville, TN 37212, USA
+{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com ABSTRACT
+Neural word representations have proven useful in Natural Language
+Processing (NLP) tasks due to their ability to efficiently model
+complex semantic and syn- tactic word relationships. However, most
+techniques model only one representa- tion per word, despite the fact
+that a single word can have multiple meanings or ”senses”. Some
+techniques model words by using multiple vectors that are clus- tered
+based on context. However, recent neural approaches rarely focus on
+the application to a consuming NLP algorithm. Furthermore, the
+training process of recent word-sense models is expensive relative to
+single-sense embedding pro- cesses. This paper presents a novel
+approach which addresses these concerns by modeling multiple
+embeddings for each word based on supervised disambigua- tion, which
+provides a fast and accurate way for a consuming NLP model to select a
+sense-disambiguated embedding. We demonstrate that these embeddings
+can disambiguate both contrastive senses such as nominal and verbal
+senses as well as nuanced senses such as sarcasm. We further evaluate
+Part-of-Speech disam- biguated embeddings on neural dependency
+parsing, yielding a greater than 8% average error reduction in
+unlabeled attachment scores across 6 languages.
 
 
 =The Lexicon=
@@ -417,6 +462,7 @@ lex = {}
 #
 class Lexicon(dict):
     def __init__(self, path, ignoreCase=True):
+        super(Lexicon, self).__init__()
         self.ignoreCase = ignoreCase
         startTime = time()
         with codecs.open(path, "rb", encoding="utf-8") as d:
@@ -497,7 +543,7 @@ def doOneFile(path):
                 continue
 
             lToken = token.lower()
-            lToken2 = re.sub(r"\W*(.*?)\W*$", "\\1", lToken)
+            lToken2 = re.sub(r"\W*(.*?)\W*$", "\\1", lToken) # shouldn't be needed.
 
             if (token in listMarkers):                # List item?
                 token = "\n" + token
@@ -513,13 +559,14 @@ def doOneFile(path):
 
             elif (not lex.isWord(lToken2)):           # Mystery word
                 warn(2, "non-word: '%s' (->'%s')" % (lToken, lToken2))
-                for j in range(1, len(lToken2)):
-                    p1 = lToken2[0:j]
-                    p2 = lToken2[j:]
+                for j in range(1, len(lToken)):
+                    p1 = lToken[0:j]
+                    p2 = lToken[j:]
                     if (lex.isWord(p1) and lex.isWord(p2)):
-                        token = re.sub(r"(\W*)(.*?)(\W*)$", "\\1"+p1+" "+p2+"\\2", token)
-                        #token = token[0:j] + " " + token[j:]
+                        #token = re.sub(r"(\W*)(.*?)(\W*)$", "\\1"+p1+" "+p2+"\\2", token)
+                        token = token[0:j] + " " + token[j:]
                         break
+                # TODO: Add multiBreak()
 
             buf += token
         print(re.sub(r"\s\s+", " ", buf))
@@ -527,16 +574,73 @@ def doOneFile(path):
 def closeUp(mat):
     return re.sub(r"(\S) ", "\\1", mat.group(1))
 
+def multiBreak(s):
+    """Try to break a spaceless span into many words.
+    This is O(n**2) on sLen, but at least not O(2**n).
+    """
+    # Find all the words that are in there anywhere.
+    # Save as a list by start-points, each mapped to a
+    # list of end-points that make up whole words.
+    warning(0, s)
+    warning(0, "0----+----1----+----2----+----3----+----4----+----5----+----6----")
+    byStarts = []
+    sLen = len(s)
+    for i in range(sLen):
+        byStarts.append([])
+        for j in range(i+1, sLen):
+            piece = s[i:j]
+            if (len(piece)==1 and piece not in 'aAiI'): continue
+            if (lex.isWord(piece) or piece.isdigit() or piece.ispunct()):
+                byStarts[i].append(j)
+
+    for i in range(sLen):
+        bs = byStarts[i]
+        buf = "From %2d:  " % (i)
+        for j in bs:
+            buf += "%d:'%s' " % (j, s[i:j])
+        warning(0, buf)
+
+    findCompleteChainsStartingAt(s, byStarts, st=0)
+
+solutions = []
+def findCompleteChainsStartingAt(s, byStarts:list, st:int, soFar:str=""):
+    startHere = byStarts[st]
+    if (len(startHere) == 0):
+        warning(0, "FAIL")
+        return None
+    for en in reversed(startHere):
+        thisToken = s[st:en]
+        farther = soFar + " " + thisToken
+        warning(0, farther)
+        #warning(0, "%s[%2d:%2d]: '%s'" % ("    " * depth, st, en, s[st:en]))
+        if (en >= len(s)):
+            solutions.append(farther)
+            warning(0, "Ding: %s" % (farther))
+        else:
+            findCompleteChainsStartingAt(
+                s, byStarts, st=en, soFar=farther)
+    return None  # TODO
+
 
 ###############################################################################
 # Main
 #
 if __name__ == "__main__":
-    sample = """A  P A P E R  T I T L E  Learning a distinct representation for eachsense  of  an  ambiguous  word  could  leadto  more  powerful  and  fine-grained  mod-els  of  vector-space  representations.    Yetwhile  ‘multi-sense’  methods  have  beenproposed  and  tested  on  artificial  word-similarity tasks, we don’t know if they im-prove real natural language understandingtasks.  In this paper we introduce a multi-sense embedding model based on ChineseRestaurant Processes that achieves state ofthe  art  performance  on  matching  humanword  similarity  judgments,  and  proposea pipelined  architecture  for incorporatingmulti-sense embeddings into language un-derstanding."""
+    sample = re.sub(r"\n *", " ",
+        """A  P A P E R  T I T L E  Learning a distinct
+    representation for eachsense  of  an  ambiguous  word  could
+    leadto  more  powerful  and  fine-grained  mod-els  of
+    vector-space  representations.    Yetwhile  ‘multi-sense’  methods
+     have  beenproposed  and  tested  on  artificial  word-similarity
+    tasks, we don’t know if they im-prove real natural language
+    understandingtasks.  In this paper we introduce a multi-sense
+    embedding model based on ChineseRestaurant Processes that achieves
+    state ofthe  art  performance  on  matching  humanword  similarity
+     judgments,  and  proposea pipelined  architecture  for
+    incorporatingmulti-sense embeddings into language
+    un-derstanding.""")
 
     import argparse
-    def anyInt(x):
-        return int(x, 0)
 
     def processOptions():
         try:
@@ -553,33 +657,36 @@ if __name__ == "__main__":
             "--bullets", action="store_true",
             help="Break before various bullet characters.")
         parser.add_argument(
-            "--dictionary",       type=str, metavar="D",
+            "--dictionary", type=str, metavar="D",
             default="/usr/share/dict/words",
             help="Dictionary to use.")
         parser.add_argument(
-            "--iencoding",        type=str, metavar="E", default="utf-8",
+            "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--quiet", "-q",      action="store_true",
+            "--multibreak", action="store_true",
+            help="Test multi-word breaking algorithm.")
+        parser.add_argument(
+            "--quiet", "-q", action="store_true",
             help="Suppress most messages.")
         parser.add_argument(
             "--stars", action="store_true",
             help="Break before various star characters..")
         parser.add_argument(
-            "--test",             action="store_true",
+            "--test", action="store_true",
             help="Run a demo/test on some fixed sample text.")
         parser.add_argument(
-            "--unicode",          action="store_const",  dest="iencoding",
+            "--unicode", action="store_const", dest="iencoding",
             const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--verbose", "-v",    action="count",       default=0,
+            "--verbose", "-v", action="count", default=0,
             help="Add more messages (repeatable).")
         parser.add_argument(
             "--version", action="version", version=__version__,
             help="Display version information, then exit.")
 
         parser.add_argument(
-            "files",             type=str,
+            "files", type=str,
             nargs=argparse.REMAINDER,
             help="Path(s) to input file(s)")
 
@@ -595,6 +702,11 @@ if __name__ == "__main__":
     if (args.stars): listMarkers.update(stars)
 
     lex = Lexicon(args.dictionary)
+
+    if (args.multibreak):
+        sample = "Thepresentdescriptionmaymakeuseofwhatever"
+        multiBreak(sample)
+        sys.exit()
 
     if (args.test):
         tfile = "/tmp/PdfStudpidityFix.tmp"

@@ -358,36 +358,37 @@ if __name__ == "__main__":
             "--extract-to", "--extractTo", type=str, metavar="F", default="",
             dest="extractTo", help="Write a copy to this file.")
         parser.add_argument(
-            "--iencoding",        type=str, metavar="E", default="utf-8",
+            "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--justPOD",              action="store_true",
+            "--justPOD", action="store_true",
             help='Wait for "=pod" line to start.')
         parser.add_argument(
-            "--oencoding",        type=str, metavar="E", default="utf-8",
+            "--oencoding", type=str, metavar="E", default="utf-8",
             help="Use this character set for output files.")
         parser.add_argument(
-            "--outputFormat",     type=str, metavar="F", default="mediawiki",
+            "--outputFormat", "--output-format", "--oformat",
+            type=str, metavar="F", default="mediawiki",
             choices=[ "md", "mediawiki", "html" ],
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
-            "--quiet", "-q",      action="store_true",
+            "--quiet", "-q", action="store_true",
             help="Suppress most messages.")
         parser.add_argument(
-            "--test",             action="store_true",
+            "--test", action="store_true",
             help="Test on some fixed sample data.")
         parser.add_argument(
-            "--unicode",          action="store_const",  dest="iencoding",
+            "--unicode", action="store_const", dest="iencoding",
             const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
-            "--verbose", "-v",    action="count",       default=0,
+            "--verbose", "-v", action="count", default=0,
             help="Add more messages (repeatable).")
         parser.add_argument(
             "--version", action="version", version=__version__,
             help="Display version information, then exit.")
 
         parser.add_argument(
-            "files",             type=str,
+            "files", type=str,
             nargs=argparse.REMAINDER,
             help="Path(s) to input file(s)")
 
