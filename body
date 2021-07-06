@@ -35,7 +35,7 @@ our $VERSION_DATE = $metadata{'modified'};
 
 body [options] file(s)
 
-Extract a range of lines or characters from the input (somewhat like
+Extract a range(s) of lines or characters from the input (somewhat like
 *nix C<head> and C<tail>, but for the middle).
 
 The starting and ending locations
@@ -44,13 +44,16 @@ and/or regular expression patterns.
 If both line and character offsets are specified,
 the character offset is counted relative to (that is, within) the line.
 
+By default only the first such range is returned, but I<--iterate> (aka I<-g>)
+repeats the process until EOF.
+
 If multiple files are specified, the whole process is applied to each of
 them separately, not applied once to their concatenated data.
 
-This could be considered a simpler (more accessible?) version of C<awk>.
-Probably, everything C<body> can do, C<awk> can too (plus much else).
-On the other hand, C<awk> required some programming skill, and may not
-support Unicode (recent versions of C<gawk> do).
+You can probably do any of this with, C<awk> (and more), if you remember how.
+I like this approach better, in part because it fills the gap between
+C<head> and C<tail>, and can do their jobs, too, and supports Unicode
+(recent versions of C<gawk> do Unicode, too).
 
 =head2 Examples
 
@@ -62,7 +65,6 @@ Gets lines 100 through 204 from the file.
 This is similar to the following C<awk> script:
 
     $ awk 'NR >= 100 && NR <= 204 { print $0 }'
-
 
 =item * body --fchar 0xBEEF --nlines 100 foo.txt
 
@@ -78,7 +80,8 @@ starting offset being mid-line more accurately):
 
 =item * body --fpat '^#START' --lpat '#END' *.txt
 
-Gets (entire) lines from the one in which "#START" is found, up to
+Gets (entire) lines from the one in which "#START" is found at
+start of line ("^"), up to
 the one in which "#END" is found, from B<each> of the C<.txt> files in
 the current directory. The lines in which the matches are found
 are included by default (but see I<--fpatBreak>, I<--fpatNum>, I<--lpatBreak>,
@@ -90,7 +93,7 @@ and I<--lpatNum>). This is similar to the following C<awk> script:
 
 =item * body --fline 1 --nlines 5 foo.txt
 
-does the same as C<head -n 5 foo.text>. You shouldn't have to specify
+Does the same as C<head -n 5 foo.text>. You shouldn't have to specify
 the I<--fline 1> part, but there's currently a bug and you do.
 
 =back
@@ -102,8 +105,10 @@ You can specify any mix of I<--fline>, I<--fpat>, and I<--fchar>.
 If none of them is specified, data is extracted starting at the
 beginning of the file. Otherwise, these options  are used,
 in the order just stated, to move forward in the file.
-If EOF is hit before a specified goal is reached,
+If EOF is hit before the specified starting point is reached,
 then an error is reported and nothing is copied.
+
+A starting point is reached by seeking:
 
 =over
 
@@ -120,14 +125,15 @@ The default is to include the entire line containing the match.
 If it is instead set to EXCLUDELINE, that line is entirely discarded,
 and the following line becomes the current line.
 
-=item # Then to offset I<--fchar> in the current line (depending on
+=item # Then to offset I<--fchar> in the current lineor portion (depending on
 I<--fpatBreak>, this might include only part of the matched input line).
 If the line (or part) is not wide enough, copying begins at the start of the
 next line and a warning is issued.
 
 B<However>, if I<--fline> and I<--fpat> are both omitted,
 then I<--fchar> is treated as an offset in the I<file> rather than in
-the starting (in this case, first) <line>.
+the starting (in this case, first) <line>. This feature should not be
+mixed with I<--iterate>.
 
 =back
 
@@ -204,13 +210,13 @@ Choose where to start copying relative to the match for I<--fpat>
 
 =over
 
-=item * INCLUDELINE -- include the entire line containing the match (default).
+=item * INCLUDELINE or IL -- include the entire line containing the match (default).
 
-=item * INCLUDEMATCH -- break line to include the match
+=item * INCLUDEMATCH or IM -- break line to include the match
 
-=item * EXCLUDEMATCH -- break line to exclude the match
+=item * EXCLUDEMATCH or EM -- break line to exclude the match
 
-=item * EXCLUDE -- exclude the entire matched line.
+=item * EXCLUDE or EX -- exclude the entire matched line.
 
 =back
 
@@ -221,6 +227,10 @@ Default: the matched line itself is included.
 
 Wait for the I<n>th match of the I<--fpat> pattern (default: 1).
 
+=item * B<-g>
+
+Synonym for I<--iterate>.
+
 =item * B<--iencoding> I<e>
 
 Assume the input file is in this character encoding.
@@ -229,7 +239,7 @@ Assume the input file is in this character encoding.
 
 Input line-breaks as for Unix (default), Mac, or DOS.
 
-=item * B<--iterate> (not yet supported)
+=item * B<--iterate> OR I<-g> (not yet supported)
 
 After finding an entire start...end block as described above, repeat the
 whole process to find another, and another. Issue them all, with the
@@ -237,7 +247,7 @@ value of I<--insert> inserted as a separate line between them.
 
 =item * B<--insert> I<s>
 
-With I<--iterate>, the value of this option (default: "") is inserte between
+With I<--iterate>, the value of this option (default: "") is inserted between
 separate matches, as a separate line.
 
 =item * B<--lchar> I<n>
@@ -420,6 +430,8 @@ C<RecordFile.pm> -- similar to internal 'Reader' package.
 
 =item * 2020-04-27: New layout.
 
+=item * 2021-06-25: Clean up.
+
 =back
 
 =head1 Rights
@@ -446,7 +458,7 @@ my %options = (
     "fpatNum"      => 1,         # Which instance of fpat counts
     "iencoding"    => "",
     "ilineends"    => "U",
-    "iterate"      => 0,         # Find start/end points repeatedly.
+    "iterate|g"    => 0,         # Find start/end points repeatedly.
     "insert"       => '--',      # Put this between --iterate blocks.
     "lline"        => 0,         # Last line to retrieve
     "lchar"        => 0,         # Last char to copy
@@ -462,15 +474,15 @@ my %options = (
     );
 
 my %getoptHash = (
-	"fchar=o"                 => \$options{"fchar"},
-	"fline=o"                 => \$options{"fline"},
-	"fpat=s"                  => \$options{"fpat"},
-	"fpatBreak!"              => \$options{"fpatBreak"},
-	"fpatNum=o"               => \$options{"fpatNum"},
-    "h|help"                  => sub { system "perldoc $0"; exit; },
-    "iencoding=s"             => \$options{"iencoding"},
-	"ilineends=s"             => \$options{"ilineends"},
-    "listEncodings"           => sub {
+	"fchar=o"          => \$options{"fchar"},
+	"fline=o"          => \$options{"fline"},
+	"fpat=s"           => \$options{"fpat"},
+	"fpatBreak!"       => \$options{"fpatBreak"},
+	"fpatNum=o"        => \$options{"fpatNum"},
+    "h|help"           => sub { system "perldoc $0"; exit; },
+    "iencoding=s"      => \$options{"iencoding"},
+	"ilineends=s"      => \$options{"ilineends"},
+    "listEncodings"    => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
         for my $k (Encode->encodings(":all")) {
@@ -484,32 +496,27 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
-	"lchar=o"                 => \$options{"lchar"},
-	"lline=o"                 => \$options{"lline"},
-	"lpat=s"                  => \$options{"lpat"},
-	"lpatBreak!"                => \$options{"lpatBreak"},
-	"lpatNum=o"               => \$options{"lpatNum"},
-	"nlines|lines=o"          => \$options{"nlines"},
-	"olineends=s"             => \$options{"olineends"},
-	"replace"                 => \$options{"replace"},
-    "q!"                      => \$options{"quiet"},
-    "tickInterval=o"          => \$options{"tickInterval"},
-    "unicode"                 => sub { $options{"iencoding"} = "utf8"; },
-    "v+"                      => \$options{"verbose"},
-    "version"                 => sub {
+	"lchar=o"          => \$options{"lchar"},
+	"lline=o"          => \$options{"lline"},
+	"lpat=s"           => \$options{"lpat"},
+	"lpatBreak!"       => \$options{"lpatBreak"},
+	"lpatNum=o"        => \$options{"lpatNum"},
+	"nlines|lines=o"   => \$options{"nlines"},
+	"olineends=s"      => \$options{"olineends"},
+	"replace"          => \$options{"replace"},
+    "q!"               => \$options{"quiet"},
+    "tickInterval=o"   => \$options{"tickInterval"},
+    "unicode"          => sub { $options{"iencoding"} = "utf8"; },
+    "v+"               => \$options{"verbose"},
+    "version"          => sub {
         die "Version of $VERSION_DATE by Steven J. DeRose.\n";
     }
     );
 
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || dieCleanly("Bad options.");
-
 sjdUtils::setVerbose($options{"verbose"});
 
-
-###############################################################################
-# Validate the options
-#
 ($options{"replace"}) && die
     "-replace option is not yet implemented. Sorry.\n";
 
@@ -526,6 +533,9 @@ if ($options{"fline"} && ($options{"fchar"} > $options{"lchar"}) &&
           $options{"fchar"} . ").\n";
 }
 
+if ($options{"iterate"} && ($options{"fchar"} || $options{"lchar"})) {
+    die "Don't mix --iterate with --fchar or --lchar.\n";
+}
 if ($options{"nlines"} && ($options{"lline"} || $options{"lpat"})) {
 	die "Can't specify --nlines with either --lline or --lpat.\n";
 }
@@ -540,6 +550,20 @@ if ($options{"lpat"} && ($options{"lline"} || $options{"lchar"})) {
 #if ($options{"lpatBreak"} && !$options{"lpat"}) {
 #    die "Can't specify --lpatBreak without --lpat.\n";
 #}
+my %abbrMap = (
+    "IL" => "INCLUDELINE",
+    "IM" => "INCLUDEMATCH",
+    "EM" => "EXCLUDEMATCH",
+    "EX" => "EXCLUDE",
+);
+$options{"fpatBreak"} = uc($options{"fpatBreak"});
+if (length($options{"fpatBreak"}) == 2) {
+    $options{"fpatBreak"} = $abbrMap{$options{"fpatBreak"}}
+}
+$options{"lpatBreak"} = uc($options{"lpatBreak"});
+if (length($options{"lpatBreak"}) == 2) {
+    $options{"lpatBreak"} = $abbrMap{$options{"lpatBreak"}}
+}
 
 $options{"ilineends"} = uc(substr($options{"ilineends"} . "U", 0, 1));
 if    ($options{"ilineends"} eq "M") { $/ = chr(13); }
@@ -573,19 +597,19 @@ if ($options{"iencoding"} ne "") {
     binmode(STDOUT, ":encoding(" . $options{"iencoding"} . ")");
 }
 
-# Compile the regexes
-#
-my $fpatc = ($options{"fpat"}) ? qr/$options{"fpat"}/ : undef;
-my $lpatc = ($options{"lpat"}) ? qr/$options{"lpat"}/ : undef;
-my $recordSepc = ($options{"recordSep"}) ? qr/$options{"recordSep"}/ : undef;
 
-
-###############################################################################
+################################################################################
 # Main
 #
 my $reader    = undef;
 my $firstLine = "";
 my $fileCount = 0;
+
+# Compile the regexes
+#
+my $fpatc = ($options{"fpat"}) ? qr/$options{"fpat"}/ : undef;
+my $lpatc = ($options{"lpat"}) ? qr/$options{"lpat"}/ : undef;
+my $recordSepc = ($options{"recordSep"}) ? qr/$options{"recordSep"}/ : undef;
 
 while (my $file = shift) {
     if (!-f $file) {
@@ -1033,120 +1057,3 @@ sub gotoNthRecord {
     }
     return(0); # EOF
 }
-
-
-###############################################################################
-# Character-level i/o -- not used currently.
-#
-package UNUSED;
-
-sub peekRec { # Get next record without moving
-    my ($self) = @_;
-    my $fh = $self->{fh};
-    my $startPos = tell($fh);
-    my $buf = readline($fh); # Not *our* readOneRecordn()!
-    my $byteCount = tell($fh) - $startPos;
-    seek($fh, $startPos, Fcntl::SEEK_SET);
-    return($byteCount, $buf);
-}
-
-# According to http://docstore.mik.ua/oreilly/perl/cookbook/ch08_05.htm,
-# there's really no way to do this. Probably true for encodings in general,
-# though easy enough for fixed-width encodings (not, e.g., utf8).
-#
-# O(n**2) to read a file backwards!!!
-#
-sub backRec {
-    my ($self, $n) = @_;
-    if (!$n) { $n = 1; }
-    $self->gotoNthRecord($self->{recnum}-$n);
-}
-sub readCharsThrough {
-    my ($self, $targetChar) = @_;
-    my $buf = "";
-    while (defined (my $char = $self->readChars())) {
-        $buf .= $char;
-        if ($char eq $targetChar) { last; }
-    }
-    return($buf);
-}
-
-# Character-level:
-
-sub readChars {
-    my ($self, $n) = @_;
-    if (!$n) { $n = 1; }
-    my $fh = $self->{fh};
-    my $buf = undef;
-    my $char = undef;
-    while ($n--) {
-        if (read($fh, $char,1) <= 0) { # EOF
-            return($buf);
-        }
-        $buf .= $char;
-        $self->{bytePos} = tell($fh);
-        $self->{charPos}++;
-        if (defined $recordSepc && $char =~ $recordSepc) {
-            $self->{recnum}++;
-        }
-    }
-    return($buf);
-}
-
-sub seekByte {
-    my ($self, $n) = @_;
-
-    # Do we need to move backwards?
-    if ($n < $self->{bytePos}) { $self->rewind(); }
-
-    # Scan forward, counting bytes/chars/recs
-     while (defined $self->readChars(1)) {
-        if ($self->{bytePos} >= $n) { return(1); }
-    }
-    return(0); # EOF
-}
-
-sub seekChar {
-    my ($self, $n) = @_;
-
-    # Do we need to move backwards?
-    if ($n < $self->{charPos}) { $self->rewind(); }
-
-    # Scan forward, counting bytes/chars/recs
-     while (defined $self->readChars(1)) {
-        if ($self->{charPos} >= $n) { return(1); }
-    }
-    return(0); # EOF
-}
-
-sub backChar {
-    my ($self, $n) = @_;
-    if (!$n) { $n = 1; }
-    my $fh = $self->{fh};
-    my $startPos = tell($fh);
-
-    if ($self->{encoding} eq "utf8") {
-        my $byte = undef;
-        seek($fh, -1, Fcntl::SEEK_CUR);
-        while ($n>0) {
-            $self->{bytePos}--;
-            read($fh, $byte, 1) || return(undef);
-            if ($byte >> 6 != 2) { # utf-8 start byte
-                $n--;
-                $self->{charPos}--;
-                if (char($byte) eq "\n") {
-                    $self->{recnum}--;
-                }
-            }
-            seek($fh, -2, Fcntl::SEEK_CUR);
-        }
-    }
-    elsif (!defined $badEncodings{$self->{encoding}}) {
-        seek($fh, -1, Fcntl::SEEK_CUR);
-    }
-    else {
-        warn "backChar: Can't do for encoding '$self->{encoding}'.\n";
-        return(undef);
-    }
-    return(1);
-} # backChar

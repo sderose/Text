@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# joinAt: join matching lines, with the next (or previous) line.
+# joinAt: Join matching lines, with the next (or previous) line.
 # 2014-08-31f: Written by Steven J. DeRose.
 #
 use strict;
@@ -8,6 +8,7 @@ use Getopt::Long;
 
 our %metadata = (
     'title'        => "joinAt",
+    'description'  => "Join matching lines, with the next (or previous) line.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
@@ -122,6 +123,9 @@ header, and use it to control where to apply I<--decode>.
 
 I<--strip> just uses Perl regex '\\s' for whitespace, which may miss cases.
 
+Might be nicer to support separate regexes for the prev and next lines,
+including a way to require they match somehow.
+
 
 =head1 Related commands
 
@@ -139,6 +143,8 @@ of regex matches.
 
 =item * 2020-02-18: New layout. Add I<--previous>, I<--separator>, I<--strip>.
 Document a few edge cases.
+
+=item * 2021-06-21: Add previous-line tracking features.
 
 =back
 
@@ -198,20 +204,29 @@ binmode(STDOUT, ":encoding($oencoding)");
 # Main
 #
 my $nRecs = my $nMatches = my $nNoMatches = 0;
+
+# Copy MIME header unchanged if needed
 my $inMIMEHeader = ($mime) ? 1:0;
-my $pendingStrip = 0;
+if ($mime) {
+    while (my $rec = <>) {
+        $nRecs++;
+        if ($rec =~ m/^\s*$/) { last; }
+        print "$rec\n";
+    }
+}
+
+my $prevLine = "";  # Keep available for cross-line comparison, etc.
+my $prevMatchText = "";
+my $pendingStrip = 0;  # line matched, and we need to --strip next one pre-join.
 while (my $rec = <>) {
     $nRecs++;
+    my $origRec = $rec;
     $rec =~ s/[\r\n]+$//;
-    if ($inMIMEHeader) {
-        if ($rec =~ m/^\s*$/) { $inMIMEHeader = 0; }
-        print "$rec\n";
-        next;
-    }
     if ($decode) {
         $rec =~ s/=([0-9a-f][0-9a-f])/{ chr(hex($1)); }/gie;
     }
     if ($rec =~ m/$expr/) {
+        my $theMatchText = ${^MATCH};
         $nMatches++;
         if (!$keep) { $rec =~ s/$expr//; }
         if ($previous) {
@@ -234,10 +249,11 @@ while (my $rec = <>) {
         print "$rec";
         $pendingStrip = 0;
     }
+    $prevLine = $origRec;
+    $prevMatchText = ${^MATCH};
 }
 if ($previous) { print "\n"; }
 
 ($verbose) && warn(sprintf(
     "joinAt: %d records, %d matches, %d non-matches\n",
     $nRecs, $nMatches, $nNoMatches));
-exit;
