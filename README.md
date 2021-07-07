@@ -97,7 +97,7 @@ pad to a given width, etc.
 ''pad'' --  Add specified pad character (default space) to start or end of lines,
 to get them to a given length. Or insert at a specified column instead.
 
-''pod2md.py'' --  Rouch conversion of POD (PERL help-file markup) to MarkDown.
+''pod2markdown.py'' --  Rough conversion of POD (PERL help-file markup) to MarkDown.
 
 ''randomRecords'' --  Select random records from a file. YOu can pick a certain number
 of records, or a percent, or even n-th record. Includes support for "reservoir"
@@ -139,4 +139,3 @@ Lines beginning with '#' can be treated as comments.
        optionally padding for nice columns. This does pretty much what 'ls' does
        for filenames, thugh with many options to control widths, paddings,
        row vs. column-major order, whitespace treatment, etc.
-
