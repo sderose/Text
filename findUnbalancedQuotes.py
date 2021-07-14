@@ -3,17 +3,12 @@
 # findUnbalancedQuotes.py: Report lines with odd quotation patterns.
 # 2017-07-03: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys, os, argparse
 import re
 import codecs
 
 from alogging import ALogger
 lg = ALogger()
-
-PY3 = sys.version_info[0] == 3
-if PY3:
-    def unichr(n): return chr(n)
 
 __metadata__ = {
     'title'        : "findUnbalancedQuotes.py",
@@ -47,31 +42,28 @@ With ''--unicode'', checks for various curly quote pairs, though not perfectly.
 
 =Known bugs and Limitations=
 
-Does not know to ignore comments in programming langauges.
-
-Does not know about quoted quoted, or backslashing or doubling.
-
-Does not know about multi-line quotes.
-
-Does not know about Perl q/.../, Python ""..."", here documents, etc.
-
-Could usefully add parenthesis balancing.
-
-Add option to colorize the quotes or quoted portions?
+* Does not know to ignore comments in programming langauges.
+* Does not know about quoted quotes, or full backslashing (though ``--escaped`
+handles simple cases) or doubling.
+* Does not know about multi-line quotes.
+* Does not know about Perl q/.../, Python ""..."", shell here documents, etc.
 
 
 =To do=
 
-* Really count ins and outs and types....
+* Colorize the quotes or quoted portions?
+* Really count ins and outs and types (perhaps not worth it)
 * Track {} brace vs. indentation, at least when braces are line-final.
 Add expandTabs for that.
-* Allow excluding '"', "'", "`", \\w's\\b,....
+* Parenthesis balancing.
 
 
 =History=
 
 2017-07-03: Written by Steven J. DeRose (port from bash script).
 2020-04-21: Start indentation-tracking.
+2021-07-13: Add --contractions and --escaped options,
+ `origiRec` for accurate reporting.
 
 
 =Rights=
@@ -79,10 +71,10 @@ Add expandTabs for that.
 This program is Copyright 2017 by Steven J. DeRose.
 It is hereby licensed under the Creative Commons
 Attribution-Share-Alike 3.0 unported license.
-For more information on this license, see L<here|"https://creativecommons.org">.
+For more information on this license, see [here|"https://creativecommons.org"].
 
-For the most recent version, see L<http://www.derose.net/steve/utilities/> or
-L<http://github/com/sderose>.
+For the most recent version, see [http://www.derose.net/steve/utilities] or
+[http://github/com/sderose].
 
 
 =Options=
@@ -91,42 +83,47 @@ L<http://github/com/sderose>.
 # Quote-pairs
 #
 pairedQuotes = [
-    [ 0x00AB,    # "LEFT-POINTING DOUBLE ANGLE QUOTATION MARK *",
-      0x00BB ],  # "RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK *",
+    [ "\u00AB",    # "LEFT-POINTING DOUBLE ANGLE QUOTATION MARK *",
+      "\u00BB" ],  # "RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK *",
 
-    [ 0x2018,    # "LEFT SINGLE QUOTATION MARK",
-      0x2019 ],  # "RIGHT SINGLE QUOTATION MARK",
+    [ "\u2018",    # "LEFT SINGLE QUOTATION MARK",
+      "\u2019" ],  # "RIGHT SINGLE QUOTATION MARK",
 
-    [ 0x201A,    # SINGLE LOW-9 QUOTATION MARK",
-      0x201B ],  # "SINGLE HIGH-REVERSED-9 QUOTATION MARK",
+    [ "\u201A",    # SINGLE LOW-9 QUOTATION MARK",
+      "\u201B" ],  # "SINGLE HIGH-REVERSED-9 QUOTATION MARK",
 
-    [ 0x201C,    # "LEFT DOUBLE QUOTATION MARK",
-      0x201D ],  # "RIGHT DOUBLE QUOTATION MARK",
+    [ "\u201C",    # "LEFT DOUBLE QUOTATION MARK",
+      "\u201D" ],  # "RIGHT DOUBLE QUOTATION MARK",
 
-    [ 0x201E,    # "DOUBLE LOW-9 QUOTATION MARK",
-      0x201F ],  # "DOUBLE HIGH-REVERSED-9 QUOTATION MARK",
+    [ "\u201E",    # "DOUBLE LOW-9 QUOTATION MARK",
+      "\u201F" ],  # "DOUBLE HIGH-REVERSED-9 QUOTATION MARK",
 
-    [ 0x2039,    # "SINGLE LEFT-POINTING ANGLE QUOTATION MARK",
-      0x203A ],  # "SINGLE RIGHT-POINTING ANGLE QUOTATION MARK",
+    [ "\u2039",    # "SINGLE LEFT-POINTING ANGLE QUOTATION MARK",
+      "\u203A" ],  # "SINGLE RIGHT-POINTING ANGLE QUOTATION MARK",
 
-    [ 0x2E02,    # "LEFT SUBSTITUTION BRACKET",
-      0x2E03 ],  # "RIGHT SUBSTITUTION BRACKET",
+    [ "\u2E02",    # "LEFT SUBSTITUTION BRACKET",
+      "\u2E03" ],  # "RIGHT SUBSTITUTION BRACKET",
 
-    [ 0x2E04,    # "LEFT DOTTED SUBSTITUTION BRACKET",
-      0x2E05 ],  # "RIGHT DOTTED SUBSTITUTION BRACKET",
+    [ "\u2E04",    # "LEFT DOTTED SUBSTITUTION BRACKET",
+      "\u2E05" ],  # "RIGHT DOTTED SUBSTITUTION BRACKET",
 
-    [ 0x2E09,    # "LEFT TRANSPOSITION BRACKET",
-      0x2E0A ],  # "RIGHT TRANSPOSITION BRACKET",
+    [ "\u2E09",    # "LEFT TRANSPOSITION BRACKET",
+      "\u2E0A" ],  # "RIGHT TRANSPOSITION BRACKET",
 
-    [ 0x2E0C,    # "LEFT RAISED OMISSION BRACKET",
-      0x2E0D ],  # "RIGHT RAISED OMISSION BRACKET",
+    [ "\u2E0C",    # "LEFT RAISED OMISSION BRACKET",
+      "\u2E0D" ],  # "RIGHT RAISED OMISSION BRACKET",
 
-    [ 0x2E1C,    # "LEFT LOW PARAPHRASE BRACKET",
-      0x2E1D ],  # "RIGHT LOW PARAPHRASE BRACKET",
+    [ "\u2E1C",    # "LEFT LOW PARAPHRASE BRACKET",
+      "\u2E1D" ],  # "RIGHT LOW PARAPHRASE BRACKET",
 
-    [ 0x2E20,    # "LEFT VERTICAL BAR WITH QUILL",
-      0x2E21 ],  # "RIGHT VERTICAL BAR WITH QUILL",
+    [ "\u2E20",    # "LEFT VERTICAL BAR WITH QUILL",
+      "\u2E21" ],  # "RIGHT VERTICAL BAR WITH QUILL",
 ]
+
+allQuoteChars = "'\"`'"
+for pq in pairedQuotes:
+    allQuoteChars += pq[0] + pq[1]
+escapedExpr = re.compile(r"""\\[%s]""" % (allQuoteChars))
 
 
 ###############################################################################
@@ -177,6 +174,7 @@ def doOneFile(path):
             lg.error("Error (%s) reading record %d of '%s'." %
                 (type(e), recnum, path), stat="readError")
             break
+        origRec = rec
         if (len(rec) == 0): break # EOF
         recnum += 1
         rec = rec.rstrip()
@@ -186,8 +184,9 @@ def doOneFile(path):
         newIndent = len(rec) - len(rec.lstrip())       # Not happy w/ tabs.
         if (newIndent < indentStack[-1]):
             if (newIndent not in indentStack):
-                report(recnum, "Indent decreasing from %d to %d, unattested." %
-                    (indentStack[-1], newIndent), rec)
+                if (args.indents): report(
+                    recnum, "Indent decreasing from %d to %d, not on stack %s." %
+                    (indentStack[-1], newIndent, indentStack), rec)
             while (indentStack[-1] > newIndent):
                 indentStack.pop()
         if (newIndent > indentStack[-1]):
@@ -198,22 +197,27 @@ def doOneFile(path):
         ###
         if (args.singlesok):
             rec = re.sub(r"""('"'|"'"|'`'|"`")""", "", rec)
+        if (args.contractions):
+            rec = re.sub(r"""\w['‘]\w""", "", rec)
+        if (args.escaped):
+            rec = re.sub(escapedExpr, "", rec)
+
         n = countChar(rec, "'")
         if (n % 2):
-            report(recnum, "Odd number of single quotes (%s)" % (n), rec)
+            report(recnum, "Odd number of straight single quotes (%s)" % (n), origRec)
         n = countChar(rec, '"')
         if (n % 2):
-            report(recnum, "Odd number of double quotes (%s)" % (n), rec)
+            report(recnum, "Odd number of straight double quotes (%s)" % (n), origRec)
         n = countChar(rec, "`")
         if (n % 2):
-            report(recnum, "Odd number of back quotes (%s)" % (n), rec)
+            report(recnum, "Odd number of plain back quotes (%s)" % (n), origRec)
 
         if (args.iencoding == 'utf8'):
             for pair in (pairedQuotes):
-                nopen = countChar(rec, unichr(pair[0]))
-                nclos = countChar(rec, unichr(pair[1]))
+                nopen = countChar(rec, pair[0])
+                nclos = countChar(rec, pair[1])
                 if (nopen != nclos):
-                    report(recnum, "Open/close counts mismatch", rec)
+                    report(recnum, "Open/close counts mismatch", origRec)
     fh.close()
     return(recnum)
 
@@ -239,8 +243,17 @@ def processOptions():
         parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
+        "--contractions", action='store_true',
+        help='Discard apostrophes and right singlequotes within words, like "can\t".')
+    parser.add_argument(
+        "--escaped", action='store_true',
+        help='Discard quotes wafter non-doubled backslash like "see \\\" and \\\'.".')
+    parser.add_argument(
         "--iencoding", type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
+    parser.add_argument(
+        "--indents", action='store_true',
+        help='Also report indentation decreases not to stacked columns.')
     parser.add_argument(
         "--oencoding", type=str, metavar='E',
         help='Use this character set for output files.')
@@ -249,7 +262,7 @@ def processOptions():
         help='Suppress most messages.')
     parser.add_argument(
         "--singlesok", action='store_true',
-        help='Discard things like: <<"\'">>.')
+        help='Discard quotes that are alone inside others, like: "\'".')
     parser.add_argument(
         "--unicode", action='store_const', dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
@@ -261,8 +274,7 @@ def processOptions():
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files', type=str,
-        nargs=argparse.REMAINDER,
+        'files', type=str, nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
