@@ -440,7 +440,7 @@ sub handleToken {
     elsif ($val =~ m/^(h|\?|help)$/) {        # help
         showHelp();
     }
-    elsif ($val eq "st") {                    # subtotal
+    elsif ($val eq "st" || $val eq "tot") {   # subtotal
         report();
     }
     elsif ($val eq "prod") {                  # turn on product reporting
