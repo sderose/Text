@@ -9,6 +9,7 @@ import argparse
 import re
 import codecs
 import PowerWalk
+from typing import IO
 
 from alogging import ALogger
 lg = ALogger(1)
@@ -199,7 +200,7 @@ def escapeXmlContent(s):  # From sjdUtils.py
 
 ###############################################################################
 #
-def doOneFile(path, fh):
+def doOneFile(path, fh:IO) -> int:
     """Read and deal with one individual file.
     """
     recnum = 0
@@ -271,7 +272,7 @@ def doOneFile(path, fh):
         print("Never saw '=pod'. Did you mistakenly set --justPOD?")
     return(recnum)
 
-def makeHeading(txt, level=1):
+def makeHeading(txt:str, level:int=1) -> str:
     if (args.outputFormat=="md"):
         flag = "#" * level
         return (flag+txt+flag)
@@ -301,7 +302,7 @@ codeMap = {
     "Z": [ "",      "",     "",     "",   "",    ],   # No POD
 }
 
-def fixInline(mat):
+def fixInline(mat:re.Match) -> str:
     # Can POD nest inlines, like I<foo B<bar>>?
     code = mat.group(1)
     txt = mat.group(2)
@@ -320,7 +321,7 @@ def fixInline(mat):
         txt = mat.group()
     return txt
 
-def decodeSpecialChar(text):
+def decodeSpecialChar(text:str) -> str:
     text = text.strip()
     if (text == "lt"):     return "<"
     if (text == "gt"):     return ">"
@@ -341,7 +342,7 @@ def decodeSpecialChar(text):
 # Main
 #
 if __name__ == "__main__":
-    def processOptions():
+    def processOptions() -> argparse.Namespace:
         try:
             from BlockFormatter import BlockFormatter
             parser = argparse.ArgumentParser(
