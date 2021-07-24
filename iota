@@ -1,32 +1,8 @@
 #!/usr/bin/perl -w
 ####!/opt/local/bin/perl5.22
 #
-# iota
-#
+# iota: Generate data with sequential numbering/time-stamping inserted.
 # 2005-12-27: Written by Steven J. DeRose.
-# 2006-03-14: Fix --format option.
-# 2006-06-13: Add --nobreak. Fix padding. Allow multi-base options.
-# 2006-10-10 sjd: Add '-padchar', '-base alpha' to get character output.
-# 2007-03-14 sjd: Add chr, Alpha.
-# 2007-12-10 sjd: Add --repstring, change dft to {}. Input number fmts. Getopt.
-# 2008-01-02 sjd: Add --right.
-# 2009-09-09 sjd: Support utf8 output, --repstring.
-# 2011-03-06 sjd: Add {args}, --escape. Fix 0 handling.
-# 2012-01-09 sjd: Cleanup. Switch pad() and unescape() to use sjdUtils.pm.
-# 2012-01-27 sjd: Fix to use lpad/rpad correctly with --right and --padchar.
-#     Add --base roman and --base Roman.
-# 2015-08-27: --.
-# 2016-07-26: Add --base date, --dateFormat.
-# 2017-01-09: Fix --base date.
-# 2017-02-21: Fix --base date some more. Much better --format. Add isOkBase().
-#
-# To do:
-#    Allow \ for $repString.
-#    Permit --increment month.
-#    Add support for times, not just dates?
-#    Allow 1, 2, or 3 args for end, (start,end), (start,end,incr)?
-#    Support --base of !... to run shell command and insert result?
-#    Add --base 'uname'.
 #
 use strict;
 use Getopt::Long;
@@ -34,304 +10,23 @@ use DateTime;
 use sjdUtils;
 use alogging;
 
-our $VERSION_DATE = "2017-02-21";
+our %metadata = (
+    'title'        => "iota",
+    'description'  => "Generate data with sequential numbering/time-stamping inserted.",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2005-12-27",
+    'modified'     => "2021-07-24",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
+
 my $ISO8601strftime = '%Y-%m-%d';
 my $dateFormatDft = '%a %Y-%m-%d';
 
-#print "Perl version number: " . $^V;
-
-# Option defaults
-#
-my $base             = 10;
-my $break            = 1;        # Line breaks between output items?
-my $dateFormat       = $dateFormatDft;  # *Output* format
-my $dateIncrement    = 'days';
-my $digits           = 0;        # No padding
-my $escape           = 1;
-my $format           = "";       # Just dump the number
-my $ignoreCase       = 0;
-my $increment        = 1;
-my $oencoding        = "";
-my $olineends        = "U";
-my $padchar          = "0";      # What character to pad with
-my $quiet            = 0;
-my $repstring        = "{}";     # String to replace in --format
-my $right            = 0;        # Pad on right side instead of left.
-my $start            = 1;
-my $verbose          = 0;
-
-
-# Process options
-#
-Getopt::Long::Configure ("ignore_case");
-my $result = GetOptions(
-    "base=s"            => \$base,
-    "break!"            => \$break,
-    "dateFormat=s"      => \$dateFormat,
-    "dateIncrement=s"   => \$dateIncrement,
-    "digits|width=i"    => \$digits,
-    "escape!"           => \$escape,
-    "format=s"          => \$format,
-    "h|help|?"          => sub { system "perldoc $0"; exit; },
-    "increment=s"       => \$increment,
-    "oencoding=s"       => \$oencoding,
-    "olineends=s"       => \$olineends,
-    "padchar=s"         => \$padchar,
-    "q|quiet!"          => \$quiet,
-	"r|right!"          => \$right,
-    "repstring=s"       => \$repstring,
-    "start=s"           => \$start,
-    "unicode!"          => sub { $oencoding = "utf8"; },
-    "v|verbose+"        => \$verbose,
-    "version"           => sub {
-        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
-    },
-    );
-
-($result) || die "Bad options.\n";
-
-if ($oencoding ne "") {
-    print "";
-    binmode(STDOUT, ":$oencoding");
-}
-
-$olineends = uc(substr($olineends."U",0,1));
-if    ($olineends eq "M") { $\ = chr(13); }
-elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
-else { }
-
-
-###############################################################################
-# Validate and default options
-#
-my $theDateTime = undef;  # Running date as ISO8601
-my $timeZone  = "GMT";
-my $theDateDuration = DateTime::Duration->new($dateIncrement=>1);
-
-sjdUtils::setVerbose($verbose);
-
-(isOkBase($base)) ||
-    die "Base " . $base . " not supported.\n";
-
-if ($base ne 'date') {
-    $start = int(getAnyNumber($start));
-}
-
-if ($base =~ m/^(roman)$/i) {
-    (sjdUtils::try_module("Roman::Roman")) || die
-        "Can't find CPAN module 'Roman' to support --base [Rr]oman.\n";
-}
-elsif ($base =~ m/^(alpha|chr)$/i) {
-    # Maybe should allow Greek and Hebrew, too?
-}
-elsif ($base eq 'date') {
-    if ($start eq 1) {  # Default to today
-        $theDateTime = DateTime->now('time_zone'  => "GMT");
-    }
-    elsif ($start =~ m/^(\d\d\d\d)-(\d\d)-(\d\d)$/) {
-        $theDateTime = DateTime->new(year => $1, month => $2, day => $3);
-        $start = 1; # Counts # days....
-    }
-    else {
-        die "Unrecognized --start '$start' for --date, must be yyyy-mm-dd.\n";
-    }
-    alogging::vMsg(1, "Starting date: '" .
-        $theDateTime->strftime($dateFormat) . "'");
-}
-
-$increment = int(getAnyNumber($increment));
-
-if ($digits < 0) {
-    warn "Kinda pointless to pad to " . $digits . " digits.\n";
-    $digits = 0;
-}
-
-if ($format ne "") {
-    (index($format,"$repstring")<0 && $format !~ m/\{.*?\}/) &&
-        die "No $repstring in the --format string.\n";
-    if ($escape) {
-        $format = sjdUtils::unbackslash($format);
-    }
-}
-
-(length($padchar) > 1) &&
-	die "-padchar cannot be more than one character.\n";
-if ($right && $padchar ne " ") {
-	warn "Are you sure you want --right with --padchar '$padchar'?\n";
-}
-
-# See if we have just a number left, as we ought
-if (scalar(@ARGV) != 1) {
-    die "Should have exactly one post-option argument.\n";
-}
-my $end = getAnyNumber($ARGV[0]);
-if ($end < 1) {
-    warn "May have options, then exactly one numeric argument, not '"
-        . join(" ",@ARGV) . "'.\n";
-    system "perldoc $0";
-   exit;
-}
-
-# Avoid infinite loops
-#
-if ($base ne "date") {
-    if (($end > $start && $increment <= 0) ||
-        ($end < $start && $increment >= 0)) {
-        die "$start to $end would take too long with increment $increment.\n";
-    }
-}
-
-
-###############################################################################
-###############################################################################
-sub isOkBase {
-    my ($base) = @_;
-    if (sjdUtils::isInteger($base) &&
-        $base >= 2 &&
-        ($base <= 32 || $base == 64)) { return 1; }
-    return $base =~ m/^(chr|roman|alpha|date)$/i;
-}
-
-
-###############################################################################
-###############################################################################
-# Main
-#
-for (my $i=$start; $i<=$end; $i+=$increment) {
-    my $cur = $i;
-    if ($base !~ m/^\d+$/ || $base != 10) {
-        $cur = baseConvert($i, $base);
-    }
-    if ($right) {
-        $cur = sjdUtils::rpad($cur,$digits,$padchar);
-    }
-    else {
-        $cur = sjdUtils::lpad($cur,$digits,$padchar);
-    }
-
-    if ($format ne "") {
-        $cur = fillInFormat($i, $cur);
-    }
-
-    print "$cur";
-    ($break) && print "\n";
-} # EOF
-
-exit;
-
-
-
-###############################################################################
-# Turn a time struct into a printable date in yyyy-mm-dd form.
-#
-sub time2ISO8601 {
-    my ($t) = @_;
-    my $p = sprintf("%04d-%02d-%02d", 1900+$t->[5], 1+$t->[4], $t->[3]);
-    return($p);
-}
-
-###############################################################################
-# Replace the format string with the number in some form.
-#
-# Instances of {} may also include a few arguments:
-#       {base,digits,right,padChar}
-# The arguments have the same meaning as like-named options, and override them.
-#
-sub fillInFormat {
-    my ($n, $formattedN) = @_;
-    my $result = $format;
-    $result =~ s/\{(\w+)?(,\d+)?(,\d+)?(,.)?\}/{
-        my $bs = defined $1 ? $1 : $base;
-        (isOkBase($bs)) || die "Unknown base '$bs' in template '$format'.\n";
-        my $dg = defined $2 ? substr($2,1) : $digits;
-        my $rt = defined $3 ? substr($3,1) : $right;
-        my $pd = defined $4 ? substr($4,1) : $padchar;
-        #warn "fillInFormat: $bs, $dg, $rt, $pd.\n";
-        if ($3) {
-            sjdUtils::rpad(baseConvert($n, $bs), $dg, $pd);
-         }
-         else {
-            sjdUtils::lpad(baseConvert($n, $bs), $dg, $pd);
-         }
-         }/ge;
-    $result =~ s/$repstring/$n/g;
-    $n = $result;
-} #  fillInFormat
-
-
-###############################################################################
-# Convert to different bases (including various named --base values such as
-# 'roman', 'alpha', 'date',.... Doesn't work for negative numbers.
-#
-sub baseConvert {
-    my ($n, $nbase) = @_;
-
-    if (!defined $nbase) {
-        die "No base passed for baseConvert of $n.\n";
-    }
-
-    if ($n<0 && $nbase != 10) {
-        die "Sorry, can't do negative numbers except in decimal.\n";
-    }
-
-    my $result = "";
-    my $value = 1;
-
-    if ($nbase eq "chr") {
-        #warn "chr for $n, which is " . chr($n) ".\n";
-        ($n>255 && $oencoding ne "utf8") && die
-            "out of range unless you use --unicode/-oencoding utf8.\n";
-        return(chr($n));
-    }
-    if ($nbase =~ m/^alpha$/i) {
-        my $list = (substr($nbase,0,1) eq 'A')
-            ? "?ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            : "?abcdefghijklmnopqrstuvwxyz";
-        return(($n<1 || $n>26) ? "?":substr($list,$n,1));
-    }
-    if ($nbase =~ m/^roman$/i) {
-        if (substr($nbase,0,1) eq 'r') {
-            return(Roman::roman($n));
-        }
-        else {
-            return(Roman::Roman($n));
-        }
-    }
-    if ($nbase =~ m/^date$/i) {
-        my $printable = $theDateTime->strftime($dateFormat);
-        $theDateTime->add($theDateDuration);
-        return($printable);
-    }
-    if ($nbase eq "64") {
-        return(base64($n));
-    }
-
-    # Find biggest power that fits
-    while ($value*$nbase <= $n) {
-        $value *= $nbase;
-    }
-    while ($value > 0) {
-        my $digNum = int($n / $value);
-        my $digChar = substr("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",$digNum,1);
-        $result = $result . $digChar;
-        $n -= $digNum * $value;
-        $value = int ($value/$nbase);
-    }
-    return $result;
-} # baseConvert
-
-
-sub getAnyNumber {
-    my $n = $_[0];
-    $n = oct($n) if ($n =~ m/^0/);
-    return($n);
-} # getAnyNumber
-
-
-
-###############################################################################
-###############################################################################
-#
 
 =encoding utf-8
 
@@ -535,11 +230,13 @@ Synonym for I<--digits>.
 =back
 
 
-
 =head1 --dateFormat codes
 
-These are same as for C<strftime>.
+These are same as for C<strftime>. For example, ISO 8601 datetime format can be 
+constructed via:
 
+    "%Y-%m-%dT%H:%M:%S%z"
+    
 =over
 
 =item '%a' The abbreviated weekday name according to the current locale.
@@ -644,6 +341,18 @@ I<--start> with I<--base date> only allows yyyy-mm-dd dates (although you can
 use I<--dateFormat> to get the full I<strftime> range of I<output> formats.
 
 
+=head1 To do
+
+  Allow \ for $repString.
+  Permit --increment month.
+  Add support for times, not just dates?
+  Allow 1, 2, or 3 args for end, (start,end), (start,end,incr)?
+  Support --base of !... to run shell command and insert result?
+  Add --base 'uname'.
+  Port to Python.
+  Support all CSS ordered-list numbering schemes, and all unicode digit sets a la C<mathAlphanumerics.py>.
+
+
 =head1 Related commands
 
 C<Roman> -- CPAN package to do Roman-numeral conversion.
@@ -661,6 +370,25 @@ decimal, octal (0777), hex (0xfff), or binary (0b1111).
 Extra points if you know where the name comes from.
 
 
+=head1 History
+
+  2005-12-27: Written by Steven J. DeRose.
+  2006-03-14: Fix --format option.
+  2006-06-13: Add --nobreak. Fix padding. Allow multi-base options.
+  2006-10-10 sjd: Add '-padchar', '-base alpha' to get character output.
+  2007-03-14 sjd: Add chr, Alpha.
+  2007-12-10 sjd: Add --repstring, change dft to {}. Input number fmts. Getopt.
+  2008-01-02 sjd: Add --right.
+  2009-09-09 sjd: Support utf8 output, --repstring.
+  2011-03-06 sjd: Add {args}, --escape. Fix 0 handling.
+  2012-01-09 sjd: Cleanup. Switch pad() and unescape() to use sjdUtils.pm.
+  2012-01-27 sjd: Fix to use lpad/rpad correctly with --right and --padchar.
+      Add --base roman and --base Roman.
+  2015-08-27: --.
+  2016-07-26: Add --base date, --dateFormat.
+  2017-01-09: Fix --base date.
+  2017-02-21: Fix --base date some more. Much better --format. Add isOkBase().
+
 =head1 Ownership
 
 This work by Steven J. DeRose is licensed under a Creative Commons
@@ -669,4 +397,288 @@ this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
 
 For the most recent version, see L<http://www.derose.net/steve/utilities/>.
 
+
 =cut
+
+
+###############################################################################
+# Options
+#
+my $base             = 10;
+my $break            = 1;        # Line breaks between output items?
+my $dateFormat       = $dateFormatDft;  # *Output* format
+my $dateIncrement    = 'days';
+my $digits           = 0;        # No padding
+my $escape           = 1;
+my $format           = "";       # Just dump the number
+my $ignoreCase       = 0;
+my $increment        = 1;
+my $oencoding        = "";
+my $olineends        = "U";
+my $padchar          = "0";      # What character to pad with
+my $quiet            = 0;
+my $repstring        = "{}";     # String to replace in --format
+my $right            = 0;        # Pad on right side instead of left.
+my $start            = 1;
+my $verbose          = 0;
+
+Getopt::Long::Configure ("ignore_case");
+my $result = GetOptions(
+    "base=s"            => \$base,
+    "break!"            => \$break,
+    "dateFormat=s"      => \$dateFormat,
+    "dateIncrement=s"   => \$dateIncrement,
+    "digits|width=i"    => \$digits,
+    "escape!"           => \$escape,
+    "format=s"          => \$format,
+    "h|help|?"          => sub { system "perldoc $0"; exit; },
+    "increment=s"       => \$increment,
+    "oencoding=s"       => \$oencoding,
+    "olineends=s"       => \$olineends,
+    "padchar=s"         => \$padchar,
+    "q|quiet!"          => \$quiet,
+	"r|right!"          => \$right,
+    "repstring=s"       => \$repstring,
+    "start=s"           => \$start,
+    "unicode!"          => sub { $oencoding = "utf8"; },
+    "v|verbose+"        => \$verbose,
+    "version"           => sub {
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
+    },
+    );
+
+($result) || die "Bad options.\n";
+
+if ($oencoding ne "") {
+    print "";
+    binmode(STDOUT, ":$oencoding");
+}
+
+$olineends = uc(substr($olineends."U",0,1));
+if    ($olineends eq "M") { $\ = chr(13); }
+elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
+else { }
+
+
+###############################################################################
+# Validate and default options
+#
+my $theDateTime = undef;  # Running date as ISO8601
+my $timeZone  = "GMT";
+my $theDateDuration = DateTime::Duration->new($dateIncrement=>1);
+
+sjdUtils::setVerbose($verbose);
+
+(isOkBase($base)) ||
+    die "Base " . $base . " not supported.\n";
+
+if ($base ne 'date') {
+    $start = int(getAnyNumber($start));
+}
+
+if ($base =~ m/^(roman)$/i) {
+    (sjdUtils::try_module("Roman::Roman")) || die
+        "Can't find CPAN module 'Roman' to support --base [Rr]oman.\n";
+}
+elsif ($base =~ m/^(alpha|chr)$/i) {
+    # Maybe should allow Greek and Hebrew, too?
+}
+elsif ($base eq 'date') {
+    if ($start eq 1) {  # Default to today
+        $theDateTime = DateTime->now('time_zone'  => "GMT");
+    }
+    elsif ($start =~ m/^(\d\d\d\d)-(\d\d)-(\d\d)$/) {
+        $theDateTime = DateTime->new(year => $1, month => $2, day => $3);
+        $start = 1; # Counts # days....
+    }
+    else {
+        die "Unrecognized --start '$start' for --date, must be yyyy-mm-dd.\n";
+    }
+    alogging::vMsg(1, "Starting date: '" .
+        $theDateTime->strftime($dateFormat) . "'");
+}
+
+$increment = int(getAnyNumber($increment));
+
+if ($digits < 0) {
+    warn "Kinda pointless to pad to " . $digits . " digits.\n";
+    $digits = 0;
+}
+
+if ($format ne "") {
+    (index($format,"$repstring")<0 && $format !~ m/\{.*?\}/) &&
+        die "No $repstring in the --format string.\n";
+    if ($escape) {
+        $format = sjdUtils::unbackslash($format);
+    }
+}
+
+(length($padchar) > 1) &&
+	die "-padchar cannot be more than one character.\n";
+if ($right && $padchar ne " ") {
+	warn "Are you sure you want --right with --padchar '$padchar'?\n";
+}
+
+# See if we have just a number left, as we ought
+if (scalar(@ARGV) != 1) {
+    die "Should have exactly one post-option argument.\n";
+}
+my $end = getAnyNumber($ARGV[0]);
+if ($end < 1) {
+    warn "May have options, then exactly one numeric argument, not '"
+        . join(" ",@ARGV) . "'.\n";
+    system "perldoc $0";
+   exit;
+}
+
+# Avoid infinite loops
+#
+if ($base ne "date") {
+    if (($end > $start && $increment <= 0) ||
+        ($end < $start && $increment >= 0)) {
+        die "$start to $end would take too long with increment $increment.\n";
+    }
+}
+
+
+###############################################################################
+sub isOkBase {
+    my ($base) = @_;
+    if (sjdUtils::isInteger($base) &&
+        $base >= 2 &&
+        ($base <= 32 || $base == 64)) { return 1; }
+    return $base =~ m/^(chr|roman|alpha|date)$/i;
+}
+
+
+###############################################################################
+# Main
+#
+for (my $i=$start; $i<=$end; $i+=$increment) {
+    my $cur = $i;
+    if ($base !~ m/^\d+$/ || $base != 10) {
+        $cur = baseConvert($i, $base);
+    }
+    if ($right) {
+        $cur = sjdUtils::rpad($cur,$digits,$padchar);
+    }
+    else {
+        $cur = sjdUtils::lpad($cur,$digits,$padchar);
+    }
+
+    if ($format ne "") {
+        $cur = fillInFormat($i, $cur);
+    }
+
+    print "$cur";
+    ($break) && print "\n";
+} # EOF
+
+exit;
+
+
+###############################################################################
+# Turn a time struct into a printable date in yyyy-mm-dd form.
+#
+sub time2ISO8601 {
+    my ($t) = @_;
+    my $p = sprintf("%04d-%02d-%02d", 1900+$t->[5], 1+$t->[4], $t->[3]);
+    return($p);
+}
+
+###############################################################################
+# Replace the format string with the number in some form.
+#
+# Instances of {} may also include a few arguments:
+#       {base,digits,right,padChar}
+# The arguments have the same meaning as like-named options, and override them.
+#
+sub fillInFormat {
+    my ($n, $formattedN) = @_;
+    my $result = $format;
+    $result =~ s/\{(\w+)?(,\d+)?(,\d+)?(,.)?\}/{
+        my $bs = defined $1 ? $1 : $base;
+        (isOkBase($bs)) || die "Unknown base '$bs' in template '$format'.\n";
+        my $dg = defined $2 ? substr($2,1) : $digits;
+        my $rt = defined $3 ? substr($3,1) : $right;
+        my $pd = defined $4 ? substr($4,1) : $padchar;
+        #warn "fillInFormat: $bs, $dg, $rt, $pd.\n";
+        if ($3) {
+            sjdUtils::rpad(baseConvert($n, $bs), $dg, $pd);
+         }
+         else {
+            sjdUtils::lpad(baseConvert($n, $bs), $dg, $pd);
+         }
+         }/ge;
+    $result =~ s/$repstring/$n/g;
+    $n = $result;
+} #  fillInFormat
+
+
+###############################################################################
+# Convert to different bases (including various named --base values such as
+# 'roman', 'alpha', 'date',.... Doesn't work for negative numbers.
+#
+sub baseConvert {
+    my ($n, $nbase) = @_;
+
+    if (!defined $nbase) {
+        die "No base passed for baseConvert of $n.\n";
+    }
+
+    if ($n<0 && $nbase != 10) {
+        die "Sorry, can't do negative numbers except in decimal.\n";
+    }
+
+    my $result = "";
+    my $value = 1;
+
+    if ($nbase eq "chr") {
+        #warn "chr for $n, which is " . chr($n) ".\n";
+        ($n>255 && $oencoding ne "utf8") && die
+            "out of range unless you use --unicode/-oencoding utf8.\n";
+        return(chr($n));
+    }
+    if ($nbase =~ m/^alpha$/i) {
+        my $list = (substr($nbase,0,1) eq 'A')
+            ? "?ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            : "?abcdefghijklmnopqrstuvwxyz";
+        return(($n<1 || $n>26) ? "?":substr($list,$n,1));
+    }
+    if ($nbase =~ m/^roman$/i) {
+        if (substr($nbase,0,1) eq 'r') {
+            return(Roman::roman($n));
+        }
+        else {
+            return(Roman::Roman($n));
+        }
+    }
+    if ($nbase =~ m/^date$/i) {
+        my $printable = $theDateTime->strftime($dateFormat);
+        $theDateTime->add($theDateDuration);
+        return($printable);
+    }
+    if ($nbase eq "64") {
+        return(base64($n));
+    }
+
+    # Find biggest power that fits
+    while ($value*$nbase <= $n) {
+        $value *= $nbase;
+    }
+    while ($value > 0) {
+        my $digNum = int($n / $value);
+        my $digChar = substr("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",$digNum,1);
+        $result = $result . $digChar;
+        $n -= $digNum * $value;
+        $value = int ($value/$nbase);
+    }
+    return $result;
+} # baseConvert
+
+
+sub getAnyNumber {
+    my $n = $_[0];
+    $n = oct($n) if ($n =~ m/^0/);
+    return($n);
+} # getAnyNumber

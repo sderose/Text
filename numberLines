@@ -9,6 +9,7 @@ use Encode;
 
 our %metadata = (
     'title'        => "numberLines",
+    'description'  => "Add/remove numbers from lines.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
@@ -29,7 +30,7 @@ numberLines [options]
 Print a line number before each line from stdin, similar to C<grep -c>,
 I<uniq -c>, etc.
 
-Can also use hex numbers (I<--hex),
+Can also use hex numbers (I<--hex>),
 remove numbers (I<--remove>),
 insert at the end rather than the beginning (I<--suffix>),
 insert each line's length instead of a serial number (I<--byLength>),
@@ -43,7 +44,7 @@ squeeze or just not number runs of blank lines, etc.
 =item * B<-b> OR B<--non-blank-only>
 
 Rather than numbering all lines, don't count or prefix lines that contain only
-whitespace characters.
+whitespace characters. Cf. C<cat -b>.
 
 =item * B<--byLength>
 
@@ -63,6 +64,12 @@ See also I<--enderChar>.
 
 Use this instead of "$" as the character to append with I<--ender>.
 
+=item * B<--escapeChar> I<c>
+
+Insert this to escape special characters when needed, for example literal occurrences
+of the I<--quoteChar> character (when enabled). In such cases, this is also used to
+escape itself. Default: "\\".
+
 =item * B<--hex>
 
 Write the numbers in base 16 instead of base 10.
@@ -78,6 +85,16 @@ Don't count or number or unnumber lines that match I<regex>.
 =item * B<--listEncodings>
 
 Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
+
+=item * B<--quote> OR B<-q>
+
+Surround each line with the character given as I<--quoteChar>,
+and escape any internal occurrences of that character, using I<--escapeChar>.
+
+=item * B<--quoteChar> I<c>
+
+Use I<c> as the character with which to quote each line (only used if I<--quote> is set).
+Default: double-quote (U+0022).
 
 =item * B<--quiet> or B<-q>
 
@@ -117,18 +134,40 @@ Zero-pad the number to at least this many digits (set C<0> for no padding).
 
 =head1 Related commands
 
-C<cat -n> is similar, but doesn't have I<--hex>, I<--width>, or
-support for Unicode and other encodings. It does have -v (similar to my
-C<showInvisibles>); -e (which i've added).
+Very similar (on purpose) to C<cat -n>, but doesn't have I<--hex>, I<--width>, I<-q>,
+I<delim>, 
+or support for Unicode and other encodings. It does have I<-v> (which I plan to add
+with more control, similar to my
+C<showInvisibles>).
 
 C<deriveData> can insert a new field into each record of a file(s) in
-CSV, XSV, and many other roughly "tabular" file formats. The expression for what
-value to insert can make reference to (among other things) the current record
-number, and so can be used to insert line-numbers much like C<numberLines>.
+CSV, XSV, and many other roughly "tabular" file formats. The
+value to insert can fill in the current record
+number (among other things) like C<numberLines>.
 
 C<iota> generates serial-numbered things in many forms, but does not attach
-them to incoming data lines. These may be integrated.
+them to incoming data lines. These could be integrated.
 
+
+=head1 To do
+
+  Option to colorize the number (can instead use C<colorstring>).
+  Option to count from/by increment, and use all bases from C<iota>.
+  Add equivalents for C<cat> options:
+    -e: -v plus add "$" at end of line
+    -n: Well, that's our default...
+    -t: -v plus tab as ^i
+    -u: no output buffering
+    -v: control to ^X, \xFF as ^?, Latin-1 as M-[chr-128). But be much more flexiebl
+  Option to quote lines and escape internals
+  Option to do much more flexible "-v" equiv:
+      Esc. as for Perl, C, Python, XML, HTML,.... (how many can be done w/ Python encode?
+      Control pictures
+  Port to Python, rename to catPP.
+  Option to insert file boundary markers
+  Integrate w/ PowerWalk
+  Support full range of --quoteChar, incl. curlies.
+  
 
 =head1 History
 
@@ -141,15 +180,8 @@ them to incoming data lines. These may be integrated.
   2018-09-27: Add --byLength, --suffix.
   2020-08-30: New layout. Add -b (like C<cat>) to number just non-blank lines.
 Add -e, --enderChar, -s.
-
-
-=head1 To do
-
-  Option to colorize the number (can just use C<colorstring>).
-  Option to count from/by increment, and use all bases from C<iota>.
-  Compare C<cat -n>.
-  Add show-tabs, show-nonprinting?
-
+  2021-07-24: Add -q, --quoteChar, --escapeChar.
+  
 
 =head1 Ownership
 
@@ -157,8 +189,7 @@ This work by Steven J. DeRose is licensed under a Creative Commons
 Attribution-Share Alike 3.0 Unported License. For further information on
 this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
 
-For the most recent version,
-see L<http://www.derose.net/steve/utilities/>.
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
 
 =cut
 
@@ -172,10 +203,13 @@ my $byLength     = 0;
 my $delim        = " ";
 my $ender        = 0;
 my $enderChar    = "\$";
+my $escapeChar   = "\\";
 my $iencoding    = "";
 my $hex          = 0;
 my $ignore       = "";
 my $quiet        = 0;
+my $quote        = 0;
+my $quoteChar    = '"';
 my $remove       = 0;
 my $squeeze      = 0;
 my $suffix       = 0;
@@ -188,6 +222,7 @@ my %getoptHash = (
     "delim=s"         => \$delim,
     "e|ender!"        => \$ender,
     "enderChar=s"     => \$enderChar,
+    "escapeChar=s"    => \$escapeChar,
     "hex!"            => \$hex,
     "h|help"          => sub { system "perldoc $0"; exit; },
     "iencoding=s"     => \$iencoding,
@@ -206,6 +241,8 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
+    "quote!"          => \$quote,
+    "quoteChar=s"     => \$quoteChar,
     "q|quiet!"        => \$quiet,
     "remove!"         => \$remove,
     "s|squeeze!"      => \$squeeze,
@@ -244,35 +281,40 @@ my $lastRec = my $rec = "";
 
 while ($lastRec = $rec, $rec = <>) {
     chomp($rec);
-    if ($ignore && $rec =~ /$ignore/) {               # Ignorable
-        print ((" " x $width) . $delim . $rec . "\n");
-        next;
+    if ($ignore && $rec =~ /$ignore/) {                  # Ignorable
+        $rec = ((" " x $width) . $delim . $rec . "\n");
     }
-    if ($rec =~ m/^\s*$/) {                           # Blank
+    elsif ($rec =~ m/^\s*$/) {                           # Blank
         if ($squeeze && ($lastRec =~ m/^\s*$/)) {
             next;
         }
-        print($rec . ($ender ? $enderChar:"") . "\n");
-        next;
     }
-    if ($remove) {                                    # Remove number
+    elsif ($remove) {                                    # Remove number
         $recnum++;
         if ($hex) { $rec =~ s/^\s*[\da-fA-F]+$delim//; }
         else { $rec =~ s/^\s*\d+$delim//; }
-        print("$rec\n");
     }
-    else {                                            # Add number
-        $recnum++;
+    else {                                               # Add number
+        $recnum++;  
         my $toInsert = ($byLength) ? length($rec) : $recnum;
         my $num = sprintf($format, $toInsert);
         if ($suffix) {
-            print($rec . ($ender ? $enderChar:"") . $delim . $num . "\n");
+            $rec .= $delim . $num;
         }
         else {
-            print($num . $delim . $rec . ($ender ? $enderChar:"") . "\n");
+            $rec = $num . $delim . $rec;
         }
     }
+    
+    if ($quote) {
+        $rec =~ s/$escapeChar/$escapeChar$escapeChar/g;
+        $rec =~ s/$quoteChar/$escapeChar$quoteChar/g;
+        $rec = $quoteChar . $rec . $quoteChar;
+    }
+    if ($ender) {
+        $rec .= $enderChar;
+    }
+    print("$rec\n");
 }
-($verbose) && warn "Handled $recnum (non-ignored) lines.\n";
 
-exit;
+($verbose) && warn "Handled $recnum (non-ignored) lines.\n";
