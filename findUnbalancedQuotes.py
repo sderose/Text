@@ -34,7 +34,9 @@ This script does not know about particular programming or other languages,
 so does not (yet) deal with cases such as quotes backslashed within quotes,
 multi-line quotations, here documents, etc.
 
-With ''--unicode'', checks for various curly quote pairs, though not perfectly.
+  With ''--unicode'', checks for various curly quote pairs, though not perfectly.
+  With ''--contractions', ignores likely natural-languages contraction apostrophes.
+  With ''--perl'', also reports things like "if...{ [...code...]" with no "}".
 
 
 =Related Commands=
@@ -64,6 +66,7 @@ Add expandTabs for that.
 2020-04-21: Start indentation-tracking.
 2021-07-13: Add --contractions and --escaped options,
  `origiRec` for accurate reporting.
+2021-08-06: Add experimental --perl to find one-line 'if's that don't close.
 
 
 =Rights=
@@ -211,7 +214,9 @@ def doOneFile(path):
         n = countChar(rec, "`")
         if (n % 2):
             report(recnum, "Odd number of plain back quotes (%s)" % (n), origRec)
-
+        if (args.perl and re.search(r"\bif.*{.*;[^\s}]*$", rec)):
+            report(recnum, "Perl-like 'if' then '{' then code, but no '}'.", origRec)
+        
         if (args.iencoding == 'utf8'):
             for pair in (pairedQuotes):
                 nopen = countChar(rec, pair[0])
@@ -257,6 +262,9 @@ def processOptions():
     parser.add_argument(
         "--oencoding", type=str, metavar='E',
         help='Use this character set for output files.')
+    parser.add_argument(
+        "--perl", action='store_true',
+        help='Also look for Perl-ish if.*{.*;[^\s}]*$')
     parser.add_argument(
         "--quiet", "-q", action='store_true',
         help='Suppress most messages.')
