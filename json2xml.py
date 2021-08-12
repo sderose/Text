@@ -16,32 +16,91 @@ from alogging import ALogger
 lg = ALogger(1)
 
 __metadata__ = {
-    'title'        : "json2xml.py",
-    'rightsHolder' : "Steven J. DeRose",
-    'creator'      : "http://viaf.org/viaf/50334488",
-    'type'         : "http://purl.org/dc/dcmitype/Software",
-    'language'     : "Python 3.7",
-    'created'      : "2012-12-04",
-    'modified'     : "2020-20-09",
-    'publisher'    : "http://github.com/sderose",
-    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+    "title"        : "json2xml.py",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2012-12-04",
+    "modified"     : "2020-20-09",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
-__version__ = __metadata__['modified']
+__version__ = __metadata__["modified"]
 
+sampleJSON = """
+    [{
+        "atom01":        1,
+        "atom03":        3.14,
+        "atom04":        true,
+        "atom05":        false,
+        "atom06":        null,
+        "atom07":        "",
+        "atom09":        "token",
+        "atom08":        "micro is \xB5, as in \xB5second.",
+        "atom10":       " < & ]]> \\" \\n \\r \\t \\\\",
+        "list1_Ints":   [ 1, 22, 3333 ],
+        "list2":        [ 9.0, false, "aardvark", [ 2, 3 ], [] ],
+        "list5_Hashes":  [
+            { "h1a":"aardvark",  "h1b": "boar" },
+            { "h2a" :"cat",      "h2b" : "dog" },
+            { "h3a"
+            :
+            "elephant"
+            ,
+            "h3b"            :       4.2 },
+            { "sublist": [ [1,2,3], [4,5,6], [7,8,9] ] }
+        ]
+    }]
+"""
 
 descr = """
-=Usage=
+=Description=
 
 json2xml.py [options] [files]
 
 Simple but thorough conversion of JSON, or of pretty much any Python data,
 to XML syntax. It's smart enough to represent not only the list vs. dict
-distinction which comes naturally to JSON, but
+distinction which comes naturally to JSON, but a variety of other Python types.
+
+A few other output formats are also provided, includinng pretty-printed JSON.
+
+The basic goals are:
+    * Support JSON entirely
+    * Support most Python types, such as collections; but not necessarily references,
+and only the data, not code (for example, no functions, and only the data of objects)
+    * Enough information to round-trip correctly
+    * Fairly compact. but much mnore important, easy to read.
+
+In short:
+* collection become container elements of the appropriate type:
+     <dict>, <list>, etc.
+* collections that need keys (such as dict), contain <item> elements, whose 'key' attribute
+holds the key, and whose content is the actual item. It may be preferable to just add
+a 'key' attribute to all the items directly, which I plan to add as an option.
+* numeric items become empty elements named for their type, with the value on an attribute:
+    <i v="1"/>, <f v="-1.2"/>
+* strings become the content of <u> (for Unicode) elements:
+    <u>Hello, world.</u>
+* The three special values True, False, and None become empty elements of the same names:
+    <T/>, <F/>, <None/>
+
+==Why?==
+
+* To support a much larger range of types, round-trippably.
+* To make the entire XML ecosystem (validation, transformation, rendering, databases,
+digital signing, query languages and engines, etc. etc.) easy to apply to Python data.
+
+
+==Usage==
 
 You can run this from the command line
-to load and convert a JSON file(s). Or you can use this from Python code
+to load and convert a JSON file(s). 
+
+You can also use this from Python code
 by calling `serialize2xml()` on most any Python object (whether it came from
-JSON or not).
+JSON or not). In that case, you'll get fancier output, that tells you what the
+classes were, handles complex numbers, tuples, etc.
 
 By default, it converts (losslessly, I hope) from JSON to XML. But use the
 `--oformat` option to choose other output formats (specifying `--oformat json`
@@ -70,31 +129,9 @@ result of which is not necessarily consistent across JSON tools).
 Thus, these are the only Python types passed to the XML serializer for data
 that was loaded by JSON. However, this package handles other Python types.
 
-
 ==Example==
 
-    [{
-        "atom01":        1,
-        "atom03":        3.14,
-        "atom04":        true,
-        "atom06":        null,
-        "atom07":        "",
-        "atom09":        "token",
-        "atom10":       "a\nbc\t ",
-        "atom11":       " < & ]]> \" \n \r \t \\",
-        "list1_Ints":   [ 1, 22, 3333 ],
-        "list2":        [ 9.0, false, "aardvark", [ 2, 3 ], [] ],
-        "list5_Hashes":  [
-            { "h1a":"aardvark",  "h1b": "boar" },
-            { "h2a" :"cat",      "h2b" : "dog" },
-            { "h3a"
-            :
-            "elephant"
-            ,
-            "h3b"            :       4.2 },
-            {}
-        ]
-    }]
+""" + sampleJSON + """
 
 becomes (by default) this:
 
@@ -151,19 +188,13 @@ bc	 </u></ditem>
 
 =Options=
 
-* '''--noprop'''
-
-Untag the "pyxs:prop" elements from the XML output. Where they have names,
-the name is lost (should instead move these items onto the container element
-as named attributes, or something like that).
-
 * '''--nonamespace'''
 
 Delete the "pyxs:" namespace prefixes from all output XML elements.
 
-* '''--nosize'''
+* '''--size'''
 
-Delete the "size" attributes from the XML output.
+Add a "size" attribute on collecitons types, giving their length.
 
 * '''--notype'''
 
@@ -241,11 +272,17 @@ some cost in verbosity, effective portability, and/or clarity.
 
 =To do=
 
-* Test with non-string dict keys.
-* Add support for changing the XML tags to use.
+* Test with non-string dict keys and other more complex Python data sources.
+* At least as an option, drop <ditem> and just put the key on the items.
+Or possibly, move scalar named items to parent attributes
+* Finish support for changing the XML tags to use.
 * Add more --oformat choices, such as Python and Perl dcls.
 * Finish support for homogeneous collections.
 * Add a loader for round-tripping straight into Python structures.
+* Fix --pad.
+* Option to number items in lists, put len on collections
+* Option to optimize sparse lists (say, where item is same as prev, gen:
+    <repeat n="200"/>
 
 
 =Rights=
@@ -267,16 +304,8 @@ For the most recent version, see [http://www.derose.net/steve/utilities] or
 distinct from "dicts", even though JSON doesn't know. Write out subclasses
 (even though they won't show up for data that was really JSON).
 * 2020-12-09: Clean up. Add --oformat, integrate PowerWalk and alogging.
-
-
-=To do=
-
-* Fix --pad.
-* Option to move scalar named items to parent attributes, or not to tag scalars.
-* Option to number items in lists, put len on collections
-* Option to optimize sparse lists (say, where item is same as prev, gen:
-    <repeat n="200"/>
-
+* 2021-08-12: Factor out tag names to enable options to set them. Type-hints.
+Add --lengths. 
 
 =Options=
 """
@@ -296,115 +325,157 @@ escMap = {
 }
 def _escaper(mat):
     return escMap[mat.group(1)]
-def escapeAttribute(s):
+def escapeAttribute(s:str):
     return re.sub(r'(["<&])', _escaper, s)
-def escapeText(s):
+def escapeText(s:str):
     return re.sub(r'(<|&|]]>])', _escaper, s)
-def escapePI(s):
+def escapePI(s:str):
     return re.sub(r'(\?>)', _escaper, s)
-def escapeComment(s):
+def escapeComment(s:str):
     return re.sub(r'(-->)', _escaper, s)
 
-
+def startTag(x:str, attrs:dict=None):
+    attlist = ""
+    if (attrs):
+        for k, v in attrs.items():
+            attlist += ' %s="%s"' % (k, escapeAttribute(v))
+    return "<%s%s>" % (x, attlist)
+def emptyTag(x:str, attrs:dict=None):
+    attlist = ""
+    if (attrs):
+        for k, v in attrs.items():
+            attlist += ' %s="%s"' % (k, escapeAttribute(v))
+    return "<%s/>" % (x)
+def endTag(x:str):
+    return "</%s>" % (x)
+    
+    
 ###############################################################################
-# See http://stackoverflow.com/questions/1305532/convert-python-dict-to-object
-# Promotes a dict to an Object.
 #
 class Str:
     def __init__(self, **entries):
         self.__dict__.update(entries)
 
-def serialize2xml(pyObject, istring='    ', depth=0):
+def serialize2xml(pyObject, istring:str="    ", depth:int=0):
     """Return an XML serialization of the object (recursive).
     Typically we expect JSON, but it doesn't have to be.
     """
+    
+    # Define what names to use as tag for various types
+    _DICT = "dict"
+    _LIST = "list"
+    _TUPLE = "tuple"
+    _OBJECT = "object"
+    _ITEM = "item"
+    _TRUE = "True"
+    _FALSE = "False"
+    _NONE = "None"
+    _int = "i"
+    _float = "f"
+    _complex = "c"
+    _str = "u"
+    # And attributes:
+    _KEY = "key"
+    _VALUE = "v"
+    _REAL = "r"
+    _IMAG = "i"
+    _CLASS = "class"
+    _LEN = "len"
+    _GENEITY = "homogeneous"
+    
     # Collection types
     #
     buf = ""
     if (isinstance(pyObject, tuple)):                   # TUPLE
         if (istring): buf += "\n" + (istring * depth)
-        if (type(pyObject).__name__ != 'tuple'):
-            buf += '<tuple class="%s">' % (type(pyObject).__name__)
-        else:
-            buf += "<tuple>"
+        attrs = {}
+        if (type(pyObject).__name__ != "tuple"): attrs[_CLASS] = type(pyObject).__name__
+        if (args.lengths): attrs[_LEN] = "%d" % (len(pyObject))
+        buf += startTag(_TUPLE, attrs)
         depth += 1
         for k, v in pyObject.items():
             if (istring): buf += "\n" + (istring * depth)
-            buf += "<item>%s</item>" % (
-                serialize2xml(v, istring=istring,depth=depth))
+            buf += (startTag(_ITEM) + 
+                serialize2xml(v, istring=istring,depth=depth) + endTag(_ITEM))
         depth -= 1
-        buf += "</tuple>"
+        buf += endTag(_TUPLE)
         return buf
 
     elif (isinstance(pyObject, dict)):                   # DICT
         if (istring): buf += "\n" + (istring * depth)
-        if (type(pyObject).__name__ != 'dict'):
-            buf += '<dict class="%s">' % (type(pyObject).__name__)
-        else:
-            buf += "<dict>"
+        attrs = {}
+        if (type(pyObject).__name__ != "dict"): attrs[_CLASS] = type(pyObject).__name__
+        if (args.lengths): attrs[_LEN] = "%d" % (len(pyObject))
+        buf += startTag(_DICT, attrs)
         depth += 1
-        for k, v in pyObject.items():
+        theKeys = sorted(pyObject.keys()) if (args.sortkeys) else pyObject.keys()
+        for k in theKeys:
+            v = pyObject[k]
             if (istring): buf += "\n" + (istring * depth)
-            buf += "<ditem key=\"%s\">%s</ditem>" % (
-                k, serialize2xml(v, istring=istring,depth=depth+1))
+            buf += (startTag(_ITEM, { _KEY: k }) +
+                serialize2xml(v, istring=istring,depth=depth+1) + endTag(_ITEM))
         depth -= 1
         if (istring): buf += "\n" + (istring * depth)
-        buf += "</dict>"
+        buf += endTag(_DICT)
         return buf
 
     elif (isinstance(pyObject, list)):                   # LIST
         if (istring): buf += "\n" + (istring * depth)
-        if (type(pyObject).__name__ != 'list'):
-            buf += '<list class="%s">' % (type(pyObject).__name__)
-        else:
-            buf += "<list>"
+        attrs = {}
+        if (type(pyObject).__name__ != "list"): attrs[_CLASS]: type(pyObject).__name__
+        if (args.lengths): attrs[_LEN] = "%d" % (len(pyObject))
+        if (args.homogeneity):
+            htype = homogeneousType(pyObject)
+            if (htype): attrs[_GENEITY] = htype.__none__
+        buf += startTag(_LIST, attrs)
         depth += 1
         for v in pyObject:
             if (istring): buf += "\n" + (istring * depth)
             #buf += "<item>%s</item>" % (serialize2xml(v, istring=istring, depth=depth))
             buf += serialize2xml(v, istring=istring, depth=depth)
         depth -= 1
-        buf += "</list>"
+        buf += endTag(_LIST)
         return buf
 
     # Scalar types (order of testing matters)
+    # TODO: Support subclassing of scalar types
     #
     elif (isinstance(pyObject, int)):
-        return '<i v="%d"/>' % (pyObject)
+        return startTag(_int, { _VALUE: "%d" % (pyObject) })
 
     elif (isinstance(pyObject, float)):
-        return '<f v="%f"/>' % (pyObject)
+        return startTag(_float, { _VALUE: "%f" % (pyObject) })
 
     elif (isinstance(pyObject, complex)):
-        return '<c r="%f" i="%f"/>' % (pyObject.real, pyObject.imag)
+        return startTag(_complex, { _REAL: "%f" % (pyObject.real), _IMAG: "%f" % (pyObject.imag) })
 
     elif (isinstance(pyObject, str)):
-        return '<u>%s</u>' % (escapeText(pyObject))
+        return startTag(_str) + escapeText(pyObject) + endTag(_str)
 
     elif (pyObject is True):
-        return '<T/>'
+        return emptyTag(_TRUE)
 
     elif (pyObject is False):
-        return '<F/>'
+        return emptyTag(_FALSE)
 
     elif (pyObject is None):
-        return '<None/>'
+        return emptyTag(_NONE)
 
     elif (isinstance(pyObject, object)):
         if (istring): buf += "\n" + (istring * depth)
-        if (type(pyObject).__name__ != 'object'):
-            buf += '<object class="%s">' % (type(pyObject).__name__)
-        else:
-            buf += "<object>"
+        attrs = None
+        if (type(pyObject).__name__ != "object"):
+            attrs = { _CLASS, type(pyObject).__name__ }
+        buf += startTag(_OBJECT, attrs)
         depth += 1
         for k, v in pyObject.__dict__:
             if (callable(v)): continue
-            if (k.startswith('__')): continue
+            if (k.startswith("__")): continue
             if (istring): buf += "\n" + (istring * depth)
-            buf += "<item>%s</item>" % (
-                serialize2xml(v, istring=istring,depth=depth))
+            buf += (startTag(_ITEM, { _KEY: k }) + 
+                serialize2xml(v, istring=istring,depth=depth) + endTag(_ITEM))
         depth -= 1
-        buf += "</object>"
+        buf += endTag(_OBJECT)
         return buf
 
     else:
@@ -422,7 +493,7 @@ def serialize2xml(pyObject, istring='    ', depth=0):
 #
 # TODO: Should they also be the exact same (sub) class?
 #
-def tuplesMatch(t1, t2, checkValueTypes=True):
+def tuplesMatch(t1:tuple, t2:tuple, checkValueTypes:bool=True):
     assert (isinstance(t1, tuple))
     assert (isinstance(t2, tuple))
     if (len(t1) != len(t1)): return False
@@ -431,7 +502,7 @@ def tuplesMatch(t1, t2, checkValueTypes=True):
         if (type(t1[i]) != type(t2[i])): return False
     return True
 
-def dictsMatch(d1, d2, checkValueTypes=True):
+def dictsMatch(d1:dict, d2:dict, checkValueTypes:bool=True):
     assert (isinstance(d1, dict))
     assert (isinstance(d2, dict))
     keySeq1 = sorted(d1.keys())
@@ -442,7 +513,7 @@ def dictsMatch(d1, d2, checkValueTypes=True):
             if (type(d1[k]) != type(d2[k])): return False
     return True
 
-def listsMatch(l1, l2, checkValueTypes=True, checkLengths=True):
+def listsMatch(l1:list, l2:list, checkValueTypes:bool=True, checkLengths:bool=True):
     """Lists often get used as tuples, in which case we want them to be the
     same size and maybe types. But in other cases, two homogeneous lists
     of different lengths could count as matching, so we add that option.
@@ -455,7 +526,7 @@ def listsMatch(l1, l2, checkValueTypes=True, checkLengths=True):
             if (type(l1[i]) != type(l2[i])): return False
     return True
 
-def objectsMatch(o1, o2, checkValueTypes=True, checkExactClass=True):
+def objectsMatch(o1, o2, checkValueTypes:bool=True, checkExactClass:bool=True):
     assert (isinstance(o1, object))
     assert (isinstance(o2, object))
     if (checkExactClass and type(o1).__name__ != type(o2).__name__):
@@ -469,8 +540,9 @@ def objectsMatch(o1, o2, checkValueTypes=True, checkExactClass=True):
     return True
 
 
-def dictKeysAreIdentifiers(pyObject, PythonKeyWordsOk=True):
+def dictKeysAreIdentifiers(pyObject, PythonKeyWordsOk:bool=True):
     """Check whether all the keys used in a dict, are legit Python identifiers.
+    TODO: Integrate PEP589 'TypedDict'?
     """
     assert (isinstance(pyObject, dict))
     import keyword
@@ -480,13 +552,17 @@ def dictKeysAreIdentifiers(pyObject, PythonKeyWordsOk=True):
         if (not PythonKeyWordsOk and keyword.iskeyword()): return False
     return True
 
-def isListHomogeneous(l1):
+def homogeneousType(l1:list):
+    """See if thelist is homogeneous. If so, return the applicable type; else None.
+    This doesn't do anything special for possibly-miscible subclasses.
+    """
     assert (isinstance(l1, list))
-    if (len(l1) == 0): return True
+    if (not l1): return None  # Empty list is inderterminate
     type0 = type(l1[0])
+    if (len(l1) == 0): return type0
     for i in range(1, len(l1)):
-        if (type(l1[i]) != type0): return False
-    return True
+        if (type(l1[i]) != type0): return None
+    return type0
 
 
 ###############################################################################
@@ -504,45 +580,45 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--iencoding",        type=str, metavar='E', default="utf-8",
-            help='Assume this character coding for input. Default: utf-8.')
+            "--homogeneity", action="store_true",
+            help='Add an attribute on collections, giving their item type if homogeneous.')
         parser.add_argument(
-            "--istring", type=str, default='    ',
-            help='Repeat this string to indent the output.')
+            "--lengths", action="store_true",
+            help='Add a length attribute on collections, giving their cardinality.')
         parser.add_argument(
-            "--noprop", action='store_true',
-            help='Untag the "pyxs:prop" element surrounding data atoms.')
+            "--iencoding", type=str, metavar="E", default="utf-8",
+            help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
-            "--nonamespaces", action='store_true',
-            help='Delete the "pyxs:" namespace prefix.')
+            "--istring", type=str, default="    ",
+            help="Repeat this string to indent the output.")
         parser.add_argument(
-            "--nosize", action='store_true',
-            help='Delete the "size" attribute everywhere.')
+            "--lengths", action="store_true",
+            help='Add a length attribute on collections, giving their cardinality.')
         parser.add_argument(
-            "--notype", action='store_true',
+            "--notype", action="store_true",
             help='Delete the "type" attribute everywhere.')
         parser.add_argument(
-            "--oformat", type=str, default='xml',
-            choices=[ 'xml', 'json', 'report' ],
-            help='Write the output to this form. Default: xml.')
+            "--oformat", type=str, default="xml",
+            choices=[ "xml", "json", "report" ],
+            help="Write the output to this form. Default: xml.")
         parser.add_argument(
             "--pad", type=int,
-            help='Left-pad integers to this many columns.')
+            help="Left-pad integers to this many columns.")
         parser.add_argument(
-            "--quiet", "-q", action='store_true',
-            help='Suppress most messages.')
+            "--quiet", "-q", action="store_true",
+            help="Suppress most messages.")
         parser.add_argument(
-            "--sortkeys", "--sort_keys", "--sort-keys", action='store_true',
+            "--sortkeys", "--sort_keys", "--sort-keys", action="store_true",
             help='Delete the "type" attribute everywhere.')
         parser.add_argument(
-            "--verbose", action='count', default=0,
-            help='Add more messages (repeatable).')
+            "--verbose", action="count", default=0,
+            help="Add more messages (repeatable).")
         parser.add_argument(
-            "--version", action='version', version='Version of '+__version__)
+            "--version", action="version", version="Version of "+__version__)
 
         parser.add_argument(
-            'files', nargs=argparse.REMAINDER,
-            help='Path(s) to input file(s).')
+            "files", nargs=argparse.REMAINDER,
+            help="Path(s) to input file(s).")
 
         args0 = parser.parse_args()
 
@@ -566,18 +642,21 @@ if __name__ == "__main__":
                 return 0
 
         try:
-            pyObject0 = json.load(fh)
+            pyObj = json.load(fh)
         except json.decoder.JSONDecodeError as e:
             lg.vMsg(0, "JSON load failed for %s:\n    %s" % (path, e))
             sys.exit()
-
-        if (args.oformat == 'xml'):
-            buf = serialize2xml(pyObject0, istring=args.istring)
-        elif (args.oformat == 'json'):
-            buf = json.dumps(pyObject0,
+        writeIt(pyObj)
+        
+        
+    def writeIt(pyObj):
+        if (args.oformat == "xml"):
+            buf = serialize2xml(pyObj, istring=args.istring)
+        elif (args.oformat == "json"):
+            buf = json.dumps(pyObj,
                 sort_keys=args.sortkeys, indent=len(args.istring))
-        elif (args.oformat == 'report'):
-            buf = lg.formatRec(pyObject0)
+        elif (args.oformat == "report"):
+            buf = lg.formatRec(pyObj)
         else:
             lg.vMsg(-1, "Unknown --oformat value '%s'." % (args.oformat))
 
@@ -590,8 +669,14 @@ if __name__ == "__main__":
     args = processOptions()
 
     if (len(args.files) == 0):
-        lg.vMsg(0, "json2xml.py: No files specified....")
-        doOneFile(None)
+        lg.vMsg(0, "json2xml.py: No files specified, using internal sample:\n%s" % (sampleJSON))
+        try:
+            pyObject0 = json.loads(sampleJSON)
+        except json.decoder.JSONDecodeError as e:
+            lg.vMsg(0, "JSON parse failed.\n    %s" % ( e))
+            sys.exit()
+        writeIt(pyObject0)
+        
     else:
         pw = PowerWalk(args.files, open=False, close=False,
             encoding=args.iencoding)
