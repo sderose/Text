@@ -9,6 +9,7 @@ use Getopt::Long;
 use Encode;
 use Term::ReadKey;
 use File::Path;
+use File::Copy;  # For move()
 
 use sjdUtils;
 use alogging;
@@ -23,7 +24,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5.18",
     'created'      => "2010-08-25",
-    'modified'     => "2021-02-24",
+    'modified'     => "2021-08-17",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -46,7 +47,8 @@ See the next section,
 L<Why globalChange instead of sed?>, for further highlights.
 
 To be queried for each change, see I<--interactive> and I<--multiDest>
-(the latter lets you choose among several replacements for each match).
+(the latter lets you choose among several pre-specified 
+replacements for each match).
 To see what changes I<would> be made, but not actually do them, see I<--test>.
 
 You can specify the change(s) using Perl regex features (see below).
@@ -170,9 +172,12 @@ See also I<--backupExtension> and I<--backupDirectory>.
 
 Directory where backup files should be put.
 Default: "" (same directory as source files).
+
+I<Warning>: The backup directory must be on the same disk volume.
 If using I<--recursive> with this, for the moment all the
 backups are written to the same (flat) directory rathen than
 having an isomorphic directory tree built.
+
 You can put these signals in I<path> for special effects:
 
     %d    The date as yyyy_mm_dd
@@ -734,6 +739,8 @@ example when the field value must contain the I<--fieldSep> character.
 
 =head1 Known bugs and limitations
 
+The backup directory must be on the same disk volume.
+
 You cannot use the I<--delim> character (control character #255) in the
 I<-e> option values themselves (e.g., you can't backslash it). But on the
 command line, you can use most anything you like to separate the to, from, and
@@ -1103,6 +1110,9 @@ Avoid copying to dest at start, by switching to "cp --attributes -p".
   2021-04-16: Warn on \\x01 etc. on RHS of regexes. Better display of invis chars.
 Take out --attributes that was added 2015-02-25, since it's only available on Linix,
 not BSD.
+  2021-08-17: Fix recently-introduced bugs in backup handling, where changes never got
+copied back to update the original. Set permissions on updated file explicitly.
+
 
 =head1 To do
 
@@ -1561,8 +1571,8 @@ sub saveChangeSpecFromExpr {
     # Parse and slightly validate.
     my $exprCopy = $expr;
     my @parts = split(/(?<![\\])$delim/, $expr);
-    if ($verbose) {
-        my $msg = "parsed to:\n";
+    if ($verbose gt 1) {
+        my $msg = "Change parsed to:\n";
         for (my $i=0; $i<scalar(@parts); $i++) {
             $msg .= sprintf("    %d: '%s'\n", $i, $parts[$i]);
         }
@@ -1631,15 +1641,15 @@ sub doOneItem {
     my ($file, $depth) = @_;
     $totalItems++;
 
-    if (!$force && $file =~ m/(\.bak|~|#)$/) {    # Types to ignore
-        vMsg(1, "Apparent backup file skipped: '$file'");
-        $filesBackup++;
-        return(0);
-    }
-
     if (!-e $file) {                              # Can't find
         eMsg(0, "Can't find file '$file'.");
         $filesMissing++;
+        return(0);
+    }
+
+    if (!$force && $file =~ m/(\.bak|~|#)$/) {    # Types to ignore
+        vMsg(1, "Apparent backup file skipped: '$file'");
+        $filesBackup++;
         return(0);
     }
 
@@ -1667,7 +1677,7 @@ sub doOneItem {
         return(0);
     }
 
-    # Could check for special types (cf grep options)
+    # Could check for special types (cf grep options / PowerWalk)
     # -w File is writable by effective uid/gid.
     # -l File is a symbolic link.
     # -p File is a named pipe (FIFO), or Filehandle is a pipe.
@@ -1682,6 +1692,14 @@ sub doOneItem {
         return(0);
     }
 
+
+    ###########################################################################
+    # Past filters, really do this file.
+    #
+    if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
+        hMsg(0, "Starting file '$file'");
+    }
+    alogging::vMsg(1, "Opening input file $file.");
     my $ifh;
     if (!open($ifh, "<$file")) {                  # Can't open
         eMsg(0, "Can't open input file '$file'.");
@@ -1691,7 +1709,7 @@ sub doOneItem {
     if ($iencoding) {
         binmode($ifh, ":encoding($iencoding)");
     }
-
+    
     # Copy then overwrite, so the permissions get set right.
     # Change to do this later, if we indeed made changes.
     #my $cmd = "cp -P $file $tmpFile";
@@ -1699,6 +1717,7 @@ sub doOneItem {
     #system $cmd || eMsg(0, "Failed to create temp file: ", $cmd);
     #vMsg(1, "    temp file created, size " . (-s $tmpFile));
 
+    alogging::vMsg(1, "Opening temp file $tmpFile.");
     my $ofh;
     if (!open($ofh, ">$tmpFile")) {
         eMsg(0, "Can't open temp output file '$tmpFile'.");
@@ -1706,75 +1725,65 @@ sub doOneItem {
         return(0);
     }
     #vMsg(1, "    temp file opened, size " . (-s $tmpFile));
-
     if ($oencoding) {
         binmode($ofh, ":encoding($oencoding)");
     }
 
+    ###########################################################################
     # Do the changes, putting results in the temp file
     #
+    alogging::vMsg(1, "Doing changes.");
     alogging::MsgPush();
+    my $permissions = (stat ($file))[2];
     my $nc = doOneFile($file, $ifh, $ofh);
     alogging::MsgPop();
     close $ifh;
     close $ofh;
-
-    # Report and finalize (unless --test)
-    #
+    
     if ($nc < 0) {
         vMsg(0, "  Changes failed for file '$file'");
         $failedChanges++;
         return(0);
     }
     if ($nc == 0) {
-        ($zero) && alogging::Msg(
-            "none", ">>> No change(s) in file '$file'");
+        ($zero || $verbose) && alogging::vMsg(0, ">>> No change(s) in file '$file'");
         return(1);
-
     }
     $totalFilesChanged++;
-    if ($test) {
-        alogging::Msg(
-            "some", ">>> $nc change(s) in file '$file'" .
-            ($test ? " (DRY RUN)" : ''));
+        alogging::Msg("some", ">>> $nc change(s) in file '$file'" . ($test ? " (DRY RUN)" : ''));
+    
+    ###########################################################################
+    #
+    if ($test) {                                      ### DRY RUN ENDS HERE ###
+        #alogging::vMsg(1, "(DRY RUN)");
         return(1);
     }
-
-    my $cmd = "";
-    if ($linux) {
-        $cmd ="cp -attributes -a -p '$file' '$tmpFile'";
-    }
-    else {
-        $cmd ="cp -a -p '$file' '$tmpFile'";
-    }
-    alogging::vMsg(1, "Running: $cmd");
-    system "$cmd";
-    if ($@) {
-        alogging::eMsg(0, "Failed to copy permissions/attributes: $@");
-    }
-
+    
+    ###########################################################################
+    # Make the backup if requested
+    # 
     if ($backup) {
-        my $tgt = "$backupDirectory$file.$backupExtension";
-        my $cmd = "mv '$file' '$tgt'";
-        alogging::vMsg(1, "Running: $cmd");
-        system $cmd;
+        my $backupDest = "$backupDirectory$file.$backupExtension";
+        alogging::vMsg(1, "Backing up '$file' to '$backupDest'.");
+        move($file, $backupDest) || die "move failed: $!\n";
         if ($@) {
-            alogging::eMsg(0,
-               "Failed to mv file '$file' to backup '$tgt'");
+            alogging::eMsg(0, "Failed to back up '$file' to '$backupDest' -- not changing.");
             return(0);
         }
     }
-
-    $cmd = "mv '$tmpFile' '$file'";
-    alogging::vMsg(1, "Attempting save: $cmd");
-    system "$cmd";
+    
+    ###########################################################################
+    # Update the disk file(s)
+    # Note: this mucks up the permission (cf. cp -a)
+    #
+    alogging::vMsg(1, "Updating original from $tmpFile");
+    move($tmpFile, $file);
     if ($@) {
-        eMsg(0, "Copy of '$tmpFile' back to '$file' failed, cmd was:");
-        vMsg(0, "    #$cmd#");
+        alogging::eMsg(0, "Failed to update: $@");
         $failedCopy++;
-        return(0);
     }
-    vMsg(1, "Successfully moved temp file '$tmpFile' to replace '$file'.");
+    chmod $permissions, $file || alogging::eMSg("Failed to reset permissions.");;
+
     return(1);
 } # doOneItem
 
@@ -1785,9 +1794,6 @@ sub doOneItem {
 #
 sub doOneFile {
     my ($file, $ifh, $ofh) = @_;
-    if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
-        hMsg(0, "Starting file '$file'");
-    }
     $filesRegular++;
     $recnum = 0;
     $curFileName = $file;
@@ -1812,7 +1818,6 @@ sub doOneFile {
         $totalChanges++;
         $nChangesInFile++;
     }
-
 
     my $quit = 0;                   # Set if user says 'q' like in emacs
     my $doContig = 0;               # User said to do til a line doesn't match
