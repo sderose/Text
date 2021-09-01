@@ -272,6 +272,8 @@ some cost in verbosity, effective portability, and/or clarity.
 
 =To do=
 
+* Add specific support for namedtuples.
+    if (isinstance(x, tuple) and hasattr(x, '_fields'))... seems to be enough.
 * Test with non-string dict keys and other more complex Python data sources.
 * At least as an option, drop <ditem> and just put the key on the items.
 Or possibly, move scalar named items to parent attributes
@@ -387,6 +389,11 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
     #
     buf = ""
     if (isinstance(pyObject, tuple)):                   # TUPLE
+        if (hasattr(x, '_fields')):                         # NAMEDTUPLE
+            assert False, "namedtuple not yet implemented, sorry")
+            #TODO What *should* this do?
+            # return buf
+                                                            # (regular/unnamed) TUPLE
         if (istring): buf += "\n" + (istring * depth)
         attrs = {}
         if (type(pyObject).__name__ != "tuple"): attrs[_CLASS] = type(pyObject).__name__

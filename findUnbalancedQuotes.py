@@ -37,7 +37,7 @@ multi-line quotations, here documents, etc.
   With ''--unicode'', checks for various curly quote pairs, though not perfectly.
   With ''--contractions', ignores likely natural-languages contraction apostrophes.
   With ''--perl'', also reports things like "if...{ [...code...]" with no "}".
-
+  With ''--triple'', suppresses reporting of triple-quotes a la Python.
 
 =Related Commands=
 
@@ -198,6 +198,8 @@ def doOneFile(path):
         ###
         # Per-record processing goes here
         ###
+        if (args.triplesok):
+            rec = re.sub(r'"""', '', rec)
         if (args.singlesok):
             rec = re.sub(r"""('"'|"'"|'`'|"`")""", "", rec)
         if (args.contractions):
@@ -271,6 +273,9 @@ def processOptions():
     parser.add_argument(
         "--singlesok", action='store_true',
         help='Discard quotes that are alone inside others, like: "\'".')
+    parser.add_argument(
+        "--triplesok", action='store_true',
+        help='Do not report cases of 3 double-quotes in a row, like Python multi-line quotes.')
     parser.add_argument(
         "--unicode", action='store_const', dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
