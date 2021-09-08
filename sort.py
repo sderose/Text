@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 #
-# sort.py
+# sort.py: Do a really, really plain sort.
 # 2018-07-18: Written by Steven J. DeRose.
 #
 from __future__ import print_function
-import sys, os
+import sys
 import argparse
 import re
 import codecs
@@ -53,7 +53,7 @@ Limited to memory size.
 
 =Rights=
 
-Copyright %DATE% by Steven J. DeRose. This work is licensed under a
+Copyright 2018-07-18 by Steven J. DeRose. This work is licensed under a
 Creative Commons Attribution-Share-alike 3.0 unported license.
 For further information on this license, see
 [https://creativecommons.org/licenses/by-sa/3.0].
@@ -77,16 +77,13 @@ def processOptions():
         parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
-        "--color",  # Don't default. See below.
-        help='Colorize the output.')
-    parser.add_argument(
         "--delim", "-d", "-t", "--fieldSep", type=str, default="\t",
         help='Use this (regex) as the field delimiter.')
     parser.add_argument(
         "--field", "-f", "-k", type=int, default=None,
         help='Use this (regex) as the field delimiter.')
     parser.add_argument(
-        "--iencoding",        type=str, metavar='E', default="utf-8",
+        "--iencoding", type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
         "--ignoreCase", "-i", action='store_true',
@@ -95,33 +92,26 @@ def processOptions():
         "--numeric", "-n", "-g", action='store_true',
         help='Do numeric comparison (incl. floats), instead of string.')
     parser.add_argument(
-        "--quiet", "-q",      action='store_true',
+        "--quiet", "-q", action='store_true',
         help='Suppress most messages.')
     parser.add_argument(
-        "--reverse", "-r",    action='store_true', default=False,
+        "--reverse", "-r", action='store_true', default=False,
         help='Sort in descending order.')
     parser.add_argument(
-        "--tickInterval",     type=int, metavar='N', default=10000,
-        help='Report progress every n records.')
-    parser.add_argument(
-        "--unicode",          action='store_const',  dest='iencoding',
+        "--unicode", action='store_const',  dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
     parser.add_argument(
-        "--verbose", "-v",    action='count',       default=0,
+        "--verbose", "-v", action='count', default=0,
         help='Add more messages (repeatable).')
     parser.add_argument(
         "--version", action='version', version=__version__,
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files',             type=str,
-        nargs=argparse.REMAINDER,
+        'files', type=str, nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    if (args0.color == None):
-        args0.color = ("USE_COLOR" in os.environ and sys.stderr.isatty())
-    lg.setColors(args0.color)
     if (args0.verbose): lg.setVerbose(args0.verbose)
     return(args0)
 
@@ -179,7 +169,3 @@ else:
         fh = codecs.open(fArg, 'rb', encoding=args.iencoding)
         doOneFile(fArg, fh)
         fh.close()
-
-if (not args.quiet):
-    lg.vMsg(0,"Done.")
-    lg.showStats()

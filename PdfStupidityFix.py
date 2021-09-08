@@ -359,9 +359,12 @@ or [https://github.com/sderose].
 
 ###############################################################################
 #
-def warn(lvl, msg):
+def warning(lvl, msg):
     if (args.verbose >= lvl): sys.stderr.write(msg + "\n")
     if (lvl < 0): sys.exit()
+def warning0(msg): warning(0, msg)
+def warning1(msg): warning(0, msg)
+def warning2(msg): warning(0, msg)
 
 bullets = {
     # Common chars used as bullets
@@ -470,7 +473,7 @@ class Lexicon(dict):
                 w = w.strip()
                 if (len(w) == 1): continue
                 self[w] = 1
-        warn(1, "Loaded %d words from '%s' in %6.4f seconds." %
+        warning1("Loaded %d words from '%s' in %6.4f seconds." %
             (len(self), path, time()-startTime))
 
     def isWord(self, w):
@@ -533,7 +536,7 @@ def doOneFile(path):
         buf = ""
         rec = re.sub(r"\b((\w ){4,})", closeUp, rec)  # Spaced-out titles
         tokens = re.split(r"([-\w]+)", rec)
-        warn(2, "Tokens: %s" % ("|".join(tokens)))
+        warning2("Tokens: %s" % ("|".join(tokens)))
         for token in tokens:
             if (not re.match(r"\w", token)):          # punct, space, etc.
                 buf += token
@@ -549,7 +552,7 @@ def doOneFile(path):
                 token = "\n" + token
 
             elif ("-" in token):                      # Hyphenated
-                warn(2, "hyphen: '%s'" % (token))
+                warning2("hyphen: '%s'" % (token))
                 mat = re.match(r"(.*)-(.*)", token)
                 if (lex.isWord(mat.group(1)+mat.group(2))):
                     token = mat.group(1)+mat.group(2)
@@ -558,7 +561,7 @@ def doOneFile(path):
                     token = mat.group(1) + " " + mat.group(2)
 
             elif (not lex.isWord(lToken2)):           # Mystery word
-                warn(2, "non-word: '%s' (->'%s')" % (lToken, lToken2))
+                warning2("non-word: '%s' (->'%s')" % (lToken, lToken2))
                 for j in range(1, len(lToken)):
                     p1 = lToken[0:j]
                     p2 = lToken[j:]
@@ -712,11 +715,11 @@ if __name__ == "__main__":
         tfile = "/tmp/PdfStudpidityFix.tmp"
         with codecs.open(tfile, "wb", encoding="utf-8") as tf:
             tf.write(sample)
-        warn(0, "Testing on:\n%s\n" % (sample))
+        warning0("Testing on:\n%s\n" % (sample))
         args.files.insert(0, tfile)
 
     if (len(args.files) == 0):
-        warn(0, "No files specified....")
+        warning0("No files specified....")
         doOneFile(None)
     else:
         doAllFiles(args.files)

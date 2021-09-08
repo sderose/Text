@@ -389,9 +389,8 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
     #
     buf = ""
     if (isinstance(pyObject, tuple)):                   # TUPLE
-        if (hasattr(x, '_fields')):                         # NAMEDTUPLE
-            assert False, "namedtuple not yet implemented, sorry")
-            #TODO What *should* this do?
+        if (hasattr(pyObject, '_fields')):                  # NAMEDTUPLE
+            assert False, "namedtuple not yet implemented, sorry" # TODO What *should* this do?
             # return buf
                                                             # (regular/unnamed) TUPLE
         if (istring): buf += "\n" + (istring * depth)
