@@ -3,7 +3,8 @@
 # findUnbalancedQuotes.py: Report lines with odd quotation patterns.
 # 2017-07-03: Written by Steven J. DeRose.
 #
-import sys, os, argparse
+import sys
+import os
 import re
 import codecs
 
@@ -11,18 +12,18 @@ from alogging import ALogger
 lg = ALogger()
 
 __metadata__ = {
-    'title'        : "findUnbalancedQuotes.py",
+    "title"        : "findUnbalancedQuotes.py",
     "description"  : "Report lines with odd quotation patterns.",
-    'rightsHolder' : "Steven J. DeRose",
-    'creator'      : "http://viaf.org/viaf/50334488",
-    'type'         : "http://purl.org/dc/dcmitype/Software",
-    'language'     : "Python 3.7",
-    'created'      : "2017-07-03",
-    'modified'     : "2020-04-21",
-    'publisher'    : "http://github.com/sderose",
-    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2017-07-03",
+    "modified"     : "2020-09-10",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/",
 }
-__version__ = __metadata__['modified']
+__version__ = __metadata__["modified"]
 
 
 descr = """
@@ -38,35 +39,36 @@ multi-line quotations, here documents, etc.
   With ''--contractions', ignores likely natural-languages contraction apostrophes.
   With ''--perl'', also reports things like "if...{ [...code...]" with no "}".
   With ''--triple'', suppresses reporting of triple-quotes a la Python.
+  With ''--parens'', also reports lines with mismatched () [] {}.
+  
 
 =Related Commands=
 
 
 =Known bugs and Limitations=
 
-* Does not know to ignore comments in programming langauges.
-* Does not know about quoted quotes, or full backslashing (though ``--escaped`
+* Does not know to ignore comments in programming langauges (but see ''--comment'').
+* Does not know about quoted quotes, or full backslashing (though ''--escaped''
 handles simple cases) or doubling.
 * Does not know about multi-line quotes.
-* Does not know about Perl q/.../, Python ""..."", shell here documents, etc.
+* Does not know about Perl q/.../, Python ""..."", shell "here" documents, etc.
 
 
 =To do=
 
 * Colorize the quotes or quoted portions?
-* Really count ins and outs and types (perhaps not worth it)
-* Track {} brace vs. indentation, at least when braces are line-final.
-Add expandTabs for that.
-* Parenthesis balancing.
+* Really count ins and outs and types (perhaps not worth it).
+* Parenthesis balancing should have a way to not consider {}.
+* Track {} brace vs. indentation, at least when braces are at start/end of line.
 
 
 =History=
 
 2017-07-03: Written by Steven J. DeRose (port from bash script).
 2020-04-21: Start indentation-tracking.
-2021-07-13: Add --contractions and --escaped options,
- `origiRec` for accurate reporting.
+2021-07-13: Add --contractions and --escaped options, `origiRec` for accurate reporting.
 2021-08-06: Add experimental --perl to find one-line 'if's that don't close.
+2021-09-10: Handle tab expansion. Add --comment, --tabStops.
 
 
 =Rights=
@@ -163,7 +165,7 @@ def doOneFile(path):
     lg.bumpStat("totalFiles")
 
     try:
-        fh = codecs.open(path, mode='r', encoding=args.iencoding)
+        fh = codecs.open(path, mode="r", encoding=args.iencoding)
     except IOError as e:
         lg.error("Can't open '%s'." % (path), stat="CantOpen")
         return(0)
@@ -181,10 +183,11 @@ def doOneFile(path):
         if (len(rec) == 0): break # EOF
         recnum += 1
         rec = rec.rstrip()
-        if (re.match(r'\s*$',rec)):                    # Blank record
+        if (re.match(r"\s*$",rec)):                                     # Blank record
             continue
-
-        newIndent = len(rec) - len(rec.lstrip())       # Not happy w/ tabs.
+        if (args.comment and rec.lstrip().startswith(args.comment)):    # Comment
+            continue
+        newIndent = getIndentColumn(rec)                                # Indentation
         if (newIndent < indentStack[-1]):
             if (newIndent not in indentStack):
                 if (args.indents): report(
@@ -216,32 +219,60 @@ def doOneFile(path):
         n = countChar(rec, "`")
         if (n % 2):
             report(recnum, "Odd number of plain back quotes (%s)" % (n), origRec)
-        if (args.perl and re.search(r"\bif.*{.*;[^\s}]*$", rec)):
-            report(recnum, "Perl-like 'if' then '{' then code, but no '}'.", origRec)
-        
-        if (args.iencoding == 'utf8'):
+
+        if (args.iencoding == "utf8"):
             for pair in (pairedQuotes):
                 nopen = countChar(rec, pair[0])
                 nclos = countChar(rec, pair[1])
                 if (nopen != nclos):
                     report(recnum, "Open/close counts mismatch", origRec)
+        if (args.perl and re.search(r"\bif.*{.*;[^\s}]*$", rec)):
+            report(recnum, "Perl-like 'if' then '{' then code, but no '}'.", origRec)
+        elif (args.parentheses):
+            msg = checkParens(origRec)
+            if (msg): report(recnum, msg, origRec)
+            
     fh.close()
     return(recnum)
 
-# Count how many times the character 'c' occurs in 's'.
+def getIndentColumn(s):
+    s = s.expandtabs(args.tabStops)
+    s = re.sub(r"\S.*$", "", s)
+    return len(s)
+    
+# Count how many times the character "c" occurs in "s".
 #
 def countChar(s, c):
-    s2 = re.sub('[^' + c + ']+', '', s)
+    s2 = re.sub("[^" + c + "]+", "", s)
     return len(s2)
 
 def report(recnum, msg, rec):
     print("%6d: %s\n    %s" % (recnum, msg, rec))
 
-
+def checkParens(s:str) -> str:
+    """Check balance of parentheses, brackets, and braces.
+    Does not yet worry about escaped or quoted ones, or groups that span lines.
+    @return An error message, or None.
+    """
+    pStack = []
+    for i, c in enumerate(s):
+        if (c in "([{"):
+            pStack.append(c)
+        elif (c in ")]}"):
+            if (not pStack or pStack[-1] != c):
+                return "Expecting '%s' but found '%s' at column %d" % (pStack[-1], c, i)
+            pStack.pop()
+    if (pStack):
+        return "Unclosed: %s" % (str(pStack))
+    return None
+    
+        
 ###############################################################################
 # Main
 #
 def processOptions():
+    import argparse
+    
     try:
         from BlockFormatter import BlockFormatter
         parser = argparse.ArgumentParser(
@@ -250,45 +281,54 @@ def processOptions():
         parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
-        "--contractions", action='store_true',
+        "--comment", type=str, default="",
+        help="Ignore lines starting with (optional whitespace plus) this.")
+    parser.add_argument(
+        "--contractions", action="store_true",
         help='Discard apostrophes and right singlequotes within words, like "can\t".')
     parser.add_argument(
-        "--escaped", action='store_true',
+        "--escaped", action="store_true",
         help='Discard quotes wafter non-doubled backslash like "see \\\" and \\\'.".')
     parser.add_argument(
-        "--iencoding", type=str, metavar='E', default="utf-8",
-        help='Assume this character set for input files. Default: utf-8.')
+        "--iencoding", type=str, metavar="E", default="utf-8",
+        help="Assume this character set for input files. Default: utf-8.")
     parser.add_argument(
-        "--indents", action='store_true',
-        help='Also report indentation decreases not to stacked columns.')
+        "--indents", action="store_true",
+        help="Also report indentation decreases not to stacked columns.")
     parser.add_argument(
-        "--oencoding", type=str, metavar='E',
-        help='Use this character set for output files.')
+        "--oencoding", type=str, metavar="E",
+        help="Use this character set for output files.")
     parser.add_argument(
-        "--perl", action='store_true',
-        help='Also look for Perl-ish if.*{.*;[^\s}]*$')
+        "--parentheses", "--parens", action="store_true",
+        help="Also look for unbalanced () [] {}.")
     parser.add_argument(
-        "--quiet", "-q", action='store_true',
-        help='Suppress most messages.')
+        "--perl", action="store_true",
+        help="Also look for Perl-ish if.*{.*;[^\\s}]*$")
     parser.add_argument(
-        "--singlesok", action='store_true',
+        "--quiet", "-q", action="store_true",
+        help="Suppress most messages.")
+    parser.add_argument(
+        "--singlesok", action="store_true",
         help='Discard quotes that are alone inside others, like: "\'".')
     parser.add_argument(
-        "--triplesok", action='store_true',
-        help='Do not report cases of 3 double-quotes in a row, like Python multi-line quotes.')
+        "--tabStops", type=int, default=4,
+        help="Tab interval for calculating indentation.")
     parser.add_argument(
-        "--unicode", action='store_const', dest='iencoding',
-        const='utf8', help='Assume utf-8 for input files.')
+        "--triplesok", action="store_true",
+        help="Do not report cases of 3 double-quotes in a row, like Python multi-line quotes.")
     parser.add_argument(
-        "--verbose", "-v", action='count', default=0,
-        help='Add more messages (repeatable).')
+        "--unicode", action="store_const", dest="iencoding",
+        const="utf8", help="Assume utf-8 for input files.")
     parser.add_argument(
-        "--version", action='version', version=__version__,
-        help='Display version information, then exit.')
+        "--verbose", "-v", action="count", default=0,
+        help="Add more messages (repeatable).")
+    parser.add_argument(
+        "--version", action="version", version=__version__,
+        help="Display version information, then exit.")
 
     parser.add_argument(
-        'files', type=str, nargs=argparse.REMAINDER,
-        help='Path(s) to input file(s)')
+        "files", type=str, nargs=argparse.REMAINDER,
+        help="Path(s) to input file(s)")
 
     args0 = parser.parse_args()
     lg.setVerbose(args0.verbose)

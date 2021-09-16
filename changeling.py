@@ -41,7 +41,7 @@ __version__ = __metadata__["modified"]
 sampleData = """#META dc.author="sjd"
 #META dc.title="Example document"
 #META myId="0F994F86-1AF3-4F44-8D43-61EDF25F5E1C"
-#META user.sjd="sderose@acm.org"
+#META user.sjd="someonee@acm.org"
 #META dc.type.mime="text/xml"
 #
 0_0_0, 1, sjd, 1629504349, chars:0:0, text:"<p>A new hope.</p>"

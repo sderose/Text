@@ -17,7 +17,7 @@ our %metadata = (
     'created'      => "2006-09~18",
     'modified'     => "2020-09-24",
     'publisher'    => "http://github.com/sderose",
-    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+    'license'      => "Public Domain"
 );
 our $VERSION_DATE = $metadata{'modified'};
 
@@ -228,19 +228,19 @@ but seems to still do the sampling right (fixed?).
 
 =head1 History
 
-# 2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
+    2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
 converter regression testing.
-# 2010-11-01 sjd: Cleanup. Rename. iooptions. --fast, --pct.
-# 2011-12-28 sjd: Add --every.
-# 2012-07-09 sjd: Rename --every to --mod (to be same as for C<disaggregate>.
+    2010-11-01 sjd: Cleanup. Rename. iooptions. --fast, --pct.
+    2011-12-28 sjd: Add --every.
+    2012-07-09 sjd: Rename --every to --mod (to be same as for C<disaggregate>.
 Beef up encoding handling. Add $lineNumberFormat.
-# 2012-11-29 sjd: Clean up.
-# 2014-10-14: Warn if they try STDIN.
-# 2014-10-14: --. Make lineNumberFormat an option. Add --blanks, --skip.
-# 2015-09-15: Add --reservoir sampling. Add --comments.
-# 2015-01-01: Fix several things I broke last time, like reading STDIN.
+    2012-11-29 sjd: Clean up.
+    2014-10-14: Warn if they try STDIN.
+    2014-10-14: --. Make lineNumberFormat an option. Add --blanks, --skip.
+    2015-09-15: Add --reservoir sampling. Add --comments.
+    2015-01-01: Fix several things I broke last time, like reading STDIN.
 Explain relation of --skip and --mod in help.
-# 2020-09-24: New layout. Fix another bug reading STDIN.
+    2020-09-24: New layout. Fix another bug reading STDIN.
 
 
 =head1 To do

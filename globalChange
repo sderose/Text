@@ -2494,7 +2494,7 @@ sub multiDestChoice {
     my $done = 0;
     my $cdata = $self->colorizeAllMatches($data);
     printf("%4d <%s\n", $recnum, $cdata);
-    while(!$done) {
+    while (!$done) {
         my $n = scalar(@{$self->{'cdests'}});
         main::ask("  Which replacement [1:$n]? ");
         my $resp = readline();

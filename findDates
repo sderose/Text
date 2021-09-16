@@ -1,12 +1,7 @@
 #!/usr/bin/perl -w
 #
 # findDates
-#
 # 2013-10-01: Written by Steven J. DeRose.
-# 2014-09-08: Fix readdir.
-#
-# To do:
-#     Avoid duplicate matches
 #
 use strict;
 use Getopt::Long;
@@ -15,8 +10,141 @@ use Encode;
 use sjdUtils;
 use alogging;
 
-my $version = "2013-10-01";
+our %metadata = (
+    'title'        => "findDates",
+    'description'  => "",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2013-10-01",
+    'modified'     => "2021-09-16",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
+
+=pod
+
+=head1 Usage
+
+findDates [options] file
+
+Locate date strings in the input, and report them.
+
+Fairly smart about numeric vs. text forms:
+
+    2013-10-01
+    01-01-2013
+    Jan 1, 2001
+    01/01/2001
+    1 Jan., 20012
+    March, 2001
+
+
+=head2 Limitations:
+
+=over
+
+=item * For months and eras, only handle English so far.
+
+=item * Doesn't handle packed dates such s 20131001, or dates with times.
+
+=item * Doesn't do anything for partial dates or date ranges.
+
+=item * Doesn't do "first of septembet, the year of our Lord nineteen hundred and thirty"
+
+=back
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over
+
+=item * B<--color>
+
+Colorize the output. Default to on if
+environment variable C<USE_COLOR> is set and STDERR is going to the terminal.
+
+=item * B<--iencoding> I<e>
+
+Specify character encoding for input.
+
+=item * B<--ignoreCase> or B<-i>
+
+Disregard upper/lower case distinctions.
+
+=item * B<--ilineends> I<t>
+
+Assume Unix, Dos, or Mac line-breaks for input.
+
+=item * B<--listEncodings>
+
+Show all available character encodings, then exit.
+
+=item * B<--oencoding> I<e>
+
+Specify character encoding for output.
+
+=item * B<--olineends> I<t>
+
+Write Unix, Dos, or Mac line-breaks for output.
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--recursive>
+
+Process directories recursively.
+
+=item * B<--tick> I<n>
+
+Report progress every I<n> records (0 to turn off).
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8> I<--oencoding utf8>.
+
+=item * B<--verbose> OR B<-v>
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+=head1 History
+
+  2013-10-01: Written by Steven J. DeRose.
+  2014-09-08: Fix readdir.
+  2021-09-16: Cleanup.
+  
+
+=head1 To do
+
+  Avoid duplicate matches
+
+
+=head1 Rights
+
+Copyright 2013-10-01 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share Alike 3.0 Unported License.
+For further information on this license, see
+L<https://creativecommons.org/licenses/by-sa/3.0>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities> or
+L<https://github.com/sderose>.
+
+=cut
+
+
+###############################################################################
+#
 my $color         = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
 my $iencoding     = "";
 my $ignoreCase    = 0;
@@ -28,9 +156,6 @@ my $recursive     = 0;
 my $tickInterval  = 10000;
 my $verbose       = 0;
 
-
-###############################################################################
-#
 my %getoptHash = (
     "color!"                  => \$color,
     "h|help"                  => sub { system "perldoc $0"; exit; },
@@ -59,9 +184,9 @@ my %getoptHash = (
     "unicode!"                => sub { $iencoding = $oencoding = "utf8"; },
     "v+"                      => \$verbose,
     "version"                 => sub {
-        die "Version of $version, by Steven J. DeRose.\n";
+        die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
-    );
+);
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die "Bad options.\n";
 
@@ -93,7 +218,6 @@ if ($oencoding) {
 }
 
 
-###############################################################################
 ###############################################################################
 # Main
 #
@@ -163,7 +287,6 @@ report();
 exit;
 
 
-###############################################################################
 ###############################################################################
 #
 sub doOneItem {
@@ -240,7 +363,6 @@ sub doOneFile {
 
 
 ###############################################################################
-###############################################################################
 #
 sub report {
     ($quiet) || warn "Done, $totalRecs records processed.\n";
@@ -263,123 +385,3 @@ sub reportLine {
         warn sprintf("  %-30s %9d\n", $label, $datum);
     }
 }
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-findDates [options] file
-
-Locate date strings in the input, and report them.
-
-Fairly smart about numeric vs. text forms:
-
-    2013-10-01
-    01-01-2013
-    Jan 1, 2001
-    01/01/2001
-    1 Jan., 20012
-    March, 2001
-
-
-
-=head2 Limitations:
-
-=over
-
-=item * For months and eras, only handle English so far.
-
-=item * Doesn't handle packed dates such s 20131001, or dates with times.
-
-=item * Doesn't do anything for partial dates or date ranges.
-
-=item * Doesn't do "first of septembet, the year of our Lord nineteen hundred and thirty"
-
-=back
-
-
-
-=head1 Options
-
-(prefix 'no' to negate where applicable)
-
-=over
-
-=item * B<--color>
-
-Colorize the output. Default to on if
-environment variable C<USE_COLOR> is set and STDERR is going to the terminal.
-
-=item * B<--iencoding> I<e>
-
-Specify character encoding for input.
-
-=item * B<--ignoreCase> or B<-i>
-
-Disregard upper/lower case distinctions.
-
-=item * B<--ilineends> I<t>
-
-Assume Unix, Dos, or Mac line-breaks for input.
-
-=item * B<--listEncodings>
-
-Show all available character encodings, then exit.
-
-=item * B<--oencoding> I<e>
-
-Specify character encoding for output.
-
-=item * B<--olineends> I<t>
-
-Write Unix, Dos, or Mac line-breaks for output.
-
-=item * B<--quiet> OR B<-q>
-Suppress most messages.
-
-=item * B<--recursive>
-
-Process directories recursively.
-
-=item * B<--tick> I<n>
-
-Report progress every I<n> records (0 to turn off).
-
-=item * B<--unicode>
-
-Synonym for I<--iencoding utf8> I<--oencoding utf8>.
-
-=item * B<--verbose> OR B<-v>
-Add more messages (repeatable).
-
-=item * B<--version>
-
-Show version info and exit.
-
-=back
-
-
-
-=head1 Known Bugs and Limitations
-
-
-
-=head1 Related commands
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut

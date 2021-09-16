@@ -152,7 +152,7 @@ def getDelimiters(ext):
     elif (ext in [ 'sql' ]):
         ds = DelimSet('--\\s', None, None)
     else:
-        lg.eMsg(0, "Unsupported extension '%s'." % (ext))
+        lg.error("Unsupported extension '%s'." % (ext))
 
         ds = DelimSet('#',  None, None)
     return ds
@@ -194,7 +194,7 @@ def doOneFile(path):
     root, ext = os.path.splitext(path)
     if (not ext):
         fileSniff = check_output([ 'file', path ])
-        lg.eMsg(0, "No extension. 'file' says: %s" % (fileSniff))
+        lg.error("No extension. 'file' says: %s" % (fileSniff))
         ext = args.extension
     ds = getDelimiters(ext)
     try:

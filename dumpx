@@ -1,77 +1,8 @@
 #!/usr/bin/perl -w
 #
 # dumpx: A better hex-dump utility, at least for 'text'.
-#
-# Why?
-#    od's interface. It's hard to get it to display based on characters,
-#    and it gets byte order wrong in some settings. It can't align X and A,
-#    and it can't produce a legible ASCII text. You can't easily go to whatever
-#    offset you want (except at the start). This layout is much more like an
-#    old CMS hex dump program (probably was a local mod at Brown University
-#    by Peter DiCamillo; at any rate it was really good).
-#
-# History:
-# Long ago (~1980?): Written in C by Steven J. DeRose.
-# 2006-06-03: Ported to Perl and made options more like Unix od.
-# 2006-09-12: Make -x synonym for -h. Implement $linesToShow.
-# 2006-09-13: Support stdin when no file argument.
-# 2006-10-02: Make color options like ls/grep. Split up help.
-# 2006-11-03: Add -cc.
-# 2006-11-07: Add -color controls.
-# 2007-01-11 sjd: Add -skipLines, -lineend.
-# 2007-02-15 sjd: Add -linenum.
-# 2007-08-29 sjd: Improve -listchars. Add -codepage.
-# 2007-09-05 sjd: Add unicode classes.
-# 2007-11-27 sjd: Start strict.
-# 2008-02-13 sjd: Add perl -w, fix a few bugs, esp. with colorizing.
-# 2008-08-31 sjd: Check for BSD.
-# 2010-02-24 sjd: Clean up options. use strict. fullnames & unicode.
-# 2010-03-01 sjd: Getopt::Long.
-# 2010-05-07 sjd: Control pictures/control symbols. Color fixes. perldoc.
-# 2010-10-26ff sjd: Packagize 'reader'. Start -break. Rename -codePage to
-#     -iencoding, -ltype to -ilineends. Break out dumpOneChunk().
-#     Separate -verbose from (od-like) -v. Add -substitute, -useCarat.
-#     Null-pad at EOF. Fix color bug.
-# 2010-11-02ff sjd: Yet more color bugs. Clean up -user macro stack handling.
-#     Work on -user mode. Offset printing in -user. Add -colHeaderBase.
-# 2011-06-27 sjd: Implement -j.
-# 2011-08-08 sjd: Fix bug in colorizing w/ showABe().
-# 2011-08-29f sjd: Break options into a hash, to help -user mode.
-#     Revamp lines/columns handling, user Find escaping. Add -addressWidth.
-#     Re-org and synchronize option variables, getopt entries, and perldoc.
-#     Rename option variables to match long option names from od.
-#     Colorize and fix bugs in showHead.
-# 2012-02-09 sjd: Start integrating, cleaning up charset handling w/ Encode.
-# 2013-03-28 sjd: Finish -break (nee -newlines). Clean up options. Count
-#     column position in lines. Add interactive command 'c' to identify chars.
-#     Add -lineNum. Fix -showGutter. Move showAlphaSide() call up and clean
-#     up width calculations. Stop showing NULs at EOF. Start real UTF8 support.
-# 2013-06-27f: Sync RecordFile.pm. Add showUCS. Clean up getName, getPrintChar.
-#     Add footnotes for chars without short names. Switch to passing around
-#     byte arrays instead of strings. Generalize colorizing.
-#     Fixing utf8. Make showUCS and showAbe gather up chars! howManyBytes().
-# 2013-08-12: More work on cleaning up colorizing. Make categories consistent.
-#     Sync color options w/ recently-added 'colorizer' package. Lose $cRed, etc.
-# 2014-09-01: Make --decimal not break due to colorizer.
-# 2017-02-08: Switch to my ColorManager package.
-#
-# To do:
-#     Finishing colorizer & color defaulting.
-#     Integrate RecordFile then delete 'reader' package. Esp. for compression.
-#     --break for non-*nix line-end types (or any code point chosen!)
-#     Add 'column number within line' as a display option.
-#     Integrate HTML::Entities to get char names.
-#     Have a UCS2 mode, with wide areas?
-#     Option to just show plain text *except* where there's funky stuff,
-#         or to recode funky stuff visible inline: the na[uuml]ve\n[tlingit digit 4]...
-#
-# Low priority:
-#     Sync/Integrate with lessFields? Or at least TabularFormats.pm.
-#     -pix for spaces doesn't work (likewise for null)
-#     Colorize showHeader, and figure out how often to show it.
-#     Auto-adjust for window width and height.
-#     Buffer for scrollback even with STDIN?
-#     Count & report number of duplicate lines in a row.
+# Long ago (~1980?): Written in C by Steven J. DeRose, inspired by a version
+# I think was written by Peter DiCamillo.
 #
 use strict;
 use Getopt::Long;
@@ -86,7 +17,587 @@ use alogging;
 #use ColorManager;
 #my $colorOff = ColorManager::getColorString('off');
 
-our $VERSION_DATE = "2017-02-08";
+our %metadata = (
+    'title'        => "dumpx",
+    'description'  => "A better hex-dump utility, at least for 'text'.",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "~1980?",
+    'modified'     => "2021-09-16",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
+ur $VERSION_DATE = "2017-02-08";
+
+
+=pod
+
+=head1 Usage
+
+dumpx [options] [file]
+
+Dumps a file or portion, converting characters to other forms;
+also provides an interactive mode (see I<--user>).
+
+This is very much like the *nix C<od> utility. However, the input is treated
+entirely as characters (not bytes or numeric types), so this is much more
+useful for 'text'-ish files, including Unicode.
+
+The input is divided into I<chunks> that fill display lines.
+If available the script uses environment variables C<$COLUMNS> to
+set the chunk length (typically 16), and C<$LINES> to calculate how many
+chunks to show before pausing (like C<more>).
+See also I<-w>, I<--cwidth>, and especially I<--break> (which cause
+a new chunk to be started after every I<newline>, making text files much
+more readable).
+
+Each chunk can be displayed in multiple I<forms> on separate lines.
+By default, the first line has the relevant offset on the left (see I<-j>,
+I<--jl>, I<-A>, and several other options),
+and the literal string text of the chunk on the right (see I<--as>).
+By default, the characters are shown in two formats:
+hexadecimal B<byte> values (I<-h>)
+and then literal characters (I<-a>), and the numeric display has some
+extra I<--showGutter> space in the middle. Thus:
+
+x000049:  31 32 33 34 35 36   61 62 63 64 65 66  |12345678abcdefgh|
+           1  2  3  4  5  6    a  b  c  d  e  f
+
+Unlike C<od>, the representations in all the lines of a group
+are aligned, and you shouldn't get big/little-endian issues.
+Offsets are shown in the same base as the line they precede. Each such
+I<group> of lines, can be followed by a blank line (see I<--blank>).
+With I<--break>, a newline character will also start a new "chunk".
+
+In I<--user> (interactive) mode, a screen's-worth of such groups will be printed
+and then a user command will be accepted.
+
+=head2 Why?
+
+    od's interface. It's hard to get it to display based on characters,
+    and it gets byte order wrong in some settings. It can't align X and A,
+    and it can't produce a legible ASCII text. You can't easily go to whatever
+    offset you want (except at the start). This layout is much more like an
+    old CMS hex dump program (probably was a local mod at Brown University
+    by Peter DiCamillo; at any rate it was really good).
+
+
+=head3 'Literal' display
+
+The 'literal' forms I<-a> (below) and I<--as> (as a right sidebar),
+display printable characters as themselves.
+By default, control characters are replaced by
+the Unicode 'control pictures' (U+2400 and following).
+Other unprintable characters will be "?" on the right, but will
+be replaced by "#" and a footnote number in the I<-a> (below) display.
+After each display chunk, each character so replaced will be
+listed on a separate line, with its footnote number and full Unicode name.
+This can be turned off via I<--nonotes>, in which case the characters
+will merely be displayed as "??".
+To display characters from d160-d255 (sometimes called Latin-1 or G1)
+literally, use I<--g1ok> (that's a one, not an el).
+See also I<--substitute> and I<--notes>.
+
+B<Note>: Unlike most of my scripts, options for C<dumpx> B<regard> case.
+This is for compatibility with C<od>: most options are exactly the same.
+However, I<-s>, I<-t>, I<--traditional>, and all options relating
+to byte order and word size are not supported.
+
+
+=head1 Options I<not> like C<od>
+
+(prefix 'no' to negate where applicable)
+
+B<Note>: The C<od>-like options are described in a later section.
+
+=over
+
+=item * B<--addressWidth> I<n>
+
+How many columns to allow for displaying the offset of each chunk.
+Default 8; specify 0 to suppress offset display.
+See also B<--addressRadix>, aka I<--address-radix> and I<-A>.
+
+=item * B<--blankLine>
+
+Put a blank line after the group of lines displayed for each chunk.
+
+=item * B<--break>
+
+Start a new output line at each input newline character (not finished).
+
+=item * B<--cc> I<char>
+
+Colorize the character specified (repeatable).
+Allows notations such as \\0777, 0xFFFF, etc.
+
+=item * B<--charForSpace> I<spec>
+
+Set what code point will be displayed as the printable form of space (regular space, not
+hard space, en/em/thin space, etc.). The number may be specified in decimal, octal,
+or hex. Some useful values include:
+     0x20    -- a literal space
+     0x2423  -- an underscore with the ends turned up (the default)
+     0x2420  -- a little "SP"
+     0x2422  -- "b" with a slash
+
+=item * B<--color> I<arg>
+
+Colorize certain characters in the output, as determined by I<arg>:
+    I<auto> (newlines, controls, spaces, non-Latin1);
+    I<xml> (<>&;);
+    I<controls>;
+    I<nonascii>;
+    I<all> (auto, xml, and controls); or
+    I<none> or I<off>.
+
+You can also give a Unicode character-class name (experimental) to colorize all
+characters that are members of that class (such as Bopomofo);
+or I<!> plus a character-class name to colorize all characters that are
+I<not> of that class. See I<man perlunicode> for more details.
+If environment variable I<USE_COLOR> is set and STDOUT is going to
+a terminal, defaults to coloring newlines and control characters
+(unfortunately, "| more" is not a terminal).
+
+B<Note>: In transition, may not completely work.
+
+=item * B<--cwidth> I<n>
+
+Display columns to allow per character. For example, 8-bit characters take 2
+hexadecimal digits, so I<--cwidth 3> is nice (and is the default).
+
+=item * B<--dcolumns> I<n>
+
+Number of character spaces in the display. Default: $COLUMNS or 80.
+
+=item * B<--dlines> I<n>
+
+Number of lines in the display. Default: $LINES or 40.
+
+=item * B<--G1ok>
+
+Allows output of G1 characters (d160-d255).
+(should be subsumed under I<--oencoding>)
+
+=item * B<--iencoding> I<c>
+
+Use a non-Latin-1 character set for display (see also I<--listEncodings>).
+Among the likely candidates: ascii, cp1252, cp500, iso-8859-1 (through -16),
+MacRoman, UCS-2BE, UCS-2LE, UTF-16, utf8 (note case and hyphenation).
+
+=item * B<--ilineends> I<t>
+
+Are input line-ends m(ac), d(os), or default u(nix)?
+(only really matters if using I<--jl>)
+
+=item * B<--jl> I<n> or B<--skip-lines>
+
+Start at line I<n> (see also I<--ilineends>, I<-j>).
+
+=item * B<--listchars>
+
+Just show a table of Latin-1 characters.
+
+=item * B<--listEncodings>
+
+Show all the encodings supported by I<--iencoding> and I<--oencoding>.
+
+=item * B<--nocolor>
+
+Synonym for I<--color none>.
+
+=item * B<--nog1>
+
+Do not try to display Latin1/G1 characters (d161-255, xA1-FF).
+
+=item * B<--noteColor> I<colorName>
+
+Show notes (added for characters which lack mnemonics or very short names),
+with the specified color.
+
+=item * B<--notes>
+
+Enable notes (added for characters which lack mnemonics or very short names).
+Default: on (use I<--nonotes> to turn off).
+
+=item * B<oencoding> I<e>
+
+Assume the output can handle enocding I<e> (see also I<--listEncodings>).
+
+B<Note>: Terminal programs will be confused if you request a character set they
+don't support.
+
+=item * I<--showAlphaSide> or B<--sas>
+
+Show literal chars more readably
+in column on right (default; use I<--noas> to turn off).
+
+=item * B<--showGutter> or B<--sg>
+
+Split the alphabetic display on the right in the middle for legibility.
+
+=item * B<--showHeader> or B<--sh>
+
+Display a relative-offset header aligned over each character-column.
+B<Note>: it is not possible to make this show the low-order byte or nibble
+or the precise offset; just a column number. It is also only printed before
+the first block of each screenful (which may be fine with I<--user>, but
+not in general).
+
+=item * B<--lineNumber> or B<--sln>
+
+Display the current line number (in which the start of each block falls).
+
+=item * B<--substitute> I<s>
+
+Print I<s> for unprintable characters. Default: U+00A4 (Currency Sign).
+See also I<--useControlSymbols>, I<--html>, and I<--oencoding>.
+
+=item * B<-u>
+
+Show a line with the UCS2 numeric equivalent of any UTF-8 sequences.
+
+=item * B<--unicode>
+
+Synonym for I<--iencoding utf8>.
+
+=item * B<--useCarat> or B<--uc>
+
+Show control characters as 0x01 through 0x1A as "^A" through "^Z".
+
+=item * B<--useControlSymbols> or I<--pix>
+
+Display control characters (C0) as Unicode control pictures (U'24xx).
+
+=item * B<--user> or B<--interactive>
+
+Use interactive mode (unfinished). See below for details.
+
+=item * B<--verbose>
+
+Add debugging messages (repeatable).
+
+=back
+
+
+=head1 Options like C<od>
+
+Many of C<od>'s options are supported, as listed below. However,
+those that parse input data by number of I<bytes>
+rather than characters are not
+(-b -c -d[SIZE] -f[SIZE] -i -l -o[SIZE] -s -u[SIZE] -x[SIZE]
+and their I<-t[TYPE]> equivalents).
+
+The supported C<od>-like options are:
+
+=over
+
+=item * B<-A> I<radix> or (B<--address-radix>)
+
+Base for displaying file offsets (0, 8, 10, or 16)
+(if not specified, of specified as 0,
+the displayed offset matches the base of following data on line.
+Thus, you can get multiple bases in a reasonably mnemonic way.
+See also I<--addressWidth> (set that to 0 to suppress offset display entirely).
+
+=item * B<-a> or B<-t a>
+
+Show literal characters below numeric(s).
+Unlike C<od>, the high-order bit is I<not> automatically cleared, and
+multi-byte encodings are supported (see also I<--iencoding>).
+Latin-1 characters will be shown as themselves; others will display
+a footnote number, and after the display line is printed, the
+footnotes will be shown. Each footnotes includes its number, the
+hex value for the code point (this will not be the same as the
+individual utf8 bytes shown by I<-h>!), and the full Unicode name for
+the character.
+
+The footnote number in the I<-a> lines, is allowed as much space
+as the number of bytes in the UTF-8 form
+(numeric display options will show the values of the UTF-8 bytes).
+
+=item * B<-c>
+
+Show C-style escaped characters.
+Unlike C<od>, backslash-codes are not decoded.
+
+=item * B<-d>
+
+Show bytes in decimal.
+
+=item * B<-h>
+
+Show bytes in hexadecimal ('-x' also works).
+
+=item * B<--help>
+
+Show this help and exit.
+For compatibility with C<od>, the I<-h> option display hex bytes,
+rather than invoking help.
+
+=item * B<-j> I<n> or B<--skip-bytes>
+
+Offset in file to start at (but see also I<--jl>, above).
+
+=item * B<--linenum>
+
+Display the line number above each block, in which that blocks begins.
+
+=item * B<-N> I<n> or B<--read-bytes> or B<--readBytes>
+
+Max number of bytes to dump.
+
+=item * B<-o>
+
+Show bytes in octal.
+
+=item * B<-S> or <--strings>
+
+Not supported.
+
+=item * B<-t> or <--format-type>
+
+Not supported.
+
+=item * B<--traditional>
+
+Not supported.
+
+=item * B<-v> or B<--output-duplicates>
+
+Don't skip duplicate lines.
+
+=item * B<--version>
+
+Show version information and exit.
+
+=item * B<-w> I<n> or B<--width>
+
+Bytes per output line (default 16, multiples of 8 are nice).
+
+=back
+
+
+=head1 Interactive mode (not finished)
+
+To invoke interactive mode, specify the I<--user> option.
+
+=head2 Interactive Commands
+
+These are largely modeled on C<more> and its kin.
+
+=over
+
+=item * quit        Exit this program
+
+=item * <Return>    Move forward one block (i.e., one screenful, see 'lines')
+
+=item * + n         Move forward n blocks
+
+=item * B<- n>         Move backward n blocks (default one block)
+
+=item * @ n         Move to file offset n
+
+=item * find s      Find string (which may include nonzero \\xx byte codes)
+
+=item * next n      Find next (with n, finds next n offsets & diffs)
+
+=item * back        Return to previous place
+
+=item * diff n m    Subtract m from n, display result in hex/decimal/octal
+
+=item * log         Append current block to logfile
+
+=item * c           Identify the current character's code point and name.
+
+=back
+
+=head3 Also
+
+=over
+
+B<Move among available files>
+  ':d' -- filelist-delete
+  ':n' -- filelist-next
+  ':p' -- filelist-prev
+  ':x' -- filelist-goto
+
+B<Move by record>
+  ' '  -- forward: go down N records (default 1)
+  'f'  -- forward: go down N records (default 1)
+  'b'  -- backward: go up N records (default 1)
+  '<'  -- start: go to top (first record)
+  '>'  -- end: go to bottom (last record)
+  'g'  -- goto: skip to record N
+
+B<Search>
+  '/'  -- find-forward: search forward for regex.
+  '?'  -- find-backward (takes arg)
+  'n'  -- find-next (takes arg)
+  'N'  -- find-previous
+  'm'  -- mark: set a mark at current record (takes arg)
+  '\'' -- goto-mark (takes arg)
+
+B<Options>
+  '-'  -- option-off
+  '_'  -- option-display
+  '+'  -- option-on
+
+B<Miscellaneous>
+  'c'  -- identify-character
+  '='  -- show-filename
+  ':f' -- show-filename
+  'v'  -- edit: edit current file
+  'V'  -- version
+  ':e' -- edit-other: edit another file (takes arg)
+  'E'  -- edit-other: edit another file (takes arg)
+  'q'  -- quit
+  ':q' -- quit
+  'Q'  -- quit
+  ':Q' -- quit
+  'h'  -- help
+  'H'  -- help
+  'r'  -- repaint: re-display current record
+  '!'  -- shell: run a shell command (takes arg)
+  '|'  -- shell-region: cat region from current record to mark X
+(named by first letter of following arg), to shell (takes arg).
+
+=back
+
+
+=head2 Setting Interactive-only Options
+
+=over
+
+=item * chunk n      Number of bytes per display line (default 16)
+
+=item * header n     0 to hide, 1 to show header line
+
+=item * lines n      Number of display lines to show at once
+
+=item * logfile name Set name of log file to write
+
+=item * macro m      Start taking commands from specified file
+
+=item * next n       Go forward by n blocks
+
+=back
+
+
+=head1 Related commands
+
+C<od> -- the *nix command most similar to this script.
+
+C<chr> and C<ord> -- utilities to convert between code point numbers (in
+various bases) and actual characters and names.
+
+L<http://search.cpan.org/~jhi/perl-5.7.3/ext/Encode/Encode.pm> -- Perl
+package for dealing with character encodings.
+
+C<RecordFile.pm> -- should replace the internal 'reader' package.
+
+C<hilite> -- can colorize all kinds of this, such as ranges of character codes,
+similar to some features of C<dumpx>.
+
+
+=head1 Known bugs and limitations
+
+Bash may wrap lines too soon if color is used, apparently because it counts
+the length of the color escapes into the line length (?).
+
+No type-checking is done for the interactive I<set option value> command.
+
+Can't count line-numbers when using I<-j> (start at offset).
+
+I<--showHeader> is kind of lame so far.
+
+EBCDIC recoding is unfinished.
+
+
+=head1 To do
+
+    Finishing colorizer & color defaulting.
+    Integrate RecordFile then delete 'reader' package. Esp. for compression.
+    --break for non-*nix line-end types (or any code point chosen!)
+    Add 'column number within line' as a display option.
+    Integrate HTML::Entities to get char names.
+    Have a UCS2 mode, with wide areas?
+    Option to just show plain text *except* where there's funky stuff,
+    or to recode funky stuff visible inline: the na[uuml]ve\n[tlingit digit 4]...
+
+Low priority:
+    Sync/Integrate with lessFields? Or at least TabularFormats.pm.
+    -pix for spaces doesn't work (likewise for null)
+    Colorize showHeader, and figure out how often to show it.
+    Auto-adjust for window width and height.
+    Buffer for scrollback even with STDIN?
+    Count & report number of duplicate lines in a row.
+
+
+=head1 History
+
+    Long ago (~1980?): Written in C by Steven J. DeRose, inspired by a version
+I think was written by Peter DiCamillo.
+    2006-06-03: Ported to Perl and made options more like Unix od.
+    2006-09-12: Make -x synonym for -h. Implement $linesToShow.
+    2006-09-13: Support stdin when no file argument.
+    2006-10-02: Make color options like ls/grep. Split up help.
+    2006-11-03: Add -cc.
+    2006-11-07: Add -color controls.
+    2007-01-11 sjd: Add -skipLines, -lineend.
+    2007-02-15 sjd: Add -linenum.
+    2007-08-29 sjd: Improve -listchars. Add -codepage.
+    2007-09-05 sjd: Add unicode classes.
+    2007-11-27 sjd: Start strict.
+    2008-02-13 sjd: Add perl -w, fix a few bugs, esp. with colorizing.
+    2008-08-31 sjd: Check for BSD.
+    2010-02-24 sjd: Clean up options. use strict. fullnames & unicode.
+    2010-03-01 sjd: Getopt::Long.
+    2010-05-07 sjd: Control pictures/control symbols. Color fixes. perldoc.
+    2010-10-26ff sjd: Packagize 'reader'. Start -break. Rename -codePage to
+-iencoding, -ltype to -ilineends. Break out dumpOneChunk().
+Separate -verbose from (od-like) -v. Add -substitute, -useCarat.
+Null-pad at EOF. Fix color bug.
+    2010-11-02ff sjd: Yet more color bugs. Clean up -user macro stack handling.
+Work on -user mode. Offset printing in -user. Add -colHeaderBase.
+    2011-06-27 sjd: Implement -j.
+    2011-08-08 sjd: Fix bug in colorizing w/ showABe().
+    2011-08-29f sjd: Break options into a hash, to help -user mode.
+Revamp lines/columns handling, user Find escaping. Add -addressWidth.
+Re-org and synchronize option variables, getopt entries, and perldoc.
+Rename option variables to match long option names from od.
+Colorize and fix bugs in showHead.
+    2012-02-09 sjd: Start integrating, cleaning up charset handling w/ Encode.
+    2013-03-28 sjd: Finish -break (nee -newlines). Clean up options. Count
+column position in lines. Add interactive command 'c' to identify chars.
+Add -lineNum. Fix -showGutter. Move showAlphaSide() call up and clean
+up width calculations. Stop showing NULs at EOF. Start real UTF8 support.
+    2013-06-27f: Sync RecordFile.pm. Add showUCS. Clean up getName, getPrintChar.
+Add footnotes for chars without short names. Switch to passing around
+byte arrays instead of strings. Generalize colorizing.
+Fixing utf8. Make showUCS and showAbe gather up chars! howManyBytes().
+    2013-08-12: More work on cleaning up colorizing. Make categories consistent.
+Sync color options w/ recently-added 'colorizer' package. Lose $cRed, etc.
+    2014-09-01: Make --decimal not break due to colorizer.
+    2017-02-08: Switch to my ColorManager package.
+    2021-09-16: New layout, cleanup.
+    
+
+=head1 Rights
+
+Copyright 2006-06-03 by Steven J. DeRose. This work is licensed under a
+Creative Commons Attribution-Share Alike 3.0 Unported License.
+For further information on this license, see
+L<https://creativecommons.org/licenses/by-sa/3.0>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities> or
+L<https://github.com/sderose>.
+
+
+=cut
 
 
 ###############################################################################
@@ -2066,507 +2577,3 @@ sub close {
 }
 
 # End of reader package.
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-dumpx [options] [file]
-
-Dumps a file or portion, converting characters to other forms;
-also provides an interactive mode (see I<--user>).
-
-This is very much like the *nix C<od> utility. However, the input is treated
-entirely as characters (not bytes or numeric types), so this is much more
-useful for 'text'-ish files, including Unicode.
-
-The input is divided into I<chunks> that fill display lines.
-If available the script uses environment variables C<$COLUMNS> to
-set the chunk length (typically 16), and C<$LINES> to calculate how many
-chunks to show before pausing (like C<more>).
-See also I<-w>, I<--cwidth>, and especially I<--break> (which cause
-a new chunk to be started after every I<newline>, making text files much
-more readable).
-
-Each chunk can be displayed in multiple I<forms> on separate lines.
-By default, the first line has the relevant offset on the left (see I<-j>,
-I<--jl>, I<-A>, and several other options),
-and the literal string text of the chunk on the right (see I<--as>).
-By default, the characters are shown in two formats:
-hexadecimal B<byte> values (I<-h>)
-and then literal characters (I<-a>), and the numeric display has some
-extra I<--showGutter> space in the middle. Thus:
-
-x000049:  31 32 33 34 35 36   61 62 63 64 65 66  |12345678abcdefgh|
-           1  2  3  4  5  6    a  b  c  d  e  f
-
-Unlike C<od>, the representations in all the lines of a group
-are aligned, and you shouldn't get big/little-endian issues.
-Offsets are shown in the same base as the line they precede. Each such
-I<group> of lines, can be followed by a blank line (see I<--blank>).
-With I<--break>, a newline character will also start a new "chunk".
-
-In I<--user> (interactive) mode, a screen's-worth of such groups will be printed
-and then a user command will be accepted.
-
-=head3 'Literal' display
-
-The 'literal' forms I<-a> (below) and I<--as> (as a right sidebar),
-display printable characters as themselves.
-By default, control characters are replaced by
-the Unicode 'control pictures' (U+2400 and following).
-Other unprintable characters will be "?" on the right, but will
-be replaced by "#" and a footnote number in the I<-a> (below) display.
-After each display chunk, each character so replaced will be
-listed on a separate line, with its footnote number and full Unicode name.
-This can be turned off via I<--nonotes>, in which case the characters
-will merely be displayed as "??".
-To display characters from d160-d255 (sometimes called Latin-1 or G1)
-literally, use I<--g1ok> (that's a one, not an el).
-See also I<--substitute> and I<--notes>.
-
-B<Note>: Unlike most of my scripts, options for C<dumpx> B<regard> case.
-This is for compatibility with C<od>: most options are exactly the same.
-However, I<-s>, I<-t>, I<--traditional>, and all options relating
-to byte order and word size are not supported.
-
-
-
-=head1 Options I<not> like C<od>
-
-(prefix 'no' to negate where applicable)
-
-B<Note>: The C<od>-like options are described in a later section.
-
-=over
-
-=item * B<--addressWidth> I<n>
-
-How many columns to allow for displaying the offset of each chunk.
-Default 8; specify 0 to suppress offset display.
-See also B<--addressRadix>, aka I<--address-radix> and I<-A>.
-
-=item * B<--blankLine>
-
-Put a blank line after the group of lines displayed for each chunk.
-
-=item * B<--break>
-
-Start a new output line at each input newline character (not finished).
-
-=item * B<--cc> I<char>
-
-Colorize the character specified (repeatable).
-Allows notations such as \\0777, 0xFFFF, etc.
-
-=item * B<--charForSpace> I<spec>
-
-Set what code point will be displayed as the printable form of space (regular space, not
-hard space, en/em/thin space, etc.). The number may be specified in decimal, octal,
-or hex. Some useful values include:
-     0x20    -- a literal space
-     0x2423  -- an underscore with the ends turned up (the default)
-     0x2420  -- a little "SP"
-     0x2422  -- "b" with a slash
-
-=item * B<--color> I<arg>
-
-Colorize certain characters in the output, as determined by I<arg>:
-    I<auto> (newlines, controls, spaces, non-Latin1);
-    I<xml> (<>&;);
-    I<controls>;
-    I<nonascii>;
-    I<all> (auto, xml, and controls); or
-    I<none> or I<off>.
-
-You can also give a Unicode character-class name (experimental) to colorize all
-characters that are members of that class (such as Bopomofo);
-or I<!> plus a character-class name to colorize all characters that are
-I<not> of that class. See I<man perlunicode> for more details.
-If environment variable I<USE_COLOR> is set and STDOUT is going to
-a terminal, defaults to coloring newlines and control characters
-(unfortunately, "| more" is not a terminal).
-
-B<Note>: In transition, may not completely work.
-
-=item * B<--cwidth> I<n>
-
-Display columns to allow per character. For example, 8-bit characters take 2
-hexadecimal digits, so I<--cwidth 3> is nice (and is the default).
-
-=item * B<--dcolumns> I<n>
-
-Number of character spaces in the display. Default: $COLUMNS or 80.
-
-=item * B<--dlines> I<n>
-
-Number of lines in the display. Default: $LINES or 40.
-
-=item * B<--G1ok>
-
-Allows output of G1 characters (d160-d255).
-(should be subsumed under I<--oencoding>)
-
-=item * B<--iencoding> I<c>
-
-Use a non-Latin-1 character set for display (see also I<--listEncodings>).
-Among the likely candidates: ascii, cp1252, cp500, iso-8859-1 (through -16),
-MacRoman, UCS-2BE, UCS-2LE, UTF-16, utf8 (note case and hyphenation).
-
-=item * B<--ilineends> I<t>
-
-Are input line-ends m(ac), d(os), or default u(nix)?
-(only really matters if using I<--jl>)
-
-=item * B<--jl> I<n> or B<--skip-lines>
-
-Start at line I<n> (see also I<--ilineends>, I<-j>).
-
-=item * B<--listchars>
-
-Just show a table of Latin-1 characters.
-
-=item * B<--listEncodings>
-
-Show all the encodings supported by I<--iencoding> and I<--oencoding>.
-
-=item * B<--nocolor>
-
-Synonym for I<--color none>.
-
-=item * B<--nog1>
-
-Do not try to display Latin1/G1 characters (d161-255, xA1-FF).
-
-=item * B<--noteColor> I<colorName>
-
-Show notes (added for characters which lack mnemonics or very short names),
-with the specified color.
-
-=item * B<--notes>
-
-Enable notes (added for characters which lack mnemonics or very short names).
-Default: on (use I<--nonotes> to turn off).
-
-=item * B<oencoding> I<e>
-
-Assume the output can handle enocding I<e> (see also I<--listEncodings>).
-
-B<Note>: Terminal programs will be confused if you request a character set they
-don't support.
-
-=item * I<--showAlphaSide> or B<--sas>
-
-Show literal chars more readably
-in column on right (default; use I<--noas> to turn off).
-
-=item * B<--showGutter> or B<--sg>
-
-Split the alphabetic display on the right in the middle for legibility.
-
-=item * B<--showHeader> or B<--sh>
-
-Display a relative-offset header aligned over each character-column.
-B<Note>: it is not possible to make this show the low-order byte or nibble
-or the precise offset; just a column number. It is also only printed before
-the first block of each screenful (which may be fine with I<--user>, but
-not in general).
-
-=item * B<--lineNumber> or B<--sln>
-
-Display the current line number (in which the start of each block falls).
-
-=item * B<--substitute> I<s>
-
-Print I<s> for unprintable characters. Default: U+00A4 (Currency Sign).
-See also I<--useControlSymbols>, I<--html>, and I<--oencoding>.
-
-=item * B<-u>
-
-Show a line with the UCS2 numeric equivalent of any UTF-8 sequences.
-
-=item * B<--unicode>
-
-Synonym for I<--iencoding utf8>.
-
-=item * B<--useCarat> or B<--uc>
-
-Show control characters as 0x01 through 0x1A as "^A" through "^Z".
-
-=item * B<--useControlSymbols> or I<--pix>
-
-Display control characters (C0) as Unicode control pictures (U'24xx).
-
-=item * B<--user> or B<--interactive>
-
-Use interactive mode (unfinished). See below for details.
-
-=item * B<--verbose>
-
-Add debugging messages (repeatable).
-
-=back
-
-
-
-=head1 Options like C<od>
-
-Many of C<od>'s options are supported, as listed below. However,
-those that parse input data by number of I<bytes>
-rather than characters are not
-(-b -c -d[SIZE] -f[SIZE] -i -l -o[SIZE] -s -u[SIZE] -x[SIZE]
-and their I<-t[TYPE]> equivalents).
-
-The supported C<od>-like options are:
-
-=over
-
-=item * B<-A> I<radix> or (B<--address-radix>)
-
-Base for displaying file offsets (0, 8, 10, or 16)
-(if not specified, of specified as 0,
-the displayed offset matches the base of following data on line.
-Thus, you can get multiple bases in a reasonably mnemonic way.
-See also I<--addressWidth> (set that to 0 to suppress offset display entirely).
-
-=item * B<-a> or B<-t a>
-
-Show literal characters below numeric(s).
-Unlike C<od>, the high-order bit is I<not> automatically cleared, and
-multi-byte encodings are supported (see also I<--iencoding>).
-Latin-1 characters will be shown as themselves; others will display
-a footnote number, and after the display line is printed, the
-footnotes will be shown. Each footnotes includes its number, the
-hex value for the code point (this will not be the same as the
-individual utf8 bytes shown by I<-h>!), and the full Unicode name for
-the character.
-
-The footnote number in the I<-a> lines, is allowed as much space
-as the number of bytes in the UTF-8 form
-(numeric display options will show the values of the UTF-8 bytes).
-
-=item * B<-c>
-
-Show C-style escaped characters.
-Unlike C<od>, backslash-codes are not decoded.
-
-=item * B<-d>
-
-Show bytes in decimal.
-
-=item * B<-h>
-
-Show bytes in hexadecimal ('-x' also works).
-
-=item * B<--help>
-
-Show this help and exit.
-For compatibility with C<od>, the I<-h> option display hex bytes,
-rather than invoking help.
-
-=item * B<-j> I<n> or B<--skip-bytes>
-
-Offset in file to start at (but see also I<--jl>, above).
-
-=item * B<--linenum>
-
-Display the line number above each block, in which that blocks begins.
-
-=item * B<-N> I<n> or B<--read-bytes> or B<--readBytes>
-
-Max number of bytes to dump.
-
-=item * B<-o>
-
-Show bytes in octal.
-
-=item * B<-S> or <--strings>
-
-Not supported.
-
-=item * B<-t> or <--format-type>
-
-Not supported.
-
-=item * B<--traditional>
-
-Not supported.
-
-=item * B<-v> or B<--output-duplicates>
-
-Don't skip duplicate lines.
-
-=item * B<--version>
-
-Show version information and exit.
-
-=item * B<-w> I<n> or B<--width>
-
-Bytes per output line (default 16, multiples of 8 are nice).
-
-=back
-
-
-
-=for nobody ===================================================================
-
-=head1 Interactive mode (not finished)
-
-To invoke interactive mode, specify the I<--user> option.
-
-=head2 Interactive Commands
-
-These are largely modeled on C<more> and its kin.
-
-=over
-
-=item * quit        Exit this program
-
-=item * <Return>    Move forward one block (i.e., one screenful, see 'lines')
-
-=item * + n         Move forward n blocks
-
-=item * B<- n>         Move backward n blocks (default one block)
-
-=item * @ n         Move to file offset n
-
-=item * find s      Find string (which may include nonzero \\xx byte codes)
-
-=item * next n      Find next (with n, finds next n offsets & diffs)
-
-=item * back        Return to previous place
-
-=item * diff n m    Subtract m from n, display result in hex/decimal/octal
-
-=item * log         Append current block to logfile
-
-=item * c           Identify the current character's code point and name.
-
-=back
-
-=head3 Also
-
-=over
-
-B<Move among available files>
-  ':d' -- filelist-delete
-  ':n' -- filelist-next
-  ':p' -- filelist-prev
-  ':x' -- filelist-goto
-
-B<Move by record>
-  ' '  -- forward: go down N records (default 1)
-  'f'  -- forward: go down N records (default 1)
-  'b'  -- backward: go up N records (default 1)
-  '<'  -- start: go to top (first record)
-  '>'  -- end: go to bottom (last record)
-  'g'  -- goto: skip to record N
-
-B<Search>
-  '/'  -- find-forward: search forward for regex.
-  '?'  -- find-backward (takes arg)
-  'n'  -- find-next (takes arg)
-  'N'  -- find-previous
-  'm'  -- mark: set a mark at current record (takes arg)
-  '\'' -- goto-mark (takes arg)
-
-B<Options>
-  '-'  -- option-off
-  '_'  -- option-display
-  '+'  -- option-on
-
-B<Miscellaneous>
-  'c'  -- identify-character
-  '='  -- show-filename
-  ':f' -- show-filename
-  'v'  -- edit: edit current file
-  'V'  -- version
-  ':e' -- edit-other: edit another file (takes arg)
-  'E'  -- edit-other: edit another file (takes arg)
-  'q'  -- quit
-  ':q' -- quit
-  'Q'  -- quit
-  ':Q' -- quit
-  'h'  -- help
-  'H'  -- help
-  'r'  -- repaint: re-display current record
-  '!'  -- shell: run a shell command (takes arg)
-  '|'  -- shell-region: cat region from current record to mark X
-(named by first letter of following arg), to shell (takes arg).
-
-=back
-
-
-=for nobody ===================================================================
-
-=head2 Setting Interactive-only Options
-
-=over
-
-=item * chunk n      Number of bytes per display line (default 16)
-
-=item * header n     0 to hide, 1 to show header line
-
-=item * lines n      Number of display lines to show at once
-
-=item * logfile name Set name of log file to write
-
-=item * macro m      Start taking commands from specified file
-
-=item * next n       Go forward by n blocks
-
-=back
-
-
-
-=for nobody ===================================================================
-
-=head1 Related commands
-
-C<od> -- the *nix command most similar to this script.
-
-C<chr> and C<ord> -- utilities to convert between code point numbers (in
-various bases) and actual characters and names.
-
-L<http://search.cpan.org/~jhi/perl-5.7.3/ext/Encode/Encode.pm> -- Perl
-package for dealing with character encodings.
-
-C<RecordFile.pm> -- should replace the internal 'reader' package.
-
-C<hilite> -- can colorize all kinds of this, such as ranges of character codes,
-similar to some features of C<dumpx>.
-
-
-
-=head1 Known bugs and limitations
-
-Bash may wrap lines too soon if color is used, apparently because it counts
-the length of the color escapes into the line length (?).
-
-No type-checking is done for the interactive I<set option value> command.
-
-Can't count line-numbers when using I<-j> (start at offset).
-
-I<--showHeader> is kind of lame so far.
-
-EBCDIC recoding is unfinished.
-
-
-
-=head1 Ownership
-
-dumpx: This work by Steven J. DeRose is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version,
-see L<http://www.derose.net/steve/utilities/>.
-
-=cut
