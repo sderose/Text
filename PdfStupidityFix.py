@@ -325,6 +325,10 @@ Misses cases with terminal punctuation (partial fix in).
 
 =To do=
 
+Deal with cases where many/most words are doubled.
+
+Do some work on cases where a big word can be broken in more than one way into smaller ones.
+
 Improve cases like "corefer-ence", where neither the big word nor either of
 the parts is known. Maybe keep as hyphenated word?
 
