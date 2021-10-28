@@ -317,13 +317,9 @@ Why doesn't "ChineseRestaurant" get fixed?
 Misses cases with terminal punctuation (partial fix in).
 
 
-=History=
-
-* 2020-09-25: Written by Steven J. DeRose.
-* 2021-04-14: Add --bullets, --asterisks, --stars.
-
-
 =To do=
+
+Catch line-final hyphens specially.
 
 Deal with cases where many/most words are doubled.
 
@@ -347,6 +343,12 @@ Recover correct inflections via Wiktionary or various other means, and make
 a better word-list.
 
 
+=History=
+
+* 2020-09-25: Written by Steven J. DeRose.
+* 2021-04-14: Add --bullets, --asterisks, --stars.
+
+
 =Rights=
 
 Copyright 2020-09-25 by Steven J. DeRose. This work is licensed under a
@@ -367,8 +369,8 @@ def warning(lvl, msg):
     if (args.verbose >= lvl): sys.stderr.write(msg + "\n")
     if (lvl < 0): sys.exit()
 def warning0(msg): warning(0, msg)
-def warning1(msg): warning(0, msg)
-def warning2(msg): warning(0, msg)
+def warning1(msg): warning(1, msg)
+def warning2(msg): warning(2, msg)
 
 bullets = {
     # Common chars used as bullets
