@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# findUnbalancedQuotes.py: Report lines with odd quotation patterns.
+# findUnbalancedQuotes.py: Report lines with odd quotation or indentation patterns.
 # 2017-07-03: Written by Steven J. DeRose.
 #
 import sys
@@ -13,13 +13,13 @@ lg = ALogger()
 
 __metadata__ = {
     "title"        : "findUnbalancedQuotes.py",
-    "description"  : "Report lines with odd quotation patterns.",
+    "description"  : "Report lines with odd quotation or indentation patterns.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2017-07-03",
-    "modified"     : "2020-09-10",
+    "modified"     : "2020-10-01",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/",
 }
@@ -29,24 +29,37 @@ __version__ = __metadata__["modified"]
 descr = """
 =Description=
 
-Scan for lines with imbalanced quotes.
+Scan for lines with imbalanced quotes, and optionally for suspicious indentation.
+This is mainly useful for tracking down where an imbalance originated, for programming
+language implementations that are not kind enough to direct you to the location of
+things like the last unmatched "{", a line with only one '"', etc. 
 
-This script does not know about particular programming or other languages,
+This script knows little about particular programming or other languages,
 so does not (yet) deal with cases such as quotes backslashed within quotes,
 multi-line quotations, here documents, etc.
 
   With ''--unicode'', checks for various curly quote pairs, though not perfectly.
   With ''--contractions', ignores likely natural-languages contraction apostrophes.
-  With ''--perl'', also reports things like "if...{ [...code...]" with no "}".
+  With ''--perl'', also reports things like "if...{ [...code...]" with no "}",
+and indentation changes without a brace or command ending the previous line.
   With ''--triple'', suppresses reporting of triple-quotes a la Python.
   With ''--parens'', also reports lines with mismatched () [] {}.
   
 
 =Related Commands=
 
+pylint, tidy, Perl::Tidy, etc.
+
 
 =Known bugs and Limitations=
 
+* --perl reports potential problems when the indentation increases but the previous
+line didn't end with '{', or the indentation decreases but the previous
+line didn't end with '}' or ','.  This covers a lot of common cases, but will report
+a number of false positives, such as continuation lines that didn't break at a comma.
+Still, it seems more useful in this application, to over-report than under.
+Oh, the '--perl' option only (so far) adds indentation and brace checks, so can be
+used for other languages with similar syntax.
 * Does not know to ignore comments in programming langauges (but see ''--comment'').
 * Does not know about quoted quotes, or full backslashing (though ''--escaped''
 handles simple cases) or doubling.
@@ -57,9 +70,8 @@ handles simple cases) or doubling.
 =To do=
 
 * Colorize the quotes or quoted portions?
-* Really count ins and outs and types (perhaps not worth it).
-* Parenthesis balancing should have a way to not consider {}.
-* Track {} brace vs. indentation, at least when braces are at start/end of line.
+* Really count indentation vs. open/close.
+* Parenthesis balancing should have a way to not consider program-structure {}.
 
 
 =History=
@@ -69,12 +81,13 @@ handles simple cases) or doubling.
 2021-07-13: Add --contractions and --escaped options, `origiRec` for accurate reporting.
 2021-08-06: Add experimental --perl to find one-line 'if's that don't close.
 2021-09-10: Handle tab expansion. Add --comment, --tabStops.
+2020-10-01: Make --perl check indentation changes against end of preceding line.
 
 
 =Rights=
 
-This program is Copyright 2017 by Steven J. DeRose.
-It is hereby licensed under the Creative Commons
+Copyright 2017 by Steven J. DeRose.
+This program is hereby licensed under the Creative Commons
 Attribution-Share-Alike 3.0 unported license.
 For more information on this license, see [here|"https://creativecommons.org"].
 
@@ -170,7 +183,7 @@ def doOneFile(path):
         lg.error("Can't open '%s'." % (path), stat="CantOpen")
         return(0)
     recnum = 0
-    rec = ""
+    lastRealRec = rec = ""
     indentStack = [ 0 ]
     while (True):
         try:
@@ -188,13 +201,23 @@ def doOneFile(path):
         if (args.comment and rec.lstrip().startswith(args.comment)):    # Comment
             continue
         newIndent = getIndentColumn(rec)                                # Indentation
-        if (newIndent < indentStack[-1]):
-            if (newIndent not in indentStack):
-                if (args.indents): report(
-                    recnum, "Indent decreasing from %d to %d, not on stack %s." %
-                    (indentStack[-1], newIndent, indentStack), rec)
-            while (indentStack[-1] > newIndent):
-                indentStack.pop()
+        if (newIndent != indentStack[-1]):
+            if (newIndent < indentStack[-1]):
+                if (newIndent not in indentStack):
+                    if (args.indents): report(
+                        recnum, "Indent decreasing from %d to %d, not on stack %s." %
+                        (indentStack[-1], newIndent, indentStack), rec)
+                while (indentStack[-1] > newIndent):
+                    indentStack.pop()
+            if (args.perl):  # TODO: enable for C, Java, etc. too
+                if (newIndent < indentStack[-1]):
+                    if (not re.search(r"}\s*(#.*)?$", lastRealRec)):
+                        report(recnum, "Indent decreasing but prev line does not end in '}'.", rec)
+                if (newIndent > indentStack[-1]):
+                    # TODO: Following check gets some false positives....
+                    if (not re.search(r"[{,]\s*(#.*)?$", lastRealRec)):
+                        report(recnum, "Indent increasing but prev line does not end in [{,].", rec)
+            
         if (newIndent > indentStack[-1]):
             indentStack.append(newIndent)
 
@@ -231,7 +254,9 @@ def doOneFile(path):
         elif (args.parentheses):
             msg = checkParens(origRec)
             if (msg): report(recnum, msg, origRec)
-            
+        
+        lastRealRec = rec
+        
     fh.close()
     return(recnum)
 
@@ -303,7 +328,8 @@ def processOptions():
         help="Also look for unbalanced () [] {}.")
     parser.add_argument(
         "--perl", action="store_true",
-        help="Also look for Perl-ish if.*{.*;[^\\s}]*$")
+        help="Also look for Perl-ish if.*{.*;[^\\s}]*$, and for indent changes not after [{},]."
+        " This gets some false positives.")
     parser.add_argument(
         "--quiet", "-q", action="store_true",
         help="Suppress most messages.")
