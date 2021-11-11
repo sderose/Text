@@ -11,7 +11,7 @@ our %metadata = (
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
-    'language'     => "Perl 5.18",
+    'language'     => "Perl 5",
     'created'      => "2006~02",
     'modified'     => "2020-08-24",
     'publisher'    => "http://github.com/sderose",
@@ -63,7 +63,7 @@ C<expand> -- expands TAB characters.
 
 C<cat -s> or my C<numberLines -s> can squeeze multiple blank lines down to one.
 
-My C<splitAt> inserts line breaks where requested.
+My C<splitAt> and C<joinAt> insert and remove line breaks where requested.
 
 
 =head1 History
@@ -75,6 +75,7 @@ My C<splitAt> inserts line breaks where requested.
   2012-10-18 sjd: Clean up. Add -empty.
   2020-08-30: New layout.
   2020-10-01: Add --multiple.
+
 
 =head1 To do
 
@@ -88,6 +89,7 @@ L<https://creativecommons.org/licenses/by-sa/3.0>.
 
 For the most recent version, see L<http://www.derose.net/steve/utilities> or
 L<https://github.com/sderose>.
+
 
 =cut
 
