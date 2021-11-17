@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 #import math
 #import subprocess
-from collections import namedtuple  #, defaultdict
+from collections import namedtuple, defaultdict
 #from enum import Enum
 #from typing import Callable  # IO, Dict, List, Union
 import uuid
@@ -20,7 +20,6 @@ import shlex
 
 from xml.dom import minidom
 from xml.dom.minidom import Node  #, Document, Element
-    
 
 #from strBuf import StrBuf
 from DomExtensions import escapeXml  #, escapeCDATA, escapeComment, escapePI, escapeXmlAttribute
@@ -105,7 +104,7 @@ Each change record includes:
 
 * (not yet) a userid for the agent making the change.
 
-* an optional *nix epoch time-stamp indicating when the change was made 
+* an optional *nix epoch time-stamp indicating when the change was made
 (this is merely a convenience).
 
 * a specification of the "target" range to be replaced (see below).
@@ -140,7 +139,7 @@ For example 'chars:100:200' will typically refer to quite different text in ever
 of a document.
 
 * Source schemes:
-** text: A de novo, quoted Unicode string to be inserted literally. The usual Python 
+** text: A de novo, quoted Unicode string to be inserted literally. The usual Python
 special-character escapes may be used inside.
 ** copy: A target specification (including a target scheme prefix) giving a range of
 characters to be copied. Giving the same target specification under source copy:, as
@@ -162,7 +161,7 @@ because replay only needs to happen from the cached version forward.
 Example file:
 """ + sampleData + """
 
-There is no assumption that the document is in a particular format. It is merely 
+There is no assumption that the document is in a particular format. It is merely
 treated as a big string.
 
 ==Usage==
@@ -172,13 +171,13 @@ treated as a big string.
 
 =Design Notes=
 
-This should work fine for disconnected or otherwise conflicting users, but not for 
+This should work fine for disconnected or otherwise conflicting users, but not for
 a single user who runs non-communicating processes doing simultaneous changes.
 * A userid+changenumber identifies a change.
 * Every change is based on (and explicitly chooses) one immediately-preceding change.
 * Thus, a change is a version.
 * Changes are recorded in an append-only change-log file, with a partial ordering
-defined by change back-links (which is consistent with write -order, because you 
+defined by change back-links (which is consistent with write -order, because you
 can only append a change that is based on a change already present.
 * At the moment, the only action is "replace", from which you can get insert and delete
 by making either one be empty. The data to be replaced is called the "target", and
@@ -187,7 +186,7 @@ that to be inserted, the "source".
 for character offset ranges, regex matches, and should be added for at least one
 XML-aware pointing scheme (simplest being XPointer, imho). Sources can be any of those,
 or a literal string.
-* Move and copy can be detected by noting what a change does. Probably I'll add a 
+* Move and copy can be detected by noting what a change does. Probably I'll add a
 specific "move" action that does the copy and then delete as a unit.
 * The change-log is in XML, but like XSLT, that's not the XML that is the document.
 It should work fine to put any old non-XML text in the document and change-manage is
@@ -201,7 +200,7 @@ File format:
 
 ==Version Identifiers==
 
-A certain document version is identified as a file (URL or path) plus a change id 
+A certain document version is identified as a file (URL or path) plus a change id
 in that file. The change id, in turn, consists of a userid and a serial number assigned
 local to that user.
 
@@ -213,12 +212,12 @@ If two forks have no conflicts (and you should be able to *really* tell, because
 of character haecceity can be (though is not yet) maintained by building two version at
 once, with a warp table). This should mean they can be unambiguously merged.
 
-*** This has a potential issue with target specifications other than offsets: if 
+*** This has a potential issue with target specifications other than offsets: if
 there's a fork (created by 2 different changes basing themselves on the same prior),
-later merges require mapping between: 
+later merges require mapping between:
 
     If this stream *had* included that earlier change, what would the corrected form of the subsequent changes be?
-    
+
 This seems to drop us into all the gory issues of git merges.... Addressing them somewhat
 like git does, only at character rather than line level, could work but wouldn't be any
 better than git for conflict cases (except that we'll be tracking actual moves as first-class
@@ -226,8 +225,8 @@ events, which should help some.
 
 ==Moves==
 
-If we only have ins/del, can't in principle retain their identity after moving -- are 
-those inserted characters "the same ones" or not? If they match, or are close enough, 
+If we only have ins/del, can't in principle retain their identity after moving -- are
+those inserted characters "the same ones" or not? If they match, or are close enough,
 we can guess so (which is basically what git does). But
 if the move is a unitary operation, characters can be tracked through it. However,
 copies and multiple pastes are still an issue.
@@ -249,7 +248,7 @@ as an XPointer extension).
 It should be possible to add a special merge operation that:
     * picks a base
     * applies a set of specific changes, possibly including changes from another stream
-    
+
 We probably want a separate
 "MERGE" operation, that takes two base versions (probably but not necessarily the tips
 of two different users' chains), and applies enough edits to make them match, while
@@ -373,8 +372,8 @@ def unquoteString(s:str) -> str:
     If no known quote-pair is found, return s unchanged.
     """
     if (not s): return ""
-    for l, r, _mnemonic in quotePairs:
-        if (s.startswith(l) and s.endswith(r)):
+    for lQuo, rQuo, _mnemonic in quotePairs:
+        if (s.startswith(lQuo) and s.endswith(rQuo)):
             s = s[1:-1]
             return s
     return s
@@ -382,9 +381,9 @@ def unquoteString(s:str) -> str:
 def quoteString(s:str, qtype:str="dangle") -> str:
     """Put quotes of chosen type around the string for display. No escaping done.
     """
-    for l, r, mnemonic in quotePairs:
+    for lQuo, rQuo, mnemonic in quotePairs:
         if (mnemonic == qtype):
-            return l + s + r
+            return lQuo + s + rQuo
     raise KeyError("No such quote type as '%s'." % (qtype))
 
 def quoteSourceText(s:str) -> str:
@@ -408,8 +407,8 @@ def makeEpochTime(s:str, fail=False) -> float:
     if (fail):
         raise ValueError("Unrecognized time string: '%s'" % (s))
     return NULL_EPOCHTIME
-    
-    
+
+
 ###############################################################################
 # On this approach, every change event is a version. So changes can reliably
 # refer to positions in the text as it existed after the previous change.
@@ -426,10 +425,10 @@ EpochTime = float
 ###############################################################################
 #
 class ChangeId:
-    """Generate a unique id for a new change. 
-    These are generally passed around as strings, so this object doesn't 
+    """Generate a unique id for a new change.
+    These are generally passed around as strings, so this object doesn't
     actually get used much.
-    
+
     Consider:
         os.getpid()
         mac=uuid.getnode()
@@ -441,18 +440,18 @@ class ChangeId:
         self.seq = seq
         if not(subuser): subuser = "0"
         self.subuser = subuser
-    
+
     @classmethod
     def fromstring(cls, s:str):
         user, seq, subuser = s.split(sep="_")
         return cls(user, int(seq), int(subuser))
-    
+
     def tostring(self) -> str:
-        return ("%s_%x%s" % 
+        return ("%s_%x%s" %
             (self.user, self.seq, '_%s' % (self.subuser) if self.subuser else "" ))
 
     def toxml(self) -> str:
-        return ('<cId user="%s" seq="%x"%s/>' % 
+        return ('<cId user="%s" seq="%x"%s/>' %
             (self.user, self.seq, ' subuser="%s"' % (self.subuser) if self.subuser else "" ))
 
 # Every document starts with this as the (unstored) baseId:
@@ -465,17 +464,17 @@ NULL_EPOCHTIME = -307614600
 ###############################################################################
 #
 class ChangeEvent:
-    """A single change, made to a given prior version, and replacing one 
+    """A single change, made to a given prior version, and replacing one
     contiguous (possibly empty) span of it.
     ChangeEvents are partially-ordered overall, but fully-ordered for any one user
     (thus a single user shouldn't be acting on two version at once. Or can they?
     Each one says what it's based on, so do we even need a serial number?)
-    
+
     Who makes the new ChangeID?
     """
     NFIELDS = 6
     FIELDSEP = ","
-    
+
     def __init__(
         self,
         baseId:str,          # uuid, user, etc so long as it's unique.
@@ -506,18 +505,18 @@ class ChangeEvent:
             self.source
         ])
         return buf
-        
+
     @staticmethod
     def toheader() -> str:
         return "%10s -> %10s %10s %10s: %s <- %s" % (
              "baseId", "changeId", "user", "timestamp", "target", "source")
-           
+
     def tostring(self):
         buf = "%10s -> %10s %10s %10d: %s <- %s" % (
             self.baseId, self.changeId, self.user, self.epochTime,
             quoteString(self.target), quoteString(self.source))
         return buf
-        
+
     def toxml(self):
         buf = '<change id="%s" base="%s" time="%d" tgt="%s">%s</change>' % (
             self.baseId,
@@ -527,7 +526,7 @@ class ChangeEvent:
             escapeXml(self.source)
         )
         return buf
-        
+
     def apply(self, doc:str) -> str:
         """Modify a document string by this changeEvent.
         TODO: For now, the only "source" is a literal string.
@@ -539,7 +538,7 @@ class ChangeEvent:
             error("Error applying ChangEvent\n    %s\n%s\n%s" % (self.tostring(), e, doc))
             return None
         return doc[0:frChar] + srcString + doc[toChar:]
-     
+
     def getTargetBounds(self, doc:str, tgt:str) -> (int, int):
         """Interpret a 'target' specification, which says what contiguous span
         is to be replaced by the current change, into a (frChar, toChar) pair.
@@ -552,7 +551,7 @@ class ChangeEvent:
             frChar, toChar = rest.split(sep=":", maxsplit=1)
             frChar = int(frChar)
             toChar = int(toChar)
-            if  frChar < 0 or frChar > toChar or toChar > len(doc):
+            if frChar < 0 or frChar > toChar or toChar > len(doc):
                 raise KeyError("Bad range [%d:%d]." % (frChar, toChar))
         elif (scheme == "match"):                               # first match of regex
             rest = unquoteString(rest)
@@ -581,7 +580,7 @@ class ChangeEvent:
         else:
             raise KeyError("unknown target scheme '%s' in '%s'." % (scheme, tgt))
         return frChar, toChar
-        
+
     def getSource(self, doc:str, src:str) -> str:
         """Get the literal string that will replace a target. It can either be
         just a quoted string, or a reference to another place in the same
@@ -604,15 +603,15 @@ class ChangeEvent:
             return doc[frChar:toChar]
         else:
             raise KeyError("unknown source scheme '%s' in '%s'." % (scheme, src))
-    
-    
+
+
 ###############################################################################
 #
 class ChangeLing(dict):
     """A document, represented by a tree of ChangeEvent objects. They are
     stored in a plain dict, keyed by the ID of each ChangeEvent. Each ChangeEvent
     includes the key of the ChangeEvent it is based on, so that leads to a tree.
-    
+
     At this time, there are no forward-pointers, so you can't actually traverse
     the tree forwards. That's because you normally start with a tip/head/current
     ChangeID, and only care about its priors in order to replay them to create
@@ -632,7 +631,7 @@ class ChangeLing(dict):
         self.meta = {}
         self.nChanges = 0
         self.successors:dict = None
-        
+
     def loadFromPlain(self, cfile):
         """Parse change records from a CSV-ish change-log file, as
         illustrated in 'sampleData'.
@@ -649,11 +648,11 @@ class ChangeLing(dict):
                     self.storeMeta(rec)
         cfh.close()
         self.tips = self.findAllTipVersions()
-    
+
     def addFromPlainRec(self, rec:str):
         fields = rec.split(sep=ChangeEvent.FIELDSEP, maxsplit=5)
         if len(fields) != ChangeEvent.NFIELDS:
-            raise ValueError("Got %d fields, not %d: %s" % 
+            raise ValueError("Got %d fields, not %d: %s" %
                 (len(fields), ChangeEvent.NFIELDS, repr(fields)))
         # TODO unescapeString() all these?
         baseId = fields[0].strip()
@@ -666,13 +665,13 @@ class ChangeLing(dict):
             epochTime=epochTime, target=target, source=source, loaded=True)
         self.addChangeEvent(ce)
         if (args.verbose): warning0("Change: %s" % (ce.tostring()))
-    
+
     def loadFromXml(self, path):
         """Parse change records from an XML change-log file, as
         illustrated in 'sampleXml'.
         """
         if (path.startswith("<?")):
-            theDom = minidom.parse_string(path)
+            theDom = minidom.parseString(path)
         else:
             with codecs.open(path, "rb", encoding="utf-8") as ifh:
                 theDom = minidom.parse(ifh)
@@ -702,15 +701,15 @@ class ChangeLing(dict):
                 self.addChangeEvent(ce)
                 if (args.verbose): warning0("%4d: %s" % (i, ce.tostring()))
         self.tips = self.findAllTipVersions()
-        
+
     def addChangeEvent(self, ce:ChangeEvent) -> None:
         if not (ce.baseId in self or ce.baseId == NULL_CHANGE_ID):
-            fatal("Unknown baseId '%s' in: %s" % 
+            fatal("Unknown baseId '%s' in: %s" %
                 (ce.baseId, ce.tostring()))
         self[ce.changeId] = ce
         if ce.baseId in self.tips: del self.tips[ce.baseId]
         self.tips[ce.changeId] = True
-    
+
     def storeMeta(self, rec:str) -> None:
         """Parse and record a #META entry in a dict keyed by field name. All META
         fields are repeatable, so the values are lists of strings.
@@ -721,7 +720,7 @@ class ChangeLing(dict):
         val = mat.group(2).strip()
         if field not in self.meta: self.meta[field] = [ val ]
         else: self.meta[field].appen(val)
-        
+
     def save(self, path:str) -> None:
         """Append all the changes we have, that are not flagged as having been loaded
         from the existing chagelog, to the changelog.
@@ -731,30 +730,30 @@ class ChangeLing(dict):
             buf = ch.tostring()
             ofh.write(buf+"\n")
         ofh.close()
-        
-    def findAllTipVersions(self) -> dict: 
+
+    def findAllTipVersions(self) -> dict:
         """Collect all versions that have no successor(s).
         Returns a dict keyed by changeID, with value baseId, containing all and only
         the changes that have no other changes based on them.
         """
         changeTips = {}
-        for cid, ce in self.items(): 
+        for cid, ce in self.items():
             try:
                 warning1("checking %s based on %s (%s)" % (ce.changeId, ce.baseId, type(ce.baseId)))
                 changeTips[cid] = ce.baseId
             except AttributeError as e:
                 error("Error on change %s:\n    %s" % (ce.tostring(), e))
-                
+
         baseIds = list(changeTips.values())
         for baseId in baseIds:
             if (baseId in changeTips): del changeTips[baseId]
         return changeTips
 
-    def mapSuccessors(self) -> dict: 
+    def mapSuccessors(self) -> dict:
         """For each version/change, make a list of its successor versions.
         """
         self.successors = defaultdict(list)
-        for cid, ce in self.items(): 
+        for cid, ce in self.items():
             self.successors[ce.baseId].append(cid)
 
     def getNewChanges(self):
@@ -765,7 +764,7 @@ class ChangeLing(dict):
         for k, ce in self.items():
             if not ce.loaded: nc.append(k)
         return sorted(nc)
-        
+
     def getDocAsOfChangeId(self, cid:ChangeId) -> str:
         """Get the entire text of the document, as of a specific changeId.
         """
@@ -773,7 +772,7 @@ class ChangeLing(dict):
         warning1("Path to %s: %s." % (cid, repr(cpath)))
         doc = self.path2Document(cpath)
         return doc
-        
+
     def getPathToChangeId(self, cid:ChangeId) -> list:
         """Trace backward from a given change, collecting all its ancestors.
         Until we introduce first-class merges, this is non-branching.
@@ -789,7 +788,7 @@ class ChangeLing(dict):
                 fatal("ChangeId %s not found, referenced from %s" %
                     (cur.baseChnge, cur))
         return thePath
-        
+
     def path2Document(self, thePath:list) -> str:
         """Given a sequence of changes (such as extract by getPathTo), replay them
         to make a document.
@@ -797,11 +796,11 @@ class ChangeLing(dict):
         doc = ""
         for chg in thePath:
             doc = chg.apply(doc)
-            if (doc is None): 
+            if (doc is None):
                 error("Cannot reconstruct doc.")
         return doc
-        
-        
+
+
 ###############################################################################
 #
 def doOneFile(path:str) -> int:
@@ -820,7 +819,7 @@ def doPlainTest() -> None:
         if (rec.startswith("#")): continue
         changeling.addFromPlainRec(rec)
     dump(changeling)
-   
+
 def doXmlTest() -> None:
     """Run the internal smoke-test data.
     """
@@ -828,35 +827,35 @@ def doXmlTest() -> None:
     changeling = ChangeLing()
     changeling.loadFromXml(sampleXml)
     dump(changeling)
-   
+
 def dump(theCL):
     print(ChangeEvent.toheader())
     cidOrder = sorted(theCL.keys())
     for cid in cidOrder:
         ce = theCL[cid]
         print(ce.tostring())
-        
+
     print("\nTips (changes with no changes based on them):")
     theTips = theCL.findAllTipVersions()
     for tip in theTips:
         ce = theCL[tip]
         print("    Tip at change %10s" % (ce.changeId))
-   
+
     for cid in cidOrder:
         doc = theCL.getDocAsOfChangeId(cid)
         print("******* Doc as of change id '%s':\n%s\n" % (cid, doc))
-        
+
 def xml2ChangeLing(ipath:str, opath:str, user:str):
     """Build an XML document by adding (essentially) SAX events in order.
     This gets a lot harder is you don't do it in order, if you still want to
     specify targets by offset. For which, see xml2Changeline.py.
-    
+
     Hmm. What if you specified offsets as element number + offset? But you'd still
     need to update-to-root on total sizes every time something changed.
     Or, the changeEvent could record an explicit entry for the warp table:
         "From offset x onward, add/sub N"
         but how do we know which old pointers are/are not still meaningful?
-        
+
     Aardvark basilisk cat dog emu fox gnu
     Now I refer to cat.*fox
     Now someone replaces (or inserts before) emu with horse.
@@ -866,7 +865,7 @@ def xml2ChangeLing(ipath:str, opath:str, user:str):
     cl = ChangeLing()
     trav(theDom.dom.documentElement, cl, lastCid=NULL_CHANGE_ID, user=user)
     cl.save(opath)
-    
+
 def trav(node:Node, changeling:ChangeLing, lastCid:str, user:str):
     if (node.nodeType == Node.ELEMENT_NODE):
         stag = quoteSourceText(node.getStartTag())
@@ -882,14 +881,14 @@ def trav(node:Node, changeling:ChangeLing, lastCid:str, user:str):
     else:
         pass
     return newChangeId
-    
-    
+
+
 ###############################################################################
 # Main
 #
 if __name__ == "__main__":
     import argparse
-    
+
     def timer():
         print("Done")
 
@@ -936,25 +935,25 @@ if __name__ == "__main__":
     ###########################################################################
     #
     args = processOptions()
-    
+
     if (args.test):
         doPlainTest()
         sys.exit()
     elif (args.xmlTest):
         doXmlTest()
         sys.exit()
-    
+
     if (args.xmlConvert):
         for path0 in args.files:
             if (not path0.endswith(".xml")):
                 error("must have extension .xml: '%s'." % (path0))
                 continue
-            opath0 = re.sub("\.xml$", ".chl", path0)
+            opath0 = re.sub(r"\.xml$", ".chl", path0)
             if (os.path.exists(opath0)):
                 error("Output file already exists: '%s'." % (opath0))
                 continue
             xml2ChangeLing(path0, opath0, user=args.user)
-            
+
     if (len(args.files) == 0):
         fatal("No files specified....")
 

@@ -96,7 +96,7 @@ def doOneFile(path:str) -> int:
         except UnicodeDecodeError as e:
             warning0("Cannot decode line %d: %s\n    %s" % (recnum, rec, e))
             if (args.keep): print(rec, end="")
-    if  (fh != sys.stdin): fh.close()
+    if (fh != sys.stdin): fh.close()
     return recnum
 
 

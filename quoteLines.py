@@ -141,7 +141,7 @@ def doOneFile(path):
         rec = quoteIt(rec, chr(op), chr(cl))
         rec += args.separator
         print(rec)
-    if  (fh != sys.stdin): fh.close()
+    if (fh != sys.stdin): fh.close()
     return recnum
 
 def quoteIt(s, qp1, qp2):

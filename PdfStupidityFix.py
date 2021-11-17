@@ -4,13 +4,11 @@
 # 2020-09-25: Written by Steven J. DeRose.
 #
 from __future__ import print_function
-import sys, os
+import sys
+import os
 import codecs
 import re
 from time import time
-
-PY2 = sys.version_info[0] == 2
-PY3 = sys.version_info[0] == 3
 
 __metadata__ = {
     "title"        : "PdfStupidityFix.py",
@@ -495,13 +493,13 @@ class Lexicon(dict):
             return True
         lw = w.lower()
         if (lw in self): return True
-        if (lw.endswith("s")   and lw[0:-1] in self):
+        if (lw.endswith("s") and lw[0:-1] in self):
             return True
-        if (lw.endswith("es")  and lw[0:-2] in self):
+        if (lw.endswith("es") and lw[0:-2] in self):
             return True
         if (lw.endswith("ies") and (lw[0:-3] + "y") in self):
             return True
-        if (lw.endswith("ed")  and lw[0:-2] in self):
+        if (lw.endswith("ed") and lw[0:-2] in self):
             return True
         if (lw.endswith("ing") and
             (lw[0:-3] in self or lw[0:-3]+"e" in self)):

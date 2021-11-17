@@ -268,7 +268,7 @@ def doOneFile(path, fh:IO) -> int:
             print(rec, end="\n")
         if (xfh): xfh.write(rec)
 
-    if (everSawPOD==False and args.justPOD==True):
+    if (args.justPOD and not everSawPOD):
         print("Never saw '=pod'. Did you mistakenly set --justPOD?")
     return(recnum)
 
@@ -323,12 +323,12 @@ def fixInline(mat:re.Match) -> str:
 
 def decodeSpecialChar(text:str) -> str:
     text = text.strip()
-    if (text == "lt"):     return "<"
-    if (text == "gt"):     return ">"
+    if (text == "lt"): return "<"
+    if (text == "gt"): return ">"
     if (text == "verbar"): return "|"
-    if (text == "sol"):    return "/"
-    if (text.startswith("0x")):  return chr(int(text[2:], 16))
-    if (text.startswith("0")):   return chr(int(text[1:], 8))
+    if (text == "sol"): return "/"
+    if (text.startswith("0x")): return chr(int(text[2:], 16))
+    if (text.startswith("0")): return chr(int(text[1:], 8))
     if (re.match(r"\d+$",text)): return chr(int(text[1:], 10))
     try:
         c = unichr(entities.name2codepoint[text])

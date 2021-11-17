@@ -6,7 +6,7 @@
 from __future__ import print_function
 import sys
 import re
-import codecs
+#import codecs
 from collections import namedtuple
 #from typing import IO, Dict, List, Union
 
@@ -192,10 +192,9 @@ def doOneFile(path:str) -> int:
         cWords = tokenize(rec)
         words += len(cWords)
         if (rec.rstrip()[-1] in dashes): finalHypens += 1
-    if  (fh != sys.stdin): fh.close()
+    if (fh != sys.stdin): fh.close()
     stats = Stats(byts, chars, words, finalHypens, sents, lines, blocks, maxRec)
     return stats
-
 
 def tokenize(s:str):
     """TODO: match to POSIX defn for wc.
@@ -212,6 +211,7 @@ def tokenize(s:str):
         return re.split(r"[-'.\w]+", s, flags=re.UNICODE)
     else:
         raise KeyError
+    
     
 ###############################################################################
 # Main
@@ -275,7 +275,7 @@ if __name__ == "__main__":
     ###########################################################################
     #
     args = processOptions()
-    totStats = Stats(0,0,0,0,0,0,0,0)
+    totStats = Stats(0, 0, 0, 0, 0, 0, 0, 0)
     
     if (len(args.files) == 0):
         warning0("wcPP.py: No files specified....")

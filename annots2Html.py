@@ -4,7 +4,8 @@
 # 2018-07-16: Written by Steven J. DeRose.
 #
 from __future__ import print_function
-import sys, os
+import sys
+import os
 import argparse
 import re
 import codecs
@@ -66,7 +67,9 @@ The "XX" value from B-XX goes on the class attribute. You can edit the output
 to add styles for different categories of annotations, or use the
 I<--cssURL> option to generate a link to a stylesheet that does so.
 
+
 =Related Commands=
+
 
 =To do=
 

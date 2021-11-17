@@ -4,10 +4,12 @@
 # 2017-11-08: Written by Steven J. DeRose.
 #
 from __future__ import print_function
-import sys, os, argparse
+import sys
+import os
+import argparse
 import re
-from subprocess import check_output
 import codecs
+from subprocess import check_output
 from collections import namedtuple
 
 from alogging import ALogger
@@ -38,12 +40,14 @@ This knows about several common languages, but is based on regular expressions,
 and is not smart enough
 to allow for cases like comment-delimiters inside of quotes, etc.
 
+
 =Related Commands=
 
 For C, C++, and their kin, you might try:
     gcc -fpreprocessed -dD -E myFile.c
 
-See L<https://stackoverflow.com/questions/2394017>.
+See [https://stackoverflow.com/questions/2394017].
+
 
 =Known bugs and Limitations=
 
@@ -55,26 +59,20 @@ It should try 'file' or similar to sniff. But it doesn't.
 This doesn't use a real parser, so is totally confused by comment
 delimiters that occur in special places. For example:
 
-=over
-
 * Comment start obviated by one-liner:  // hello /*
-
 * Quoted comment delimiters:  $ = "//eh?"
-
 * The C preprocessor:   #ifdef 0... /*... #endif
-
 * XML, HTML, etc. support doesn't handle '--' inside comments,
 comments inside processing instructions, CDATA marked sections, etc.
-
 * Python conventional comment at start of functions
 
-=back
 
 =Licensing=
 
 Copyright 2015 by Steven J. DeRose. This script is licensed under a
 Creative Commons Attribution-Share-alike 3.0 unported license.
-See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
+See [http://creativecommons.org/licenses/by-sa/3.0/] for more information.
+
 
 =Options=
 """
@@ -93,41 +91,41 @@ def processOptions():
         parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
-        "--color",  # Don't default. See below.
+        "--color", # Don't default. See below.
         help='Colorize the output.')
     parser.add_argument(
-        "--compact", "-c",    action='store_true',
+        "--compact", "-c", action='store_true',
         help='Suppress blank lines.')
     parser.add_argument(
-        "--extension",        type=str, default='py',
+        "--extension", type=str, default='py',
         help='Choose the default extension to assume for files without one.')
     parser.add_argument(
-        "--iencoding",        type=str, metavar='E', default="utf-8",
+        "--iencoding", type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
-        "--oencoding",        type=str, metavar='E',
+        "--oencoding", type=str, metavar='E',
         help='Use this character set for output files.')
     parser.add_argument(
-        "--quiet", "-q",      action='store_true',
+        "--quiet", "-q", action='store_true',
         help='Suppress most messages.')
     parser.add_argument(
-        "--unicode",          action='store_const',  dest='iencoding',
+        "--unicode", action='store_const', dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
     parser.add_argument(
-        "--verbose", "-v",    action='count',       default=0,
+        "--verbose", "-v", action='count', default=0,
         help='Add more messages (repeatable).')
     parser.add_argument(
         "--version", action='version', version=__version__,
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files',             type=str,
+        'files', type=str,
         nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
     lg.setVerbose(args0.verbose)
-    if (args0.color == None):
+    if (args0.color is None):
         args0.color = ("USE_COLOR" in os.environ and sys.stderr.isatty())
     lg.setColors(args0.color)
     return(args0)
@@ -139,8 +137,7 @@ def processOptions():
 #
 def getDelimiters(ext):
     ext = ext.strip('.')
-    if   (ext in [ 'c', 'php', 'php3', 'php4', 'js',
-                   'css', 'sass', 'scss', 'less', 'pcss', ]):
+    if (ext in [ 'c', 'php', 'php3', 'php4', 'js', 'css', 'sass', 'scss', 'less', 'pcss', ]):
         ds = DelimSet('//', '/\\*', '\\*/')
     elif (ext in [ 'py', 'pl', 'sh' ]):
         ds = DelimSet('#',  None, None)
@@ -186,12 +183,12 @@ def doOneFile(path):
     """
     try:
         fh = codecs.open(path, mode='r', encoding=args.iencoding)
-    except IOError as e:
+    except IOError:
         lg.error("Can't open '%s'." % (path), stat="CantOpen")
         return(0)
     lg.bumpStat("totalFiles")
 
-    root, ext = os.path.splitext(path)
+    _root, ext = os.path.splitext(path)
     if (not ext):
         fileSniff = check_output([ 'file', path ])
         lg.error("No extension. 'file' says: %s" % (fileSniff))

@@ -32,7 +32,7 @@ descr = """
 Scan for lines with imbalanced quotes, and optionally for suspicious indentation.
 This is mainly useful for tracking down where an imbalance originated, for programming
 language implementations that are not kind enough to direct you to the location of
-things like the last unmatched "{", a line with only one '"', etc. 
+things like the last unmatched "{", a line with only one '"', etc.
 
 This script knows little about particular programming or other languages,
 so does not (yet) deal with cases such as quotes backslashed within quotes,
@@ -179,7 +179,7 @@ def doOneFile(path):
 
     try:
         fh = codecs.open(path, mode="r", encoding=args.iencoding)
-    except IOError as e:
+    except IOError:
         lg.error("Can't open '%s'." % (path), stat="CantOpen")
         return(0)
     recnum = 0
