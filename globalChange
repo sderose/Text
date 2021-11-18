@@ -24,7 +24,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2010-08-25",
-    'modified'     => "2021-08-17",
+    'modified'     => "2021-11-18",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -445,6 +445,12 @@ If you use this with I<--interactive>, the results are,
 unfortunately, undefined for the moment.
 See also I<--firstPerFile>, I<--perFile>, I<--maxChanges>, I<--maxLinesChanged>.
 
+=item * B<--lineNumbers>
+
+If set, when I<--versbose> or <--dry-run> display the "before" and "after" forms of
+a changed line, the "before" form is preceded by its line number (and the "after"
+form is indented to stay lined up).
+
 =item * B<--linux>
 
 Inform the script that you're on Linux. At the moment, all this does is
@@ -513,8 +519,7 @@ and ask again
 =item * B<+> -- add a new replacement to the list for this change expression
 and ask again
 
-=item * B<h> -- display help
-and ask again.
+=item * B<h> -- display help and ask again
 
 =item * B<s> or B<n> -- do not change this match
 
@@ -1112,15 +1117,17 @@ Take out --attributes that was added 2015-02-25, since it's only available on Li
 not BSD.
   2021-08-17: Fix recently-introduced bugs in backup handling, where changes never got
 copied back to update the original. Set permissions on updated file explicitly.
+  2021-11-18: Clean up parsing of user's change expressions, fixing bug handling
+empty portions. Add --lineNumbers for makeDiffLine().
 
 
 =head1 To do
 
-    Move to Python, on top of PowerWalk and fsplit.
+  Move to Python, on top of PowerWalk and fsplit.
 
-    Option to do literal, not regex, substitution.
+  Option to do literal, not regex, substitution.
 
-    Escaping in cases like:
+  Escaping in cases like:
     "s/::\\$options\\['\(\w+\)'\\]/::x('\1')/" *
     Treat arg as -e if it has slashes.
     Test and sync back-references with eval() code in renameFiles cmd.
@@ -1128,22 +1135,22 @@ copied back to update the original. Set permissions on updated file explicitly.
     Test features: --multidest, --dropEmptiedLines, --interactive changes.
     Test piping in and out.
     Test named capture groups.
-    Add way to insert a counter, or a file, into the replacement text
+    Add way to insert a counter, or a file, into the replacement text.
     Add "exchange with next line"?
     Add multidest command to show line changed each way.
     multidest with /g needs to iterate or something....
     Maybe suppress final line-check with multiDest?
-    Report   files each change affected (not just total changes).
+    Report which files each change affected (not just total changes).
     Finish --pre, --post, --span (span x fields)?
     Add option to keep but comment out original form of lines.
 
   Extensions:
-    Document how to do special chars in input exprs (-d, -e, --fileOfExprs)
+    Document how to do special chars in input exprs (-d, -e, --fileOfExprs).
     Document how to refer to filename/path, and ser number, in exprs?
     Make --fieldChoice accept field *names*.
-    Separate RHS for successive instances of match (per line, overall)
-    --multidest but applying to successive matches (in line or overall)
-    RHS access to match-number in line and total and of this change
+    Separate RHS for successive instances of match (per line, overall).
+    --multidest but applying to successive matches (in line or overall).
+    RHS access to match-number in line and total and of this change.
     Option to restrict changes to XML gi/aname/avalue/markup/content?
     Handle compressed files transparently.
     Option to catch variants of character in regex (&#65;, \x...)?
@@ -1159,7 +1166,7 @@ copied back to update the original. Set permissions on updated file explicitly.
     \Q for balanced quoted string?
     \p{Po} etc.
 
-  Perhaps add some vars to test or substitute, such as in `awk`:
+  Perhaps add some vars to test or substitute, similar to `awk`:
     CONVFMT  conversion format used when converting numbers (default %.6g).
     ENVIRON  array of environment variables; subscripts are names.
     FILENAME the name of the current input file.
@@ -1186,12 +1193,14 @@ L<https://creativecommons.org/licenses/by-sa/3.0>.
 For the most recent version, see L<http://www.derose.net/steve/utilities> or
 L<https://github.com/sderose>.
 
+
 =cut
 
 
 ###############################################################################
 # Options
 #
+my $askColor         = 'green';
 my $backup           = 1;
 my $backupDirectory  = '';
 my $backupExtension  = "bak";
@@ -1200,23 +1209,24 @@ my $color            = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
 my $compileRegex     = 1;
 my $delim            = "/";
 my $dropEmptiedLines = 0;
-my @exprs            = ();
+my $errorColor       = 'red';
 my $fileOfExprs      = '';
 my $fileStart        = 1;
 my $firstPerFile     = 0;
 my $force            = 0;
 my $hiliteResults    = 0;
+my $iString          = "  ";
 my $iencoding        = '';
 my $ilineends        = '';
 my $include          = '';
 my $instanceBegin    = 0;
 my $instanceEnd      = 0;
-
 my $interactive      = 0;
-my $iString          = "  ";
 my $lastPerFile      = 0;
+my $lineNumbers      = 0;
 my $linux            = 0;
 my $list             = 0;
+my $matchColor       = 'yellow';
 my $maxChanges       = 0;
 my $maxLinesChanged  = 0;
 my $oencoding        = '';
@@ -1225,23 +1235,20 @@ my $perFile          = 0;
 my $prepend          = "";
 my $quiet            = 0;
 my $recursive        = 0;
-my $showChanges      = 0;
+my $resultColor      = 'red';
 my $showAllMatches   = 0;
+my $showChanges      = 0;
 my $showMatchCounts  = 0;
 my $showResults      = 0;
 my $sideBySide       = 0;
+my $sourceColor      = 'bold';
 my $super            = 1; # Try to make changeInfo::apply faster.
 my $test             = 0;
 my $tickInterval     = 10000;
-my $verbose          = 0;
 my $vSep             = '|';
+my $verbose          = 0;
 my $zero             = 0;
-
-my $sourceColor      = 'bold';
-my $matchColor       = 'yellow';
-my $askColor         = 'green';
-my $errorColor       = 'red';
-my $resultColor      = 'red';
+my @exprs            = ();
 
 sub ask {
     print(sjdUtils::colorize($askColor, $_[0]) . "\n");
@@ -1268,37 +1275,33 @@ my %exprOptions = ( # Options copied into each changeExpr
 my $tmpFile = "/tmp/globalChange_" . int(rand(100000)) . ".out";
 
 (my $tfmt = new TabularFormats()) ||
-    dieCleanly("Could not construct TabularFormats instance.");
+    warn ("Could not construct TabularFormats instance.");
 
 
 ###############################################################################
 #
 my %getoptHash = (
+    "askColor=s"            => \$askColor,
     "backup!"               => \$backup,
     "backupDirectory=s"     => \$backupDirectory,
     "backupExtension=s"     => \$backupExtension,
     "binary!"               => \$binary,
     "color!"                => \$color,
-    "sourceColor=s"         => \$sourceColor,
-    "matchColor=s"          => \$matchColor,
-    "askColor=s"            => \$askColor,
-    "errorColor=s"          => \$errorColor,
-    "resultColor=s"         => \$resultColor,
-
     "compileRegex!"         => \$compileRegex,
     "dropEmptiedLines!"     => \$dropEmptiedLines,
+    "errorColor=s"          => \$errorColor,
     "fileStart!"            => \$fileStart,
     "firstPerFile=i"        => \$firstPerFile,
-    "lastPerFile=i"         => \$lastPerFile,
-
     "force!"                => \$force,
-    "h|help"                => sub { system "perldoc $0"; exit; },
     "hiliteResults!"        => \$hiliteResults,
+    "h|help"                => sub { system "perldoc $0"; exit; },
+    "iString=s"             => \$iString,
     "iencoding=s"           => \$iencoding,
     "ilineends=s"           => \$ilineends,
     "include=s"             => \$include,
     "interactive!"          => \$interactive,
-    "iString=s"             => \$iString,
+    "lastPerFile=i"         => \$lastPerFile,
+    "lineNumbers!"          => \$lineNumbers,
     "linux!"                => \$linux,
     "list!"                 => \$list,
     "listEncodings"         => sub {
@@ -1315,6 +1318,7 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
+    "matchColor=s"          => \$matchColor,
     "maxChanges=i"          => \$maxChanges,
     "maxLinesChanged=i"     => \$maxLinesChanged,
     "oencoding=s"           => \$oencoding,
@@ -1322,15 +1326,15 @@ my %getoptHash = (
     "perFile!"              => \$perFile,
     "prepend=s"             => \$prepend,
     "q|quiet!"              => \$quiet,
+    "reset"                 => sub { Term::ReadKey::ReadMode 1; },
+    "resultColor=s"         => \$resultColor,
     "r|recursive!"          => \$recursive,
-    "reset"                 => sub {
-        Term::ReadKey::ReadMode 1;
-    },
-    "showChanges!"          => \$showChanges,
     "showAllMatches!"       => \$showAllMatches,
+    "showChanges!"          => \$showChanges,
     "showMatchCounts!"      => \$showMatchCounts,
     "showResults!"          => \$showResults,
     "sideBySide=i"          => \$sideBySide,
+    "sourceColor=s"         => \$sourceColor,
     "test|dry-run|dryrun!"  => \$test,
     "tickInterval=i"        => \$tickInterval,
     "unicode!"              => sub { $iencoding = $oencoding = "utf8"; },
@@ -1397,7 +1401,7 @@ my %getoptHash = (
         close F;
         vMsg(1,"Added $fcount changes from file $fileOfExprs.");
     }, # fileOfExprs
-    );
+);
 
 $tfmt->addOptionsToGetoptLongArg(\%getoptHash);
 Getopt::Long::Configure ("ignore_case");
@@ -1562,7 +1566,7 @@ exit;
 sub saveChangeSpecFromExpr {
     my ($expr) = @_;
     ($expr =~ m/^s(\W)/) || main::dieCleanly(
-        "Expression must start with 's' and a delimiter:\n    $expr\n");
+        "Expression must start with 's' and a non-word-char delimiter:\n    $expr\n");
     if ($delim ne "/") {
         alogging::vMsg(0,
             "(internal-use) delim '$delim' for eval() is experimental.");
@@ -1570,17 +1574,11 @@ sub saveChangeSpecFromExpr {
 
     # Parse and slightly validate.
     my $exprCopy = $expr;
-    my @parts = split(/(?<![\\])$delim/, $expr);
-    if ($verbose gt 1) {
-        my $msg = "Change parsed to:\n";
-        for (my $i=0; $i<scalar(@parts); $i++) {
-            $msg .= sprintf("    %d: '%s'\n", $i, $parts[$i]);
-        }
-        vMsg(1, $msg);
+    my @parts = ();
+    if (0) {
+        @parts = split(/(?<![\\])$delim/, $expr);
     }
-
-    if (0) {  # Obsolete
-        my @parts = ();
+    elsif (0) {  # Obsolete
         while ($exprCopy =~ s/^(.*?[^\\])?$delim//) {
             push @parts, $1;
         }
@@ -1588,9 +1586,26 @@ sub saveChangeSpecFromExpr {
             push @parts, $exprCopy;
         }
     }
+    else {
+        my $metaExpr = "^(s)/([^/]*)/([^/]*)/([msixpgc]*)\$";
+        if ($delim ne "/") {
+            $metaExpr =~ s|/|\\$delim|g;
+        }
+        ($verbose) && warn("Parsing expr is: $metaExpr\n");
+        $exprCopy =~ /$metaExpr/;
+        @parts = ( $1, $2, $3, $4 );
+    }
+    
+    if ($verbose ge 1) {
+        my $msg = "Change parsed to:\n";
+        for (my $i=0; $i<scalar(@parts); $i++) {
+            $msg .= sprintf("    %d: '%s'\n", $i, $parts[$i]);
+        }
+        vMsg(1, $msg);
+    }
 
+    my ($theS, $from, $to, $mods) = @parts;
     my $problem = (scalar(@parts)<3 || scalar(@parts)>4) ? 1:0;
-    my ($theS, $from, $to, $mods, $bogus) = @parts;
     if ($to =~ m/[\x01-\x08]/) {
         warn "***** Char from 0 to 8 in /to/ -- did you do \\1 instead of \\\\n?\n";
         $problem = 1;
@@ -1603,8 +1618,7 @@ sub saveChangeSpecFromExpr {
             "    1. s:     '" . ($theS  || '') . "'\n" .
             "    2. from:  '" . ($from  || '') . "'\n" .
             "    3. to:    '" . ($to    || '') . "'\n" .
-            "    4. mods:  '" . ($mods  || '') . "'\n" .
-            "    5. extra: '" . ($bogus || '') . "'\n"
+            "    4. mods:  '" . ($mods  || '') . "'\n"
             );
         ($problem) && dieCleanly(
             "  Could not parse regex change, found " . (scalar(@parts)) . " parts (need 3 or 4).\n");
@@ -1922,15 +1936,18 @@ sub doOneFile {
         }
 
         # Report
-        ($verbose>=2 || $showChanges || ($test && $verbose)) &&
-            vMsg(0, "  Line $recnum: " . $lineStats->{'nChangesInLine'} .
-            " total match(es). By expr: [" .
-            join(",",  @{$lineStats->{'whichApplied'}}, "]"));
-
+        if ($verbose >= 2 || $showChanges || ($test && $verbose)) {
+            my $msg = "  Line $recnum: " . $lineStats->{'nChangesInLine'} . " total match(es).";
+            if (scalar(@exprs) > 1) {
+                $msg .= " By expr: [" . join(",",  @{$lineStats->{'whichApplied'}}, "]");
+            } 
+            vMsg(0, $msg);
+        }
+        
         if (sjdUtils::getVerbose() >= 2) {
             my $diffLine = (scalar(@originalFields) == 1)
-                ? makeDiffLine($originalFields[0], $newFields[0])
-                : makeDiffLine($vSep . join($vSep, @originalFields) . $vSep,
+                ? makeDiffLine($recnum, $originalFields[0], $newFields[0])
+                : makeDiffLine($recnum, $vSep . join($vSep, @originalFields) . $vSep,
                                $vSep . join($vSep, @newFields) . $vSep);
             vMsg(2, "    " . $lineStats->{'nChangesInLine'} .
                 " changes in line $recnum:\n", $diffLine);
@@ -1992,9 +2009,10 @@ sub userApproves {
     my $newRec = ($needToParse) ?
         $tfmt->assembleRecord($newFields) : $newFields->[1];
 
-    my $reallyDoit = 0;
     main::ask(sprintf("  Record %d of '%s'?\n", $recnum, $file));
-    printf("  <%s\n  >%s\n", $originalRec, $newRec);
+    print(makeDiffLine($recnum, $originalRec, $newRec) . "\n");
+    
+    my $reallyDoit = 0;
     main::ask("Change? [ynq!+.h=]\n");
     while (1) {
         my $cmd = <>;
@@ -2047,6 +2065,16 @@ sub userApproves {
     return($reallyDoit);
 }
 
+sub showBeforeAfter {
+    my ($recnum, $originalRec, $newRec) = @_;
+    if ($lineNumbers) {
+        printf("  %5d: <%s\n        >%s\n", $recnum, $originalRec, $newRec);
+    }
+    else {
+        printf("  <%s\n  >%s\n", $originalRec, $newRec);
+    }
+}
+
 # Show what user can do at line-final confirmation prompt.
 #     e   Edit this occurrence if minibuffer (not supported)
 #     ^   Back to previous change (not supported)
@@ -2091,7 +2119,7 @@ sub issueLine {
         && !$showResults) {
         my $x = '[' . join(", ",  @{$lineStats->{'whichApplied'}}) . " ]";
         #alogging::vMsg(0, "  Line $recnum: changed by expressions $x:");
-        alogging::vMsg(0, makeDiffLine($originalRec, $outrec));
+        alogging::vMsg(0, makeDiffLine($recnum, $originalRec, $outrec));
     }
     if ($dropEmptiedLines && $outrec =~ m/^\s*$/) { next; }
     outputALine($ofh, $outrec, 1);
@@ -2130,7 +2158,8 @@ sub issueLine {
 # That is, everything from the first differing column to the last.
 #
 sub makeDiffLine {
-    my ($r1,       # "before" form of line (or just field)
+    my ($recnum,
+        $r1,       # "before" form of line (or just field)
         $r2,       # "after" form of line (or just field)
         $indent,   # >= 0: columns to indent. < 0: width for side-by-side
         ) = @_;
@@ -2177,6 +2206,10 @@ sub makeDiffLine {
         $r1c = substr($r1c . $pad, 0, $sideBySide);
         $r2c = substr($r2c . $pad, 0, $sideBySide);
         $dl = $r1c . " | " . $r2c . "\n";
+    }
+    elsif ($lineNumbers) {
+        $dl = sprintf("%5d: %s<%s\n       %s>%s", 
+            $recnum, ' ' x 0, $r1c, ' ' x $indent, $r2c);
     }
     else {
         $dl = sprintf("%s<%s\n%s>%s", ' ' x 0, $r1c, ' ' x $indent, $r2c);
