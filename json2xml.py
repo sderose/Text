@@ -144,7 +144,7 @@ becomes (by default) this:
             <ditem key="atom07"><u></u></ditem>
             <ditem key="atom09"><u>token</u></ditem>
             <ditem key="atom10"><u>a
-bc	 </u></ditem>
+bc   </u></ditem>
             <ditem key="atom11"><u> &lt; &amp; ]]> "
          </u></ditem>
             <ditem key="list1_Ints">
@@ -287,16 +287,6 @@ Or possibly, move scalar named items to parent attributes
     <repeat n="200"/>
 
 
-=Rights=
-
-Copyright 2012 by Steven J. DeRose. This work is licensed under a Creative Commons
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see [http://creativecommons.org/licenses/by-sa/3.0].
-
-For the most recent version, see [http://www.derose.net/steve/utilities] or
-[http://github.com/sderose].
-
-
 =History=
 
 * 2012-12-04: Written by Steven J. DeRose.
@@ -308,6 +298,17 @@ distinct from "dicts", even though JSON doesn't know. Write out subclasses
 * 2020-12-09: Clean up. Add --oformat, integrate PowerWalk and alogging.
 * 2021-08-12: Factor out tag names to enable options to set them. Type-hints.
 Add --lengths. 
+
+
+=Rights=
+
+Copyright 2012 by Steven J. DeRose. This work is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see [http://creativecommons.org/licenses/by-sa/3.0].
+
+For the most recent version, see [http://www.derose.net/steve/utilities] or
+[http://github.com/sderose].
+
 
 =Options=
 """

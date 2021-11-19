@@ -174,8 +174,8 @@ Copyright 2019 by Steven J. DeRose. This script is licensed under a
 Creative Commons Attribution-Share-alike 3.0 unported license.
 See http://creativecommons.org/licenses/by-sa/3.0/ for more information.
 
-For the most recent version, see L<http://www.derose.net/steve/utilities/>
-or L<http://github.com/sderose>.
+For the most recent version, see [http://www.derose.net/steve/utilities/]
+or [http://github.com/sderose].
 
 
 =Options=
