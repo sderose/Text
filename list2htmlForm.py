@@ -91,7 +91,7 @@ parser.add_argument(
     "--verbose", "-v", action='count', default=0,
     help='Add more messages (repeatable).')
 parser.add_argument(
-    "--version",       action='version', version=__version__,
+    "--version", action='version', version=__version__,
     help='Display version information, then exit.')
 
 parser.add_argument(

@@ -3,15 +3,15 @@
 # fixPairs.py: Try to fix common OCR errors.
 # 2015-08-25: Written by Steven J. DeRose.
 #
-from __future__ import print_function
-import sys, os, argparse
+import sys
+import argparse
 import re
 import codecs
 from collections import defaultdict
 
 from sjdUtils import sjdUtils
 from alogging import ALogger
-from MarkupHelpFormatter import MarkupHelpFormatter
+lg = ALogger()
 
 __metadata__ = {
     "title"        : "fixPairs.py",
@@ -27,11 +27,9 @@ __metadata__ = {
 }
 __version__ = __metadata__["modified"]
 
-#global args, su, typesByPair, tokensByPair, pairExamples, totalFreq
 typesByPair = defaultdict(int)
 tokensByPair = defaultdict(int)
 pairExamples = defaultdict(list)
-totalFreq = 0
 
 splitExpr = re.compile(r'\t')
 
@@ -138,35 +136,35 @@ pairMap = [
 ###############################################################################
 #
 def processOptions():
-    "Parse command-line options and arguments."
-    global args, su
-    x = sys.argv[0]
-    parser = argparse.ArgumentParser(
-        description=descr, formatter_class=MarkupHelpFormatter)
+    try:
+        from BlockFormatter import BlockFormatter
+        parser = argparse.ArgumentParser(
+            description=descr, formatter_class=BlockFormatter)
+    except ImportError:
+        parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
-        "--iencoding",        type=str, metavar='E', default="utf-8",
+        "--iencoding", type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
         "--ignoreCase", "-i", action='store_true',
         help='Disregard case distinctions.')
     parser.add_argument(
-        "--minvocab",         type=int, default=25,
+        "--minvocab", type=int, default=25,
         help='Trim list or single-char mappings to use, to ones that ' +
         'represent at least this many vocab items.')
     parser.add_argument(
-        "--quiet", "-q",      action='store_true',
+        "--quiet", "-q", action='store_true',
         help='Suppress most messages.')
     parser.add_argument(
-        "--verbose", "-v",    action='count',       default=0,
+        "--verbose", "-v", action='count', default=0,
         help='Add more messages (repeatable).')
     parser.add_argument(
-        "--version",          action='version', version=__metadata__['__version__'],
+        "--version", action='version', version=__metadata__['__version__'],
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files',             type=str,
-        nargs=argparse.REMAINDER,
+        'files', type=str,  nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
@@ -181,8 +179,9 @@ def processOptions():
 
 ###############################################################################
 #
-def doOneFile(path):
-    global totalFreq
+stats = defaultdict(int)
+
+def doOneFile(path:str):
     recnum = 0
     rec = ""
     try:
@@ -193,7 +192,7 @@ def doOneFile(path):
     while (True):
         try:
             rec = fh.readline()
-        except Exception as e:
+        except IOError as e:
             lg.error("Error (%s) reading record %d of '%s'." %
                 (type(e), recnum, path), stat="readError")
             break
@@ -207,10 +206,10 @@ def doOneFile(path):
             continue
         found, fixed, freq = tokens
         freq = int(freq)
-        totalFreq += freq
+        stats['totalFreq'] += freq
         if (len(found) != len(fixed)):
             lg.vMsg(1, "%s\tLength mismatch" % (rec), stat='typesLengthDifference')
-            su.bumpStat('tokensLengthDifference', amount=freq)
+            stats['tokensLengthDifference'] += freq
             continue
 
         d = 0
@@ -228,28 +227,26 @@ def doOneFile(path):
             tokensByPair[(w,c)] += freq
             pairExamples[(w,c)].append(found)
         elif (re.sub(r'f', 's', found)==fixed):
-            su.bumpStat('multiFS')
+            stats['multiFS'] += 1
         elif (tryList(found, fixed)):
-            su.bumpStat('byList')
+            stats['byList'] += 1
         else:
-            su.bumpStat('other')
+            stats['other'] += 1
     fh.close()
     report(recnum)
     return(recnum)
 
-
-def tryList(found, fixed):
+def tryList(found, fixed) -> bool:
     """Try the corrections in the list, vs. a dictionary, and collect all
     the returns.
     """
-    for i, pair in pairMap.enumerate():
-        fr, to, freq = pair
+    for _i, pair in enumerate(pairMap):
+        fr, to, _freq = pair
         if (re.sub(fr,to,found) == fixed):
-            return(true)
+            return(True)
     return(False)
 
-
-def report(recnum):
+def report(recnum:int):
     sigma = u'\u03A3'
     print("Forms in list, that need one-character replacement:")
     print("      Err   Fix    Tokens     Tokens%       " + sigma +
@@ -260,16 +257,16 @@ def report(recnum):
     stypPct = 0.0
     skey = sorted(tokensByPair.items(), key=lambda x: -x[1])
     for k in skey:
-        pair, freq = k
+        pair, _freq = k
         tokFreq = tokensByPair[pair]
-        tokPct = tokFreq*100.0/totalFreq
+        tokPct = tokFreq*100.0/stats['totalFreq']
         stokPct += tokPct
         typFreq = typesByPair[pair]
         typPct = typFreq*100.0/recnum
         stypPct += typPct
         msg = fmt % (pair, tokFreq, tokPct, stokPct, typFreq, typPct, stypPct)
         lim = min(5, len(pairExamples[k]))
-        if (args.verbose): msg += `pairExamples[k][0:lim]`
+        if (args.verbose): msg += str(pairExamples[k][0:lim])
         print(msg)
 
 
@@ -283,9 +280,6 @@ if (len(args.files) == 0):
     sys.exit()
 
 for f in (args.files):
-    su.bumpStat("totalFiles")
+    stats["totalFiles"] += 1
     recs = doOneFile(f)
-    su.bumpStat("totalRecords", amount=recs)
-
-if (not args.quiet):
-    su.showStats()
+    stats["totalRecords"] += recs

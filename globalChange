@@ -24,7 +24,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2010-08-25",
-    'modified'     => "2021-11-18",
+    'modified'     => "2021-11-22",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -1119,6 +1119,8 @@ not BSD.
 copied back to update the original. Set permissions on updated file explicitly.
   2021-11-18: Clean up parsing of user's change expressions, fixing bug handling
 empty portions. Add --lineNumbers for makeDiffLine().
+  2021-11-22: More fixes to -e parsing. Fix big in makeDiffLine() where it could
+print extra data.
 
 
 =head1 To do
@@ -1766,7 +1768,8 @@ sub doOneItem {
         return(1);
     }
     $totalFilesChanged++;
-        alogging::Msg("some", ">>> $nc change(s) in file '$file'" . ($test ? " (DRY RUN)" : ''));
+    alogging::Msg("some", sprintf(">>> %3d change(s) in file '%s'%s",
+        $nc, $file, $test ? " (DRY RUN)" : ''));
     
     ###########################################################################
     #
@@ -2180,25 +2183,27 @@ sub makeDiffLine {
         my $r1len = length($r1);
         my $r2len = length($r2);
         my $minlen = ($r1len < $r2len) ? $r1len:$r2len;
-        my $firstDiff = my $lastDiff = 0;
+        my $firstDiff = 0;
         while ($firstDiff<$minlen &&
-               substr($r1,$firstDiff,1) eq substr($r2,$firstDiff,1)) {
+               substr($r1, $firstDiff, 1) eq substr($r2, $firstDiff, 1)) {
             $firstDiff++;
         }
-        while ($lastDiff<$minlen &&
-               substr($r1,$r1len-$lastDiff-1,1) eq
-               substr($r2,$r2len-$lastDiff-1,1)) {
+        my $remaining1 = $r1len - $firstDiff;
+        my $remaining2 = $r2len - $firstDiff;
+        my $leftToScan = ($remaining1 < $remaining2) ? $remaining1 : $remaining2;
+        my $lastDiff = 0;
+        while ($lastDiff<$leftToScan &&
+               substr($r1, $r1len-$lastDiff-1, 1) eq
+               substr($r2, $r2len-$lastDiff-1, 1)) {
             $lastDiff++;
         }
         $r1c =
             substr($r1,0,$firstDiff) .
-            colorize($matchColor,
-                substr($r1,$firstDiff,$r1len-$firstDiff-$lastDiff)) .
+            colorize($matchColor, substr($r1, $firstDiff, $r1len-$firstDiff-$lastDiff)) .
             substr($r1,$r1len-$lastDiff);
         $r2c =
             substr($r2,0,$firstDiff) .
-            colorize($matchColor,
-                substr($r2,$firstDiff,$r2len-$firstDiff-$lastDiff)) .
+            colorize($matchColor, substr($r2, $firstDiff, $r2len-$firstDiff-$lastDiff)) .
             substr($r2,$r2len-$lastDiff);
     }
 

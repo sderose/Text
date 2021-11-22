@@ -122,10 +122,10 @@ if __name__ == "__main__":
             "--regex", "-e", type=str, metavar='R',
             help='Regex to identify the hits you want context for.')
         parser.add_argument(
-            "--unicode",          action='store_const', dest='iencoding',
+            "--unicode", action='store_const', dest='iencoding',
             const='utf8', help='Assume utf-8 for input files.')
         parser.add_argument(
-            "--verbose", "-v",    action='count', default=0,
+            "--verbose", "-v", action='count', default=0,
             help='Add more messages (repeatable).')
         parser.add_argument(
             "--version", action='version', version=__version__,
