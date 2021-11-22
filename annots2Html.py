@@ -97,40 +97,39 @@ def processOptions():
         parser = argparse.ArgumentParser(description=descr)
 
     parser.add_argument(
-        "--beginMark",        type=str, metavar='S', default="B-",
+        "--beginMark", type=str, metavar='S', default="B-",
         help='The string that indicates starts of annotation.')
     parser.add_argument(
-        "--inMark",           type=str, metavar='S', default="I-",
+        "--inMark", type=str, metavar='S', default="I-",
         help='The string that indicates continuing of annotation.')
     parser.add_argument(
-        "--outMark",          type=str, metavar='S', default="O",
+        "--outMark", type=str, metavar='S', default="O",
         help='The string that indicates tokens not in an annotation.')
 
     parser.add_argument(
-        "--classPrefix",        type=str, metavar='S', default='',
+        "--classPrefix", type=str, metavar='S', default='',
         help='Prefix this to the class attribute on tagged spans.')
     parser.add_argument(
-        "--cssURL",            type=str, metavar='S', default='',
+        "--cssURL", type=str, metavar='S', default='',
         help='URL to a CSS file to reference from the header.')
     parser.add_argument(
-        "--iencoding",        type=str, metavar='E', default="utf-8",
+        "--iencoding", type=str, metavar='E', default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
-        "--oencoding",        type=str, metavar='E',
+        "--oencoding", type=str, metavar='E',
         help='Use this character set for output files.')
     parser.add_argument(
-        "--recursive",        action='store_true',
+        "--recursive", action='store_true',
         help='Descend into subdirectories.')
     parser.add_argument(
-        "--unicode",          action='store_const',  dest='iencoding',
+        "--unicode",          action='store_const', dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
     parser.add_argument(
         "--version", action='version', version=__version__,
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files',             type=str,
-        nargs=argparse.REMAINDER,
+        "files", type=str, nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()

@@ -95,7 +95,7 @@ digital signing, query languages and engines, etc. etc.) easy to apply to Python
 ==Usage==
 
 You can run this from the command line
-to load and convert a JSON file(s). 
+to load and convert a JSON file(s).
 
 You can also use this from Python code
 by calling `serialize2xml()` on most any Python object (whether it came from
@@ -297,7 +297,7 @@ distinct from "dicts", even though JSON doesn't know. Write out subclasses
 (even though they won't show up for data that was really JSON).
 * 2020-12-09: Clean up. Add --oformat, integrate PowerWalk and alogging.
 * 2021-08-12: Factor out tag names to enable options to set them. Type-hints.
-Add --lengths. 
+Add --lengths.
 
 
 =Rights=
@@ -351,8 +351,8 @@ def emptyTag(x:str, attrs:dict=None):
     return "<%s/>" % (x)
 def endTag(x:str):
     return "</%s>" % (x)
-    
-    
+
+
 ###############################################################################
 #
 class Str:
@@ -363,7 +363,7 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
     """Return an XML serialization of the object (recursive).
     Typically we expect JSON, but it doesn't have to be.
     """
-    
+
     # Define what names to use as tag for various types
     _DICT = "dict"
     _LIST = "list"
@@ -385,7 +385,7 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
     _CLASS = "class"
     _LEN = "len"
     _GENEITY = "homogeneous"
-    
+
     # Collection types
     #
     buf = ""
@@ -393,7 +393,6 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
         if (hasattr(pyObject, '_fields')):                  # NAMEDTUPLE
             assert False, "namedtuple not yet implemented, sorry" # TODO What *should* this do?
             # return buf
-                                                            # (regular/unnamed) TUPLE
         if (istring): buf += "\n" + (istring * depth)
         attrs = {}
         if (type(pyObject).__name__ != "tuple"): attrs[_CLASS] = type(pyObject).__name__
@@ -402,7 +401,7 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
         depth += 1
         for k, v in pyObject.items():
             if (istring): buf += "\n" + (istring * depth)
-            buf += (startTag(_ITEM) + 
+            buf += (startTag(_ITEM) +
                 serialize2xml(v, istring=istring,depth=depth) + endTag(_ITEM))
         depth -= 1
         buf += endTag(_TUPLE)
@@ -479,7 +478,7 @@ def serialize2xml(pyObject, istring:str="    ", depth:int=0):
             if (callable(v)): continue
             if (k.startswith("__")): continue
             if (istring): buf += "\n" + (istring * depth)
-            buf += (startTag(_ITEM, { _KEY: k }) + 
+            buf += (startTag(_ITEM, { _KEY: k }) +
                 serialize2xml(v, istring=istring,depth=depth) + endTag(_ITEM))
         depth -= 1
         buf += endTag(_OBJECT)
@@ -654,8 +653,8 @@ if __name__ == "__main__":
             lg.vMsg(0, "JSON load failed for %s:\n    %s" % (path, e))
             sys.exit()
         writeIt(pyObj)
-        
-        
+
+
     def writeIt(pyObj):
         if (args.oformat == "xml"):
             buf = serialize2xml(pyObj, istring=args.istring)
@@ -683,7 +682,7 @@ if __name__ == "__main__":
             lg.vMsg(0, "JSON parse failed.\n    %s" % ( e))
             sys.exit()
         writeIt(pyObject0)
-        
+
     else:
         pw = PowerWalk(args.files, open=False, close=False,
             encoding=args.iencoding)

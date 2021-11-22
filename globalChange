@@ -1575,8 +1575,9 @@ sub saveChangeSpecFromExpr {
     # Parse and slightly validate.
     my $exprCopy = $expr;
     my @parts = ();
-    if (0) {
+    if (1) {
         @parts = split(/(?<![\\])$delim/, $expr);
+        if (scalar @parts == 2) { push @parts, ""; }  # s/xyz//
     }
     elsif (0) {  # Obsolete
         while ($exprCopy =~ s/^(.*?[^\\])?$delim//) {
@@ -1591,8 +1592,9 @@ sub saveChangeSpecFromExpr {
         if ($delim ne "/") {
             $metaExpr =~ s|/|\\$delim|g;
         }
-        ($verbose) && warn("Parsing expr is: $metaExpr\n");
-        $exprCopy =~ /$metaExpr/;
+        ($verbose) && warn("Parsing expr is: $metaExpr\n         parsing: '$exprCopy'\n");
+        my $compiled = qr#$metaExpr#;
+        $exprCopy =~ qr#$metaExpr#;
         @parts = ( $1, $2, $3, $4 );
     }
     

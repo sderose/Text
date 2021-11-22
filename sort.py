@@ -98,7 +98,7 @@ def processOptions():
         "--reverse", "-r", action='store_true', default=False,
         help='Sort in descending order.')
     parser.add_argument(
-        "--unicode", action='store_const',  dest='iencoding',
+        "--unicode", action='store_const', dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
     parser.add_argument(
         "--verbose", "-v", action='count', default=0,
@@ -108,7 +108,7 @@ def processOptions():
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files', type=str, nargs=argparse.REMAINDER,
+        "files", type=str, nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()

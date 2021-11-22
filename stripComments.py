@@ -119,8 +119,7 @@ def processOptions():
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files', type=str,
-        nargs=argparse.REMAINDER,
+        "files", type=str, nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()

@@ -79,23 +79,23 @@ def vMsg(level, msg):
 #
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--break",         action='store_true', dest="breakEm",
+    "--break", action='store_true', dest="breakEm",
     help='Put a <br> before each item.')
 parser.add_argument(
-    "--group",         type=str, default="group_01",
+    "--group", type=str, default="group_01",
     help='Group name for checkbox or radio button.')
 parser.add_argument(
-    "--type",          type=str, default="radio",
+    "--type", type=str, default="radio",
     help='Kind of input control: radio or checkbox or menu.')
 parser.add_argument(
     "--verbose", "-v", action='count', default=0,
     help='Add more messages (repeatable).')
 parser.add_argument(
-    "--version",       action='version',     version=__version__,
+    "--version",       action='version', version=__version__,
     help='Display version information, then exit.')
 
 parser.add_argument(
-    'files',           nargs=argparse.REMAINDER,
+    "files", nargs=argparse.REMAINDER,
     help='Path(s) to input file(s)')
 
 args = parser.parse_args()
