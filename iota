@@ -1,5 +1,4 @@
 #!/usr/bin/perl -w
-####!/opt/local/bin/perl5.22
 #
 # iota: Generate data with sequential numbering/time-stamping inserted.
 # 2005-12-27: Written by Steven J. DeRose.
@@ -18,7 +17,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2005-12-27",
-    'modified'     => "2021-07-24",
+    'modified'     => "2021-12-23",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -41,7 +40,7 @@ either as-is or filled in to a place(s) in a template.
 This can be useful for making lists to use in code or documents.
 
 By default, prints decimal numbers, in ASCII, starting at 1 and
-going up to I<limit>. Use I<--start> to change the starting point. For example,
+going up to some value. For example,
 
     iota --base decimal --start 20 22
 
@@ -51,22 +50,37 @@ produces:
     21
     22
 
-Output can be in many forms, chosen with the I<--base> option.
-Numeric bases from 2 to 36, and 64, are available.
-So are Roman numerals, characters chosen by Unicode code point,
-the Latin alphabet (a special case of characters), and dates.
+Use I<--start> to change the starting point (you may also specify the ending value
+with I<--end> rather than as a plain argument). Use I<--increment> to set
+the step-size (which may be negative).
+
+The numbers for I<--start>, I<--increment>, and I<limit> can be given in
+decimal, octal (0777), hex (0xfff), or binary (0b1111).
+
+Output can be in many forms, chosen with the I<--base> option (even though not
+all forms are actually numeric bases):
+    Numeric bases from 2 to 36, and 64
+    Roman numerals
+    Characters chosen by Unicode code point
+    The Latin alphabet (a special case of characters)
+    Dates
 
 For example, you can output code to initialize a hash that maps
-literal lower-case Greek letters to their Unicode code points with
+literal lower-case Greek letters to their Unicode code points as shown below
 (the code shown is for Perl, but you can generate whatever you want):
 
     iota --unicode --base chr
-      --format '    "{}" => 0x{16,4},' --start 0x3b1 0x3c9
+        --format '    "{}" => 0x{16,4},' --start 0x3b1 0x3c9
 
 The current value is filled in wherever you put "{}".
-Any instance of {} may also set its own values to override the
-I<--base>, I<--digits>, I<--right>, and I<--padChar> options.
+Instances of '{}' in the format template may also set their own format details.
+In this example, '{16,4}' means to forat the value in base 16, left padded with '0's
+to a minimum of 4 columns (further arguments control padding side and character;
+see L<#--format> for details).
+Such values override the I<--base>, I<--digits>, I<--right>, and I<--padChar> options.
 See the I<--format> option (below) for more information.
+
+Extra points if you know where the name comes from.
 
 
 =head1 Options
@@ -87,13 +101,13 @@ place the value is inserted (see I<--format>, below, for details).
 
 =item * I<64> (the digits are C<A-Za-z0-9+/>),
 
-=item * I<chr> the values are treated as ASCII/Latin-1 code points
-(or full-fledged Unicode if I<--unicode> is specified),
-and converted to characters. For example, 65-90 => A-Z, 97 => a, 48 => 0,....
+=item * I<chr> the values are treated as character code points
+(ASCII, Latin-1, or Unicode if I<--unicode> is specified),
+and converted to characters. For example, I<--start 65 --end 90> yields A through Z.
 
-=item * I<alpha> uses C<a-z>,
+=item * I<alpha> uses C<a-z>, Specify the range by 1...26 (but see also I<--base chr>).
 
-=item * I<Alpha> uses C<A-Z>.
+=item * I<Alpha> uses C<A-Z>. Specify the range by 1...26 (but see also I<--base chr>).
 
 =item * I<roman> uses lower-case Roman numerals.
 
@@ -140,6 +154,11 @@ See also I<--base> and I<--start>.
 Pad the values to a minimum of I<d> digits (default: 0 (no padding)).
 See also I<--padchar> and I<--right>).
 
+=item * B<--end> I<n>
+
+Set the value to stop at. This is just a synonym for giving the limit as the (final/only)
+argument, because the author sometimes forgets to do it that way.
+
 =item * B<--escape>
 
 Allow C-style backslash escapes in I<--format> text
@@ -153,7 +172,8 @@ to some other string using I<repstring>).
 
 You can also use the following arguments between the braces,
 to override formatting options
-for a particular instance (you can't omit arguments in the middle, though):
+for a particular instance (you can't omit arguments in the middle, or
+have spaces after the commas):
 
 =over
 
@@ -166,12 +186,12 @@ and which side to pad (I<1> to right-pad; 0 or omitted to left-pad
 (see I<--right>).
 
 '{base,digits,side,c}' to specify the base, padding width,
-side, and pad character (see I<--padchar>). Unusual pad characters
+side, and a single pad character (see I<--padchar>). Unusual pad characters
 (particularly "}") might not work.
 
 =back
 
-=item * B<-h>
+=item * B<--help> OR B<-h>
 
 Print this help and exit.
 
@@ -211,13 +231,13 @@ There is not yet any way to set the starting I<time>.
 
 With any I<--base> other than I<date>, the value
 must be an integer (which can be specified in octal, decimal, or hex).
-See also I<--base>, I<--dateFormat>, I<--dateIncrement>.
+See also I<--end>, I<--increment>, I<--base>, I<--dateFormat>, I<--dateIncrement>.
 
 =item * B<--unicode>
 
 Synonym for I<--oencoding utf8>.
 This differs from most of my scripts, where I<--unicode>
-affects input, not output. This is because there is no input to this script.
+affects input, not output. That is because there is no input to this script.
 
 =item * B<--version>
 
@@ -232,8 +252,8 @@ Synonym for I<--digits>.
 
 =head1 --dateFormat codes
 
-These are same as for C<strftime>. For example, ISO 8601 datetime format can be 
-constructed via:
+These are intended to be the same as for C<strftime>. 
+For example, ISO 8601 datetime format can be constructed via:
 
     "%Y-%m-%dT%H:%M:%S%z"
     
@@ -335,39 +355,41 @@ constructed via:
 Although you can change the "{}" string (see I<--format>), that doesn't
 work for the "{args...}" form.
 
+I<--base alpha> only supports unaccented Latin, and you have to specify the range
+by position (1...26), not by letter ('a'...'z').
+
 I<--base date> does not account for leap seconds.
 
+Numeric I<--base>s other than 10 don't support negatives. Though of course you 
+could use I<--format> to put a minus sign in front, if that helps.
+
 I<--start> with I<--base date> only allows yyyy-mm-dd dates (although you can
-use I<--dateFormat> to get the full I<strftime> range of I<output> formats.
+use I<--dateFormat> to get the full I<strftime> range of I<output> formats).
 
 
 =head1 To do
 
-  Allow \ for $repString.
-  Permit --increment month.
+  Allow \\ for $repString.
+  Port to Python.
+  Add I<--increment month>.
   Add support for times, not just dates?
   Allow 1, 2, or 3 args for end, (start,end), (start,end,incr)?
-  Support --base of !... to run shell command and insert result?
-  Add --base 'uname'.
-  Port to Python.
-  Support all CSS ordered-list numbering schemes, and all unicode digit sets a la C<mathAlphanumerics.py>.
+  Support I<--base !cmd> to run a shell command and insert the result?
+  Support all CSS ordered-list numbering schemes
+  Support Unicode digit sets, via C<mathAlphanumerics.py>.
 
 
 =head1 Related commands
 
-C<Roman> -- CPAN package to do Roman-numeral conversion.
+=over
 
-C<Time::Piece> -- CPAN package to manage dates and times.
+=item * C<Roman> -- CPAN package to do Roman-numeral conversion.
 
-C<strftime> -- Perl, C, and POSIX function to formats dates.
+=item * C<Time::Piece> -- CPAN package to manage dates and times.
 
+=item * C<strftime> -- Perl, C, and POSIX function to formats dates.
 
-=head1 Notes
-
-The numbers for I<--start>, I<--increment>, and I<limit> can be given in
-decimal, octal (0777), hex (0xfff), or binary (0b1111).
-
-Extra points if you know where the name comes from.
+=back
 
 
 =head1 History
@@ -383,11 +405,13 @@ Extra points if you know where the name comes from.
   2011-03-06 sjd: Add {args}, --escape. Fix 0 handling.
   2012-01-09 sjd: Cleanup. Switch pad() and unescape() to use sjdUtils.pm.
   2012-01-27 sjd: Fix to use lpad/rpad correctly with --right and --padchar.
-      Add --base roman and --base Roman.
+Add --base roman and --base Roman.
   2015-08-27: --.
   2016-07-26: Add --base date, --dateFormat.
   2017-01-09: Fix --base date.
   2017-02-21: Fix --base date some more. Much better --format. Add isOkBase().
+  2021-12-23: Add --end. Better option checking. Improve doc.
+  
 
 =head1 Ownership
 
@@ -409,17 +433,18 @@ my $break            = 1;        # Line breaks between output items?
 my $dateFormat       = $dateFormatDft;  # *Output* format
 my $dateIncrement    = 'days';
 my $digits           = 0;        # No padding
+my $end              = "";       # String 'cuz might be a date
 my $escape           = 1;
 my $format           = "";       # Just dump the number
 my $ignoreCase       = 0;
-my $increment        = 1;
+my $increment        = "1";      # String 'cuz might be a date
 my $oencoding        = "";
 my $olineends        = "U";
 my $padchar          = "0";      # What character to pad with
 my $quiet            = 0;
 my $repstring        = "{}";     # String to replace in --format
 my $right            = 0;        # Pad on right side instead of left.
-my $start            = 1;
+my $start            = "1";      # String 'cuz might be a date
 my $verbose          = 0;
 
 Getopt::Long::Configure ("ignore_case");
@@ -429,6 +454,7 @@ my $result = GetOptions(
     "dateFormat=s"      => \$dateFormat,
     "dateIncrement=s"   => \$dateIncrement,
     "digits|width=i"    => \$digits,
+    "end=s"             => \$end,
     "escape!"           => \$escape,
     "format=s"          => \$format,
     "h|help|?"          => sub { system "perldoc $0"; exit; },
@@ -437,7 +463,7 @@ my $result = GetOptions(
     "olineends=s"       => \$olineends,
     "padchar=s"         => \$padchar,
     "q|quiet!"          => \$quiet,
-	"r|right!"          => \$right,
+    "r|right!"          => \$right,
     "repstring=s"       => \$repstring,
     "start=s"           => \$start,
     "unicode!"          => sub { $oencoding = "utf8"; },
@@ -445,7 +471,7 @@ my $result = GetOptions(
     "version"           => sub {
         die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
-    );
+);
 
 ($result) || die "Bad options.\n";
 
@@ -459,10 +485,6 @@ if    ($olineends eq "M") { $\ = chr(13); }
 elsif ($olineends eq "D") { $\ = chr(13).chr(10); }
 else { }
 
-
-###############################################################################
-# Validate and default options
-#
 my $theDateTime = undef;  # Running date as ISO8601
 my $timeZone  = "GMT";
 my $theDateDuration = DateTime::Duration->new($dateIncrement=>1);
@@ -481,7 +503,7 @@ if ($base =~ m/^(roman)$/i) {
         "Can't find CPAN module 'Roman' to support --base [Rr]oman.\n";
 }
 elsif ($base =~ m/^(alpha|chr)$/i) {
-    # Maybe should allow Greek and Hebrew, too?
+    # TODO: Hook up to mathAlphanumerics.py?
 }
 elsif ($base eq 'date') {
     if ($start eq 1) {  # Default to today
@@ -498,8 +520,6 @@ elsif ($base eq 'date') {
         $theDateTime->strftime($dateFormat) . "'");
 }
 
-$increment = int(getAnyNumber($increment));
-
 if ($digits < 0) {
     warn "Kinda pointless to pad to " . $digits . " digits.\n";
     $digits = 0;
@@ -513,27 +533,28 @@ if ($format ne "") {
     }
 }
 
-(length($padchar) > 1) &&
-	die "-padchar cannot be more than one character.\n";
+if (length($padchar) == 1) {
+    die "--padchar must be exactly one character (not '$padchar').\n";
+}
 if ($right && $padchar ne " ") {
-	warn "Are you sure you want --right with --padchar '$padchar'?\n";
+    ($quiet) || warn "Are you sure you want --right with --padchar '$padchar'?\n";
 }
 
-# See if we have just a number left, as we ought
-if (scalar(@ARGV) != 1) {
-    die "Should have exactly one post-option argument.\n";
+# Figure the high end limit, via sole arg OR --end option.
+if (scalar(@ARGV) > 1) {
+    die "Should have exactly one post-option argument (or none and use --end n).\n";
 }
-my $end = getAnyNumber($ARGV[0]);
-if ($end < 1) {
-    warn "May have options, then exactly one numeric argument, not '"
-        . join(" ",@ARGV) . "'.\n";
-    system "perldoc $0";
-   exit;
+if (scalar(@ARGV) == 1) {
+    ($end eq "") || die "Don't specify both --end ('$end') and an argument ('$ARGV[0]').\n";
+    $end = $ARGV[0];
 }
 
 # Avoid infinite loops
 #
 if ($base ne "date") {
+    $start = getAnyNumber($start);
+    $end = getAnyNumber($end);
+    $increment = int(getAnyNumber($increment));
     if (($end > $start && $increment <= 0) ||
         ($end < $start && $increment >= 0)) {
         die "$start to $end would take too long with increment $increment.\n";
@@ -586,8 +607,9 @@ sub time2ISO8601 {
     return($p);
 }
 
+
 ###############################################################################
-# Replace the format string with the number in some form.
+# Replace the format string (default '{}') with the number in some form.
 #
 # Instances of {} may also include a few arguments:
 #       {base,digits,right,padChar}
@@ -616,8 +638,8 @@ sub fillInFormat {
 
 
 ###############################################################################
-# Convert to different bases (including various named --base values such as
-# 'roman', 'alpha', 'date',.... Doesn't work for negative numbers.
+# Convert to different bases (including various named ones. 
+# Doesn't work for negative numbers.
 #
 sub baseConvert {
     my ($n, $nbase) = @_;
@@ -675,7 +697,6 @@ sub baseConvert {
     }
     return $result;
 } # baseConvert
-
 
 sub getAnyNumber {
     my $n = $_[0];
