@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# stripComments.py
+# stripComments.py: Remove comments from a file, appropriate to its filetype.
 # 2017-11-08: Written by Steven J. DeRose.
 #
 from __future__ import print_function
@@ -17,6 +17,7 @@ lg = ALogger(1)
 
 __metadata__ = {
     'title'        : "stripComments.py",
+    'description'  : "Remove comments from a file, appropriate to its filetype.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
     'type'         : "http://purl.org/dc/dcmitype/Software",
@@ -162,7 +163,7 @@ def tryOneItem(path):
     lg.hMsg(1, "Starting item '%s'" % (path))
     recnum = 0
     if (not os.path.exists(path)):
-        lg.error("Couldn't find '%s'." % (path), stat="cantOpen")
+        lg.error("Couldn't find '%s'." % (path))
     elif (os.path.isdir(path)):
         lg.bumpStat("totalDirs")
         if (args.recursive):
@@ -183,7 +184,7 @@ def doOneFile(path):
     try:
         fh = codecs.open(path, mode='r', encoding=args.iencoding)
     except IOError:
-        lg.error("Can't open '%s'." % (path), stat="CantOpen")
+        lg.error("Can't open '%s'." % (path))
         return(0)
     lg.bumpStat("totalFiles")
 
@@ -196,8 +197,7 @@ def doOneFile(path):
     try:
         data = fh.read()
     except IOError as e:
-        lg.error("Error (%s) reading file '%s'." %
-                 (type(e), path), stat="readError")
+        lg.error("Error (%s) reading file '%s'." % (type(e), path))
         return
 
     # This utterly fails for comment delims inside quotes, ifdefs, etc.
@@ -236,4 +236,3 @@ for f in (args.files):
 
 if (not args.quiet):
     lg.vMsg(0,"Done.")
-    lg.showStats()

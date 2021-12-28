@@ -385,6 +385,10 @@ use I<--dateFormat> to get the full I<strftime> range of I<output> formats).
 
 =item * C<Roman> -- CPAN package to do Roman-numeral conversion.
 
+=item * C<jot> -- Broadly similar, with etymologically related name. But doesn't have bases, dates,
+{} fill-ins, padding, Unicode support, etc. Does, however, have hand random-number 
+generation, which I should probably add.
+
 =item * C<Time::Piece> -- CPAN package to manage dates and times.
 
 =item * C<strftime> -- Perl, C, and POSIX function to formats dates.
@@ -411,7 +415,7 @@ Add --base roman and --base Roman.
   2017-01-09: Fix --base date.
   2017-02-21: Fix --base date some more. Much better --format. Add isOkBase().
   2021-12-23: Add --end. Better option checking. Improve doc.
-  
+
 
 =head1 Ownership
 

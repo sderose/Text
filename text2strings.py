@@ -76,7 +76,7 @@ def doOneFile(path, fh):
             rec = fh.readline()
         except IOError as e:
             sys.stderr.write("Error (%s) reading record %d of '%s'.\n" %
-                (type(e), recnum, path), stat="readError")
+                (type(e), recnum, path))
             break
         if (len(rec) == 0): break # EOF
         recnum += 1

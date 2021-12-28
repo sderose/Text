@@ -152,7 +152,7 @@ def tryOneItem(path):
     lg.hMsg(1, "Starting item '%s'" % (path))
     recnum = 0
     if (not os.path.exists(path)):
-        lg.error("Couldn't find '%s'." % (path), stat="cantOpen")
+        lg.error("Couldn't find '%s'." % (path))
     elif (os.path.isdir(path)):
         lg.bumpStat("totalDirs")
         if (args.recursive):
@@ -173,14 +173,14 @@ def doOneFile(path):
     try:
         fh = open(path, mode="r")  # binary
     except IOError:
-        lg.error("Couldn't open '%s'." % (path), stat="cantOpen")
+        lg.error("Couldn't open '%s'." % (path))
         return(0)
     lg.bumpStat("totalFiles")
 
     try:
         fh = codecs.open(path, mode="r", encoding=args.iencoding)
     except IOError:
-        lg.error("Can't open '%s'." % (path), stat="CantOpen")
+        lg.error("Can't open '%s'." % (path))
         return(0)
     recnum = 0
     lastRealRec = rec = ""
@@ -190,7 +190,7 @@ def doOneFile(path):
             rec = fh.readline()
         except IOError as e:
             lg.error("Error (%s) reading record %d of '%s'." %
-                (type(e), recnum, path), stat="readError")
+                (type(e), recnum, path))
             break
         origRec = rec
         if (len(rec) == 0): break # EOF
@@ -371,7 +371,3 @@ for f in (args.files):
     lg.bumpStat("totalFiles")
     recs = doOneFile(f)
     lg.bumpStat("totalRecords", amount=recs)
-
-if (not args.quiet):
-    lg.vMsg(0,"Done.")
-    lg.showStats()

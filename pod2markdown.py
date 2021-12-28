@@ -217,7 +217,7 @@ def doOneFile(path, fh:IO) -> int:
             rec = fh.readline()
         except IOError as e:
             lg.error("Error (%s) reading record %d of '%s'." %
-                (type(e), recnum, path), stat="readError")
+                (type(e), recnum, path))
             break
         if (len(rec) == 0): break # EOF
         recnum += 1
@@ -240,7 +240,7 @@ def doOneFile(path, fh:IO) -> int:
         elif (rec.startswith("=encoding")):
             encoding = rec[9:].strip()
             if (encoding != args.iencoding):
-                lg.error0("=encoding '%s' not supported." % (encoding))
+                lg.error("=encoding '%s' not supported." % (encoding))
             continue
         elif (rec.startswith("=head")):
             hLevel = int(rec[5]) + 0
