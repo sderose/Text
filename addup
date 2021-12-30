@@ -11,13 +11,14 @@ use alogging;
 use TabularFormats;
 
 our %metadata = (
-    'title'        => ".pm",
+    'title'        => "addup",
+    'description'  => "Add up numbers that are tokens of each line, until EOF.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006",
-    'modified'     => "2020-09-22",
+    'modified'     => "2021-12-30",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -84,6 +85,11 @@ Show the average, not just the total.
 
 Support bin/octal/hex/dec in C/C++ notations.
 Without I<--bases>, leading zeros do I<not> imply octal.
+
+
+=item * B<--brief>
+
+Output only the grand total, in decimal.
 
 =item * B<--field> I<numberOrName>
 
@@ -204,6 +210,7 @@ Break out handleToken().
   2016-11-04: Formatting. Start on --logbook.
   2017-06-29: Add timespans and --roundMinutes.
   2020-09-22: New layout.
+  2021-12-30: Add --brief.
 
 
 =head1 To do
@@ -237,6 +244,7 @@ L<https://github.com/sderose>.
 #
 my $avg             = 0;
 my $bases           = 0;
+my $brief           = 0;
 my $field           = "";
 my $logbook         = 0;
 my $logStart        = "\\b(IN|BEGIN|START)\\b";
@@ -253,6 +261,7 @@ my $verbose         = 0;
 my %getoptHash = (
     "avg|average!"      => \$avg,
     "bases!"            => \$bases,
+    "brief!"            => \$brief,
     "h|help"            => sub { system "perldoc $0"; exit; },
     "human-readable!"   => \$humanReadable,
     "field|n=s"         => \$field,
@@ -681,6 +690,10 @@ Other commands:
 # Report
 #
 sub report {
+    if ($brief) {
+        printf("%d\n", $total);
+        return;
+    }
     print "Records handled: $recnum.\n";
     (!$quiet && $notEnough) && warn
         "WARNING: $notEnough of $recnum records did not contain"
@@ -692,10 +705,10 @@ sub report {
 
     if ($numTokens) {
         if ($total == int($total)) {
-            print sprintf("Total: d%d  (o%o, x%04x)\n", $total, $total, $total);
+            printf("Total: d%d  (o%o, x%04x)\n", $total, $total, $total);
         }
         else {
-            print sprintf("Total: %f.\n", $total);
+            printf("Total: %f.\n", $total);
         }
         if ($humanReadable && $total > 1023) {
             print "    " . sjdUtils::toHNumber($total) . "\n";
