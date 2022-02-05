@@ -14,26 +14,25 @@ use alogging;
 
 our %metadata = (
     'title'        => "body",
-    'description'  => "Like 'head' and 'tail', but grab any range.",
+    'description'  => "Like 'head' and 'tail', but find ranges by line number or regex.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-03-23",
-    'modified'     => "2020-01-15",
+    'modified'     => "2021-12-24",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
 our $VERSION_DATE = $metadata{'modified'};
 
 
-###############################################################################
-
 =pod
+
 
 =head1 Usage
 
-body [options] file(s)
+    body [options] file(s)
 
 Extract a range(s) of lines or characters from the input (somewhat like
 *nix C<head> and C<tail>, but for the middle).
@@ -68,21 +67,22 @@ This is similar to the following C<awk> script:
 
 =item * body --fchar 0xBEEF --nlines 100 foo.txt
 
-Gets from hexadecimal character offset 0xBEEF, the next 100 lines
-(the first of which may be a partial line, because offset 0xBEEF may
-point to the middle of a line).
+Gets a block of 100 lines starting at the character
+at hexadecimal character offset 0xBEEF in the input.
+The first line output may be only part of the input line that included that
+offset, because the offset may point to the middle of a line.
 This is similar to the following C<awk> script (but supports the
 starting offset being mid-line more accurately):
 
     $ awk 'offset < 0xBEEF && nlines < 100 {
         print $0; offset += length($0); nlines++ }'
 
-
 =item * body --fpat '^#START' --lpat '#END' *.txt
 
-Gets (entire) lines from the one in which "#START" is found at
-start of line ("^"), up to
-the one in which "#END" is found, from B<each> of the C<.txt> files in
+Gets (entire) lines from the one in which "#START" is found (because of the "^",
+it must be at the start of the line), up to
+the line in which "#END" is found (not necessarily at start of line).
+This is done separately for B<each> of the C<.txt> files in
 the current directory. The lines in which the matches are found
 are included by default (but see I<--fpatBreak>, I<--fpatNum>, I<--lpatBreak>,
 and I<--lpatNum>). This is similar to the following C<awk> script:
@@ -104,7 +104,10 @@ the I<--fline 1> part, but there's currently a bug and you do.
 You can specify any mix of I<--fline>, I<--fpat>, and I<--fchar>.
 If none of them is specified, data is extracted starting at the
 beginning of the file. Otherwise, these options  are used,
-in the order just stated, to move forward in the file.
+in the order just stated, to move forward in the file. 
+For example, you could skip to line 100, then to the first line after that
+which matches a given regex, then to the nth column of that matching line.
+
 If EOF is hit before the specified starting point is reached,
 then an error is reported and nothing is copied.
 
@@ -336,9 +339,13 @@ Fix STDIN!!!
 Add a way to partition file(s) into multiple, such as extracting all the
 n-level <div>s from HTML, all the classes from Python, etc.
 
-Should add I<--fbyte>, I<--lbyte>, I<--nchars>, I<--nbytes>.
+A way to invert patterns, so you start/end at the first I<non>-matching line.
 
-Way to get all but the last N lines?
+At least for lpat, a way to keep going until the n-th matching line?
+
+Add I<--fbyte>, I<--lbyte>, I<--nchars>, I<--nbytes>.
+
+Way to get all I<but> the last N lines?
 
 Allow counting by tokens?
 
@@ -432,7 +439,10 @@ C<RecordFile.pm> -- similar to internal 'Reader' package.
 
 =item * 2021-06-25: Clean up.
 
+=item * 2021-12-24: Fix reporting bug with --fpat.
+
 =back
+
 
 =head1 Rights
 
@@ -442,6 +452,7 @@ See L<http://creativecommons.org/licenses/by-sa/3.0> for more information.
 
 For the most recent version, see L<http://www.derose.net/steve/utilities/>
 or L<http://github.com/sderose>.
+
 
 =cut
 
@@ -474,14 +485,14 @@ my %options = (
     );
 
 my %getoptHash = (
-	"fchar=o"          => \$options{"fchar"},
-	"fline=o"          => \$options{"fline"},
-	"fpat=s"           => \$options{"fpat"},
-	"fpatBreak!"       => \$options{"fpatBreak"},
-	"fpatNum=o"        => \$options{"fpatNum"},
+    "fchar=o"          => \$options{"fchar"},
+    "fline=o"          => \$options{"fline"},
+    "fpat=s"           => \$options{"fpat"},
+    "fpatBreak!"       => \$options{"fpatBreak"},
+    "fpatNum=o"        => \$options{"fpatNum"},
     "h|help"           => sub { system "perldoc $0"; exit; },
     "iencoding=s"      => \$options{"iencoding"},
-	"ilineends=s"      => \$options{"ilineends"},
+    "ilineends=s"      => \$options{"ilineends"},
     "listEncodings"    => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
@@ -496,14 +507,14 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
-	"lchar=o"          => \$options{"lchar"},
-	"lline=o"          => \$options{"lline"},
-	"lpat=s"           => \$options{"lpat"},
-	"lpatBreak!"       => \$options{"lpatBreak"},
-	"lpatNum=o"        => \$options{"lpatNum"},
-	"nlines|lines=o"   => \$options{"nlines"},
-	"olineends=s"      => \$options{"olineends"},
-	"replace"          => \$options{"replace"},
+    "lchar=o"          => \$options{"lchar"},
+    "lline=o"          => \$options{"lline"},
+    "lpat=s"           => \$options{"lpat"},
+    "lpatBreak!"       => \$options{"lpatBreak"},
+    "lpatNum=o"        => \$options{"lpatNum"},
+    "nlines|lines=o"   => \$options{"nlines"},
+    "olineends=s"      => \$options{"olineends"},
+    "replace"          => \$options{"replace"},
     "q!"               => \$options{"quiet"},
     "tickInterval=o"   => \$options{"tickInterval"},
     "unicode"          => sub { $options{"iencoding"} = "utf8"; },
@@ -528,7 +539,7 @@ if ($options{"fline"} && $options{"lline"} &&
 
 if ($options{"fline"} && ($options{"fchar"} > $options{"lchar"}) &&
     ($options{"fline"}==$options{"lline"} || $options{"nlines"}==1)) {
-	  die "When --fline = --lline or --nlines = 1, " .
+      die "When --fline = --lline or --nlines = 1, " .
           "-lchar (" . $options{"lchar"} . ") must be > --fchar (" .
           $options{"fchar"} . ").\n";
 }
@@ -537,10 +548,10 @@ if ($options{"iterate"} && ($options{"fchar"} || $options{"lchar"})) {
     die "Don't mix --iterate with --fchar or --lchar.\n";
 }
 if ($options{"nlines"} && ($options{"lline"} || $options{"lpat"})) {
-	die "Can't specify --nlines with either --lline or --lpat.\n";
+    die "Can't specify --nlines with either --lline or --lpat.\n";
 }
 if ($options{"lpat"} && ($options{"lline"} || $options{"lchar"})) {
-	die "Can't specify both --lpat and (--lline (" . $options{"lline"} .
+    die "Can't specify both --lpat and (--lline (" . $options{"lline"} .
         ") or --lchar (" . $options{"lchar"} . ")).\n";
 }
 
@@ -570,7 +581,7 @@ if    ($options{"ilineends"} eq "M") { $/ = chr(13); }
 elsif ($options{"ilineends"} eq "U") { $/ = chr(10); }
 elsif ($options{"ilineends"} eq "D") { $/ = chr(13) . chr(10); }
 else {
-	die "-ilineends, must specify Mac, Dos, or Unix/*nix, not '" .
+    die "-ilineends, must specify Mac, Dos, or Unix/*nix, not '" .
         $options{"ilineends"} . "'.\n";
 }
 
@@ -580,7 +591,7 @@ if    ($options{"olineends"} eq "M") { $newline = chr(13); }
 elsif ($options{"olineends"} eq "U") { $newline = chr(10); }
 elsif ($options{"olineends"} eq "D") { $newline = chr(13) . chr(10); }
 else {
-	die "-olineends must be Mac, Dos, or Unix/*nix, not '" .
+    die "-olineends must be Mac, Dos, or Unix/*nix, not '" .
         $options{"olineends"} . "'.\n";
 }
 
@@ -617,7 +628,7 @@ while (my $file = shift) {
         next;
     }
     $reader = new Reader($file, $options{"iencoding"});
-	if (!$reader) {
+    if (!$reader) {
         warn "Can't open file '$file'.\n";
         next;
     }
@@ -668,12 +679,12 @@ exit;
 ###############################################################################
 #
 sub charOffsetsOnly {
-	bWarn(1, "No line number args, just doing fchar/lchar");
+    bWarn(1, "No line number args, just doing fchar/lchar");
 
     findStartPoint();
     outLine($firstLine);
 
-	my $lastLine = "";
+    my $lastLine = "";
     while (defined (my $rec = $reader->readOneRecord())) {
         my $tell = $reader->{charPos};
         if ($options{"lchar"} && $tell>$options{"lchar"}) { # done
@@ -730,18 +741,18 @@ sub findStartPoint {
     if ($options{"fpat"}) { # scan for first matching line
         bWarn(1, "Seeking fpat /" . $options{"fpat"} .
               "/ #" . $options{"fpatNum"} . "...");
-    	my $gotFpat = 0;
+        my $gotFpat = 0;
         while (defined ($firstLine = $reader->readOneRecord())) {
-    		# bWarn(1,  "Trying '$firstLine'");
-    		if ($firstLine =~ m/$fpatc/) {
+            # bWarn(1,  "Trying '$firstLine'");
+            if ($firstLine =~ m/$fpatc/) {
                 $fpatNumFoundSoFar++;
                 if ($fpatNumFoundSoFar >= $options{"fpatNum"}) {
                     $gotFpat = 1;
                     last;
                 }
             }
-    	}
-    	if ($gotFpat) {
+        }
+        if ($gotFpat) {
             bWarn(1, "Found --fpat /" . $options{"fpat"} .
               "/ #" . $options{"fpatNum"}, $firstLine);
         }
@@ -771,14 +782,14 @@ sub findStartPoint {
     if ($options{"fchar"}) { # fchar *within* line
         bWarn(1, "Seeking fchar " . $options{"fchar"});
         my $flinelen = length($firstLine);
-    	if ($options{"fchar"} > $flinelen) {
+        if ($options{"fchar"} > $flinelen) {
             alogging::eMsg(0, "fline (" . $options{"fline"} .
                 ") too short ($flinelen) for fchar (" .
                 $options{"fchar"} . ").");
-    	}
-    	else {
-    		$firstLine = substr($firstLine,$options{"fchar"}-1);
-    	}
+        }
+        else {
+            $firstLine = substr($firstLine,$options{"fchar"}-1);
+        }
     }
     bWarn(1, "Copy starts at '$firstLine' (line " . $reader->{recnum} . ")");
 } # findStartPoint
@@ -830,30 +841,29 @@ sub copyToEndPoint {
             $rec =~ m/(.*?)($lpatc)(.*$)/;
             my $PRE = $`;
             my $MAT = $&;
+            (!$MAT) || next;
             bWarn(1, "lpat matched /" . $options{"lpat"} . "/", "    $rec");
             warn " Got: $1, $2, $3.\n";
-            if ($MAT) {
-                $lpatFound = 1;
+            $lpatFound = 1;
 
-                if ($options{"lpatBreak"} eq 'INCLUDELINE') {
-                    bWarn(1, "lpatBreak INCLUDELINE");
-                }
-                elsif ($options{"lpatBreak"} eq 'INCLUDEMATCH') {
-                    $rec = ${'PRE'} . ${'MAT'};
-                }
-                elsif ($options{"lpatBreak"} eq 'EXCLUDEMATCH') {
-                    $rec = ${'PRE'};
-                }
-                elsif ($options{"lpatBreak"} eq 'EXCLUDELINE') {
-                    bWarn(1, "lpatBreak EXCLUDELINE");
-                    $rec = "";
-                }
-                else {
-                    die "Bad  --lpatBreak: " . $options{"lpatBreak"} . ".\n";
-                }
-                outPeek();
-                last;
+            if ($options{"lpatBreak"} eq 'INCLUDELINE') {
+                bWarn(1, "lpatBreak INCLUDELINE");
             }
+            elsif ($options{"lpatBreak"} eq 'INCLUDEMATCH') {
+                $rec = ${'PRE'} . ${'MAT'};
+            }
+            elsif ($options{"lpatBreak"} eq 'EXCLUDEMATCH') {
+                $rec = ${'PRE'};
+            }
+            elsif ($options{"lpatBreak"} eq 'EXCLUDELINE') {
+                bWarn(1, "lpatBreak EXCLUDELINE");
+                $rec = "";
+            }
+            else {
+                die "Bad  --lpatBreak: " . $options{"lpatBreak"} . ".\n";
+            }
+            outPeek();
+            last;
         } # lpat
         outLine($rec);
         $ncopied++;
@@ -881,12 +891,12 @@ sub handleLchar {
     my $lastLine = outBack(); # Retrieve last-queued line
     my $llinelen = length($lastLine);
     if ($options{"lchar"} > $llinelen) {
-	    bWarn(0,"Last line is too short for lchar (" .
+        bWarn(0,"Last line is too short for lchar (" .
             $options{"lchar"} . "): $llinelen.");
-	}
-	else {
-	    $lastLine = substr($lastLine,0,$options{"lchar"});
-	}
+    }
+    else {
+        $lastLine = substr($lastLine,0,$options{"lchar"});
+    }
     outLine($lastLine);
 } # handleLchar
 
@@ -947,7 +957,7 @@ sub tick {
 # Seeking backwards is available, but little tested.
 # Code follows for doing character-level i/o, but is presently unused.
 #
-# CF: RecordFile.pm, TabularFormats.pm, splitFiles, EntityManager.pm
+# CF: RecordFile.pm, splitFiles, EntityManager.pm
 #
 # Methods:
 #  $x = new(class, path, encoding)
@@ -986,7 +996,6 @@ my %badEncodings = ( # Only includes ones also in Perl 'Encode'
     "gb12345-raw"   => 1,    # 2-byte
     "gb2312-raw"    => 1,    # 2-byte
     );
-
 
 sub new {
     my ($class, $path, $enc) = @_;
