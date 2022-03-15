@@ -10,7 +10,7 @@ import codecs
 import PowerWalk
 
 __metadata__ = {
-    "title"        : "text2strings.py",
+    "title"        : "text2strings",
     "description"  : "Turn a text file into a Python array of strings",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

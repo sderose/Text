@@ -20,7 +20,7 @@ if PY3:
     def unichr(n): return chr(n)
 
 __metadata__ = {
-    "title"        : "pod2md.py",
+    "title"        : "pod2md",
     "description"  : "Convert perldoc-style POD markup to MarkDown-ish.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

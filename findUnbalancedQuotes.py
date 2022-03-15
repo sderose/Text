@@ -12,7 +12,7 @@ from alogging import ALogger
 lg = ALogger()
 
 __metadata__ = {
-    "title"        : "findUnbalancedQuotes.py",
+    "title"        : "findUnbalancedQuotes",
     "description"  : "Report lines with odd quotation or indentation patterns.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
@@ -149,7 +149,7 @@ escapedExpr = re.compile(r"""\\[%s]""" % (allQuoteChars))
 def tryOneItem(path):
     """Try to open a file (or directory, if -r is set).
     """
-    lg.hMsg(1, "Starting item '%s'" % (path))
+    lg.info1("====Starting item '%s'" % (path))
     recnum = 0
     if (not os.path.exists(path)):
         lg.error("Couldn't find '%s'." % (path))

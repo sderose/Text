@@ -11,7 +11,7 @@ import re
 import codecs
 
 __metadata__ = {
-    "title"        : "annotsToHTML.py",
+    "title"        : "annotsToHTML",
     "description"  : "Get rid of IOBxyz notation.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

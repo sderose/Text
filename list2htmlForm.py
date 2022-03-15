@@ -9,7 +9,7 @@ import re
 import argparse
 
 __metadata__ = {
-    'title'        : "list2htmlForm.py",
+    'title'        : "list2htmlForm",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
     'type'         : "http://purl.org/dc/dcmitype/Software",

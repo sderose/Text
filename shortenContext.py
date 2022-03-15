@@ -12,7 +12,7 @@ import codecs
 from PowerWalk import PowerWalk
 
 __metadata__ = {
-    "title"        : "shortenContext.py",
+    "title"        : "shortenContext",
     "description"  : "Trim lines to just the surrounding of a regex match.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

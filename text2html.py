@@ -14,7 +14,7 @@ from alogging import ALogger
 lg = ALogger(1)
 
 __metadata__ = {
-    "title"        : "text2html.py",
+    "title"        : "text2html",
     "description"  : "Convert simple text layouts to HTML.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

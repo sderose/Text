@@ -11,7 +11,7 @@ import re
 from time import time
 
 __metadata__ = {
-    "title"        : "PdfStupidityFix.py",
+    "title"        : "PdfStupidityFix",
     "description"  : "Make spacing, hyphenation, etc. better.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
@@ -24,6 +24,146 @@ __metadata__ = {
 }
 __version__ = __metadata__["modified"]
 
+# Define samples of text as obtained from various viewers, for use in help text and
+# as test data.
+#
+rawSample = """
+  SENSE2VEC - A FAST AND ACCURATE METHOD
+  FOR  WORD SENSE DISAMBIGUATION IN
+  NEURAL WORD EMBEDDINGS.
+
+  Andrew Trask & Phil Michalak & John Liu
+  Digital Reasoning Systems, Inc.
+  Nashville, TN 37212, USA
+  {andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
+
+                                  ABSTRACT
+
+  Neural word representations have proven useful in Natural Language Processing
+  (NLP) tasks due to their ability to efficiently model complex semantic and syn-
+  tactic word relationships.  However, most techniques model only one representa-
+  tion per word, despite the fact that a single word can have multiple meanings or
+  ”senses”.  Some techniques model words by using multiple vectors that are clus-
+  tered based on context.  However, recent neural approaches rarely focus on the
+  application to a consuming NLP algorithm.  Furthermore, the training process of
+  recent word-sense models is expensive relative to single-sense embedding pro-
+  cesses.  This paper presents a novel approach which addresses these concerns by
+  modeling multiple embeddings for each word based on supervised disambigua-
+  tion, which provides a fast and accurate way for a consuming NLP model to select
+  a sense-disambiguated embedding.  We demonstrate that these embeddings can
+  disambiguate both contrastive senses such as nominal and verbal senses as well
+  as nuanced senses such as sarcasm.  We further evaluate Part-of-Speech disam-
+  biguated embeddings on neural dependency parsing, yielding a greater than 8%
+  average error reduction in unlabeled attachment scores across 6 languages.
+"""
+
+firefoxSample = """
+SENSE2VEC-A FAST AND ACCURATE METHODFOR  WORD SENSE DISAMBIGUATION INNEURAL WORD EMBEDDINGS.Andrew Trask & Phil Michalak & John LiuDigital Reasoning Systems, Inc.Nashville, TN 37212, USA{andrew.trask,phil.michalak,john.liu}@digitalreasoning.comABSTRACTNeural word representations have proven useful in Natural Language Processing(NLP) tasks due to their ability to efficiently model complex semantic and syn-tactic word relationships.  However, most techniques model only one representa-tion per word, despite the fact that a single word can have multiple meanings or”senses”.  Some techniques model words by using multiple vectors that are clus-tered based on context.  However, recent neural approaches rarely focus on theapplication to a consuming NLP algorithm.  Furthermore, the training process ofrecent word-sense models is expensive relative to single-sense embedding pro-cesses.  This paper presents a novel approach which addresses these concerns bymodeling multiple embeddings for each word based on supervised disambigua-tion, which provides a fast and accurate way for a consuming NLP model to selecta sense-disambiguated embedding.  We demonstrate that these embeddings candisambiguate both contrastive senses such as nominal and verbal senses as wellas nuanced senses such as sarcasm.  We further evaluate Part-of-Speech disam-biguated embeddings on neural dependency parsing, yielding a greater than 8%average error reduction in unlabeled attachment scores across 6 languages.
+"""
+
+safariSample = """
+SENSE2VEC - A FAST AND ACCURATE METHOD FOR WORD SENSE DISAMBIGUATION IN NEURAL WORD EMBEDDINGS.
+Andrew Trask & Phil Michalak & John Liu
+Digital Reasoning Systems, Inc.
+Nashville, TN 37212, USA {andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
+ABSTRACT
+Neural word representations have proven useful in Natural Language Processing (NLP) tasks due to their ability to efficiently model complex semantic and syn- tactic word relationships. However, most techniques model only one representa- tion per word, despite the fact that a single word can have multiple meanings or ”senses”. Some techniques model words by using multiple vectors that are clus- tered based on context. However, recent neural approaches rarely focus on the application to a consuming NLP algorithm. Furthermore, the training process of recent word-sense models is expensive relative to single-sense embedding pro- cesses. This paper presents a novel approach which addresses these concerns by modeling multiple embeddings for each word based on supervised disambigua- tion, which provides a fast and accurate way for a consuming NLP model to select a sense-disambiguated embedding. We demonstrate that these embeddings can disambiguate both contrastive senses such as nominal and verbal senses as well as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disam- biguated embeddings on neural dependency parsing, yielding a greater than 8% average error reduction in unlabeled attachment scores across 6 languages.
+"""
+
+chromeSample = """
+SENSE2VEC - A FAST AND ACCURATE METHOD
+FOR WORD SENSE DISAMBIGUATION IN
+NEURAL WORD EMBEDDINGS.
+Andrew Trask & Phil Michalak & John Liu
+Digital Reasoning Systems, Inc.
+Nashville, TN 37212, USA
+{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
+ABSTRACT
+Neural word representations have proven useful in Natural Language Processing
+(NLP) tasks due to their ability to efficiently model complex semantic and syntactic word relationships. However, most techniques model only one representation per word, despite the fact that a single word can have multiple meanings or
+”senses”. Some techniques model words by using multiple vectors that are clustered based on context. However, recent neural approaches rarely focus on the
+application to a consuming NLP algorithm. Furthermore, the training process of
+recent word-sense models is expensive relative to single-sense embedding processes. This paper presents a novel approach which addresses these concerns by
+modeling multiple embeddings for each word based on supervised disambiguation, which provides a fast and accurate way for a consuming NLP model to select
+a sense-disambiguated embedding. We demonstrate that these embeddings can
+disambiguate both contrastive senses such as nominal and verbal senses as well
+as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated embeddings on neural dependency parsing, yielding a greater than 8%
+average error reduction in unlabeled attachment scores across 6 languages.
+"""
+
+operaSample = """
+SENSE2VEC - A FAST AND ACCURATE METHOD
+FOR WORD SENSE DISAMBIGUATION IN
+NEURAL WORD EMBEDDINGS.
+Andrew Trask & Phil Michalak & John Liu
+Digital Reasoning Systems, Inc.
+Nashville, TN 37212, USA
+{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
+ABSTRACT
+Neural word representations have proven useful in Natural Language Processing
+(NLP) tasks due to their ability to efficiently model complex semantic and syntactic word relationships. However, most techniques model only one representation per word, despite the fact that a single word can have multiple meanings or
+”senses”. Some techniques model words by using multiple vectors that are clustered based on context. However, recent neural approaches rarely focus on the
+application to a consuming NLP algorithm. Furthermore, the training process of
+recent word-sense models is expensive relative to single-sense embedding processes. This paper presents a novel approach which addresses these concerns by
+modeling multiple embeddings for each word based on supervised disambiguation, which provides a fast and accurate way for a consuming NLP model to select
+a sense-disambiguated embedding. We demonstrate that these embeddings can
+disambiguate both contrastive senses such as nominal and verbal senses as well
+as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated embeddings on neural dependency parsing, yielding a greater than 8%
+average error reduction in unlabeled attachment scores across 6 languages.
+"""
+
+acrobatSample = """
+SENSE2VEC - A FAST AND ACCURATE METHOD
+FOR WORD SENSE DISAMBIGUATION IN
+NEURAL WORD EMBEDDINGS.
+Andrew Trask & Phil Michalak & John Liu
+Digital Reasoning Systems, Inc.
+Nashville, TN 37212, USA
+fandrew.trask,phil.michalak,john.liug@digitalreasoning.com
+ABSTRACT
+Neural word representations have proven useful in Natural Language Processing
+(NLP) tasks due to their ability to efficiently model complex semantic and syntactic
+word relationships. However, most techniques model only one representation
+per word, despite the fact that a single word can have multiple meanings or
+”senses”. Some techniques model words by using multiple vectors that are clustered
+based on context. However, recent neural approaches rarely focus on the
+application to a consuming NLP algorithm. Furthermore, the training process of
+recent word-sense models is expensive relative to single-sense embedding processes.
+This paper presents a novel approach which addresses these concerns by
+modeling multiple embeddings for each word based on supervised disambiguation,
+which provides a fast and accurate way for a consuming NLP model to select
+a sense-disambiguated embedding. We demonstrate that these embeddings can
+disambiguate both contrastive senses such as nominal and verbal senses as well
+as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated
+embeddings on neural dependency parsing, yielding a greater than 8%
+average error reduction in unlabeled attachment scores across 6 languages.
+"""
+
+previewSample = """
+SENSE2VEC - A FAST AND ACCURATE METHOD FOR WORD SENSE DISAMBIGUATION
+IN NEURAL WORD EMBEDDINGS. Andrew Trask & Phil Michalak & John Liu
+Digital Reasoning Systems, Inc. Nashville, TN 37212, USA
+{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com ABSTRACT
+Neural word representations have proven useful in Natural Language
+Processing (NLP) tasks due to their ability to efficiently model
+complex semantic and syn- tactic word relationships. However, most
+techniques model only one representa- tion per word, despite the fact
+that a single word can have multiple meanings or ”senses”. Some
+techniques model words by using multiple vectors that are clus- tered
+based on context. However, recent neural approaches rarely focus on
+the application to a consuming NLP algorithm. Furthermore, the
+training process of recent word-sense models is expensive relative to
+single-sense embedding pro- cesses. This paper presents a novel
+approach which addresses these concerns by modeling multiple
+embeddings for each word based on supervised disambigua- tion, which
+provides a fast and accurate way for a consuming NLP model to select a
+sense-disambiguated embedding. We demonstrate that these embeddings
+can disambiguate both contrastive senses such as nominal and verbal
+senses as well as nuanced senses such as sarcasm. We further evaluate
+Part-of-Speech disam- biguated embeddings on neural dependency
+parsing, yielding a greater than 8% average error reduction in
+unlabeled attachment scores across 6 languages.
+"""
 
 descr = """
 =Description=
@@ -65,34 +205,7 @@ selecting something often produces text such as shown below
 This is edited to show line-breaks, hyphenation, and spacing comparable to
 what you actually see:
 
-  SENSE2VEC - A FAST AND ACCURATE METHOD
-  FOR  WORD SENSE DISAMBIGUATION IN
-  NEURAL WORD EMBEDDINGS.
-
-  Andrew Trask & Phil Michalak & John Liu
-  Digital Reasoning Systems, Inc.
-  Nashville, TN 37212, USA
-  {andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
-
-                                  ABSTRACT
-
-  Neural word representations have proven useful in Natural Language Processing
-  (NLP) tasks due to their ability to efficiently model complex semantic and syn-
-  tactic word relationships.  However, most techniques model only one representa-
-  tion per word, despite the fact that a single word can have multiple meanings or
-  ”senses”.  Some techniques model words by using multiple vectors that are clus-
-  tered based on context.  However, recent neural approaches rarely focus on the
-  application to a consuming NLP algorithm.  Furthermore, the training process of
-  recent word-sense models is expensive relative to single-sense embedding pro-
-  cesses.  This paper presents a novel approach which addresses these concerns by
-  modeling multiple embeddings for each word based on supervised disambigua-
-  tion, which provides a fast and accurate way for a consuming NLP model to select
-  a sense-disambiguated embedding.  We demonstrate that these embeddings can
-  disambiguate both contrastive senses such as nominal and verbal senses as well
-  as nuanced senses such as sarcasm.  We further evaluate Part-of-Speech disam-
-  biguated embeddings on neural dependency parsing, yielding a greater than 8%
-  average error reduction in unlabeled attachment scores across 6 languages.
-
+%s
 
 ===Firefox 81.0.1 with built-in PDF viewing===
 
@@ -101,8 +214,7 @@ line breaks and even large swathes of whitespace (e.g. around ABSTRACT). It
 also turns soft hyphens hard, and keeps multiple spaces. It all ends up as a
 single line.
 
-SENSE2VEC-A FAST AND ACCURATE METHODFOR  WORD SENSE DISAMBIGUATION INNEURAL WORD EMBEDDINGS.Andrew Trask & Phil Michalak & John LiuDigital Reasoning Systems, Inc.Nashville, TN 37212, USA{andrew.trask,phil.michalak,john.liu}@digitalreasoning.comABSTRACTNeural word representations have proven useful in Natural Language Processing(NLP) tasks due to their ability to efficiently model complex semantic and syn-tactic word relationships.  However, most techniques model only one representa-tion per word, despite the fact that a single word can have multiple meanings or”senses”.  Some techniques model words by using multiple vectors that are clus-tered based on context.  However, recent neural approaches rarely focus on theapplication to a consuming NLP algorithm.  Furthermore, the training process ofrecent word-sense models is expensive relative to single-sense embedding pro-cesses.  This paper presents a novel approach which addresses these concerns bymodeling multiple embeddings for each word based on supervised disambigua-tion, which provides a fast and accurate way for a consuming NLP model to selecta sense-disambiguated embedding.  We demonstrate that these embeddings candisambiguate both contrastive senses such as nominal and verbal senses as wellas nuanced senses such as sarcasm.  We further evaluate Part-of-Speech disam-biguated embeddings on neural dependency parsing, yielding a greater than 8%average error reduction in unlabeled attachment scores across 6 languages.
-
+%s
 
 ===Safari 14.0===
 
@@ -111,12 +223,7 @@ out soft hyphens (and oddly leaves a space after "disambigua-").
 Granted, not quite all line-final hyphens are soft -- but the odds
 are good, especially if you use a dictionary (as this script does).
 
-SENSE2VEC - A FAST AND ACCURATE METHOD FOR WORD SENSE DISAMBIGUATION IN NEURAL WORD EMBEDDINGS.
-Andrew Trask & Phil Michalak & John Liu
-Digital Reasoning Systems, Inc.
-Nashville, TN 37212, USA {andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
-ABSTRACT
-Neural word representations have proven useful in Natural Language Processing (NLP) tasks due to their ability to efficiently model complex semantic and syn- tactic word relationships. However, most techniques model only one representa- tion per word, despite the fact that a single word can have multiple meanings or ”senses”. Some techniques model words by using multiple vectors that are clus- tered based on context. However, recent neural approaches rarely focus on the application to a consuming NLP algorithm. Furthermore, the training process of recent word-sense models is expensive relative to single-sense embedding pro- cesses. This paper presents a novel approach which addresses these concerns by modeling multiple embeddings for each word based on supervised disambigua- tion, which provides a fast and accurate way for a consuming NLP model to select a sense-disambiguated embedding. We demonstrate that these embeddings can disambiguate both contrastive senses such as nominal and verbal senses as well as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disam- biguated embeddings on neural dependency parsing, yielding a greater than 8% average error reduction in unlabeled attachment scores across 6 languages.
+%s
 
 However, this is inconsistent. A US Patent document I loaded, gets all spaces
 removed (except ones for end-of-line, even when there's a line-ending hyphen,
@@ -142,108 +249,27 @@ ityofsuchfeatures/elementsbeingwithinthescopeofthe descriptionandclaims.
 Chrome seems better at removing soft hyphens and excess space.
 It keeps more line breaks than Safari, some of which seem odd. It seems to
 think if the previous visual lines ends with a non-letter, or the next begins
-with a non-letter, that's a paragraph break? For example, after "8%" and
+with a non-letter, that's a paragraph break? For example, after "8%%" and
 before a quotation mark. But still, why not join up "the\\napplication"?
 
-SENSE2VEC - A FAST AND ACCURATE METHOD
-FOR WORD SENSE DISAMBIGUATION IN
-NEURAL WORD EMBEDDINGS.
-Andrew Trask & Phil Michalak & John Liu
-Digital Reasoning Systems, Inc.
-Nashville, TN 37212, USA
-{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
-ABSTRACT
-Neural word representations have proven useful in Natural Language Processing
-(NLP) tasks due to their ability to efficiently model complex semantic and syntactic word relationships. However, most techniques model only one representation per word, despite the fact that a single word can have multiple meanings or
-”senses”. Some techniques model words by using multiple vectors that are clustered based on context. However, recent neural approaches rarely focus on the
-application to a consuming NLP algorithm. Furthermore, the training process of
-recent word-sense models is expensive relative to single-sense embedding processes. This paper presents a novel approach which addresses these concerns by
-modeling multiple embeddings for each word based on supervised disambiguation, which provides a fast and accurate way for a consuming NLP model to select
-a sense-disambiguated embedding. We demonstrate that these embeddings can
-disambiguate both contrastive senses such as nominal and verbal senses as well
-as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated embeddings on neural dependency parsing, yielding a greater than 8%
-average error reduction in unlabeled attachment scores across 6 languages.
-
+%s
 
 ===Opera===
 
 Opera seems essentially the same as Chrome for this.
 
-SENSE2VEC - A FAST AND ACCURATE METHOD
-FOR WORD SENSE DISAMBIGUATION IN
-NEURAL WORD EMBEDDINGS.
-Andrew Trask & Phil Michalak & John Liu
-Digital Reasoning Systems, Inc.
-Nashville, TN 37212, USA
-{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com
-ABSTRACT
-Neural word representations have proven useful in Natural Language Processing
-(NLP) tasks due to their ability to efficiently model complex semantic and syntactic word relationships. However, most techniques model only one representation per word, despite the fact that a single word can have multiple meanings or
-”senses”. Some techniques model words by using multiple vectors that are clustered based on context. However, recent neural approaches rarely focus on the
-application to a consuming NLP algorithm. Furthermore, the training process of
-recent word-sense models is expensive relative to single-sense embedding processes. This paper presents a novel approach which addresses these concerns by
-modeling multiple embeddings for each word based on supervised disambiguation, which provides a fast and accurate way for a consuming NLP model to select
-a sense-disambiguated embedding. We demonstrate that these embeddings can
-disambiguate both contrastive senses such as nominal and verbal senses as well
-as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated embeddings on neural dependency parsing, yielding a greater than 8%
-average error reduction in unlabeled attachment scores across 6 languages.
-
+%s
 
 ===Acrobat Reader===
 
 Similar to Chrome, but drops braces from author email address list, and
 inserts "g" before the @ (?). They also break lines quite differently
 
-SENSE2VEC - A FAST AND ACCURATE METHOD
-FOR WORD SENSE DISAMBIGUATION IN
-NEURAL WORD EMBEDDINGS.
-Andrew Trask & Phil Michalak & John Liu
-Digital Reasoning Systems, Inc.
-Nashville, TN 37212, USA
-fandrew.trask,phil.michalak,john.liug@digitalreasoning.com
-ABSTRACT
-Neural word representations have proven useful in Natural Language Processing
-(NLP) tasks due to their ability to efficiently model complex semantic and syntactic
-word relationships. However, most techniques model only one representation
-per word, despite the fact that a single word can have multiple meanings or
-”senses”. Some techniques model words by using multiple vectors that are clustered
-based on context. However, recent neural approaches rarely focus on the
-application to a consuming NLP algorithm. Furthermore, the training process of
-recent word-sense models is expensive relative to single-sense embedding processes.
-This paper presents a novel approach which addresses these concerns by
-modeling multiple embeddings for each word based on supervised disambiguation,
-which provides a fast and accurate way for a consuming NLP model to select
-a sense-disambiguated embedding. We demonstrate that these embeddings can
-disambiguate both contrastive senses such as nominal and verbal senses as well
-as nuanced senses such as sarcasm. We further evaluate Part-of-Speech disambiguated
-embeddings on neural dependency parsing, yielding a greater than 8%
-average error reduction in unlabeled attachment scores across 6 languages.
+%s
 
-==Apple Preview (11.0)==
+===Apple Preview (11.0)===
 
-SENSE2VEC - A FAST AND ACCURATE METHOD FOR WORD SENSE DISAMBIGUATION
-IN NEURAL WORD EMBEDDINGS. Andrew Trask & Phil Michalak & John Liu
-Digital Reasoning Systems, Inc. Nashville, TN 37212, USA
-{andrew.trask,phil.michalak,john.liu}@digitalreasoning.com ABSTRACT
-Neural word representations have proven useful in Natural Language
-Processing (NLP) tasks due to their ability to efficiently model
-complex semantic and syn- tactic word relationships. However, most
-techniques model only one representa- tion per word, despite the fact
-that a single word can have multiple meanings or ”senses”. Some
-techniques model words by using multiple vectors that are clus- tered
-based on context. However, recent neural approaches rarely focus on
-the application to a consuming NLP algorithm. Furthermore, the
-training process of recent word-sense models is expensive relative to
-single-sense embedding pro- cesses. This paper presents a novel
-approach which addresses these concerns by modeling multiple
-embeddings for each word based on supervised disambigua- tion, which
-provides a fast and accurate way for a consuming NLP model to select a
-sense-disambiguated embedding. We demonstrate that these embeddings
-can disambiguate both contrastive senses such as nominal and verbal
-senses as well as nuanced senses such as sarcasm. We further evaluate
-Part-of-Speech disam- biguated embeddings on neural dependency
-parsing, yielding a greater than 8% average error reduction in
-unlabeled attachment scores across 6 languages.
+%s
 
 
 =The Lexicon=
@@ -263,7 +289,7 @@ nearly perfect, but it's pretty good, and reasonably fast.
 The default dictionary file has these characteristics:
 
 * It is all lowercase except for initial-capital proper names.
-Thus no "1st", "M*A*S*H", "4x4", "100%", "it's", "3/4", etc.
+Thus no "1st", "M*A*S*H", "4x4", "100%%", "it's", "3/4", etc.
 
 * Only two entries ("Jean-Christophe" and "Jean-Pierre") have characters
 other than [a-zA-Z].
@@ -340,6 +366,9 @@ and use that to inform a replacement(s).
 Recover correct inflections via Wiktionary or various other means, and make
 a better word-list.
 
+Hook up to Zotero to fix titles, abstracts, etc.?
+See [https://pyzotero.readthedocs.io/en/latest].
+
 
 =History=
 
@@ -358,7 +387,7 @@ or [https://github.com/sderose].
 
 
 =Options=
-"""
+""" % (rawSample, firefoxSample, safariSample, chromeSample, operaSample, acrobatSample, previewSample)
 
 
 ###############################################################################
@@ -468,7 +497,7 @@ lex = {}
 # Load and query a list of words, typically the usual *nix list.
 #
 class Lexicon(dict):
-    def __init__(self, path, ignoreCase=True):
+    def __init__(self, path:str, ignoreCase:bool=True):
         super(Lexicon, self).__init__()
         self.ignoreCase = ignoreCase
         startTime = time()
@@ -480,7 +509,7 @@ class Lexicon(dict):
         warning1("Loaded %d words from '%s' in %6.4f seconds." %
             (len(self), path, time()-startTime))
 
-    def isWord(self, w):
+    def isWord(self, w:str) -> bool:
         """Check if the word, or a predictably-missing possible variant, is in
         the Lexicon. This over-accepts, because it tries regular endings even
         though they might not be correct. For example, "zebraing" counts.
@@ -509,7 +538,7 @@ class Lexicon(dict):
 
 ###############################################################################
 #
-def doAllFiles(pathlist):
+def doAllFiles(pathlist:list) -> None:
     for path in pathlist:
         if (os.path.isdir(path)):
             if (not args.recursive): continue
@@ -519,10 +548,7 @@ def doAllFiles(pathlist):
         else:
             doOneFile(path)
 
-def closeup(mat):
-    return re.sub(" ", "", mat.group(1))
-
-def doOneFile(path):
+def doOneFile(path:str) -> None:
     """Read and deal with one individual file.
     """
     if (not path):
@@ -577,10 +603,10 @@ def doOneFile(path):
             buf += token
         print(re.sub(r"\s\s+", " ", buf))
 
-def closeUp(mat):
+def closeUp(mat:re.Match) -> str:
     return re.sub(r"(\S) ", "\\1", mat.group(1))
 
-def multiBreak(s):
+def multiBreak(s:str):
     """Try to break a spaceless span into many words.
     This is O(n**2) on sLen, but at least not O(2**n).
     """
@@ -609,7 +635,8 @@ def multiBreak(s):
     findCompleteChainsStartingAt(s, byStarts, st=0)
 
 solutions = []
-def findCompleteChainsStartingAt(s, byStarts:list, st:int, soFar:str=""):
+
+def findCompleteChainsStartingAt(s:str, byStarts:list, st:int, soFar:str=""):
     startHere = byStarts[st]
     if (len(startHere) == 0):
         warning(0, "FAIL")

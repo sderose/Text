@@ -10,7 +10,7 @@ import codecs
 from PowerWalk import PowerWalk, PWType
 
 __metadata__ = {
-    "title"        : "unescpeString.py",
+    "title"        : "unescpeString",
     "description"  : "Unbackslash stuff, as for a Python string.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

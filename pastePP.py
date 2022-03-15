@@ -8,7 +8,7 @@ import sys
 import codecs
 
 __metadata__ = {
-    "title"        : "pastePP.py",
+    "title"        : "pastePP",
     "description"  : "Upgraded form of *nix 'paste'.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

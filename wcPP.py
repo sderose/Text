@@ -13,7 +13,7 @@ from collections import namedtuple
 from PowerWalk import PowerWalk, PWType
 
 __metadata__ = {
-    "title"        : "wcPP.py",
+    "title"        : "wcPP",
     "description"  : "An enhance 'wc'.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

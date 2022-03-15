@@ -22,10 +22,10 @@ from xml.dom import minidom
 from xml.dom.minidom import Node  #, Document, Element
 
 #from strBuf import StrBuf
-from DomExtensions import escapeXml  #, escapeCDATA, escapeComment, escapePI, escapeXmlAttribute
+from DomExtensions.XMLStrings import escapeXml  #, escapeCDATA, escapeComment, escapePI, escapeXmlAttribute
 
 __metadata__ = {
-    "title"        : "theScroll.py",
+    "title"        : "theScroll",
     "description"  : "An append-only document version space.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

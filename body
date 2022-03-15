@@ -20,7 +20,11 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-03-23",
+<<<<<<< HEAD
     'modified'     => "2021-12-24",
+=======
+    'modified'     => "2022-02-25",
+>>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -178,7 +182,7 @@ is specified. If it is, then a scan is done for new starting and ending points,
 beginning with the first data not included in the body part found as
 just described (which makes sense mainly for pattern searches rather than
 offsets). Lather, rinse, repeat. In this case, the value of
-I<--insert> is placed as a separate line between the found blocks.
+I<--insert> plus a newline is placed as a separate line between the found blocks.
 
 
 =head1 Options
@@ -242,16 +246,18 @@ Assume the input file is in this character encoding.
 
 Input line-breaks as for Unix (default), Mac, or DOS.
 
-=item * B<--iterate> OR I<-g> (not yet supported)
-
-After finding an entire start...end block as described above, repeat the
-whole process to find another, and another. Issue them all, with the
-value of I<--insert> inserted as a separate line between them.
-
 =item * B<--insert> I<s>
 
 With I<--iterate>, the value of this option (default: "") is inserted between
 separate matches, as a separate line.
+Known bug: you cannot use \\n, etc. in I<s>.
+
+=item * B<--iterate> OR I<-g> (not yet supported)
+
+[experimental/unfinished].
+After finding an entire start...end block as described above, repeat the
+whole process to find another, and another. Issue them all, with the
+value of I<--insert> inserted as a separate line between them.
 
 =item * B<--lchar> I<n>
 
@@ -298,10 +304,6 @@ Output line-breaks as for Unix (default), Mac, or DOS.
 
 Suppress most messages.
 
-=item * B<--tickInterval> I<n>
-
-Report progress after every I<n> records are read.
-
 =item * B<--unicode>
 
 Synonym for I<--iencoding utf8>.
@@ -333,8 +335,12 @@ I<any> of the ending conditions is met. This might not always be as desired.
 
 Fix STDIN!!!
 
+Does not handle \\n, etc. in I<--insert> strings.
+
 
 =head1 To do
+
+Finish --iterate.
 
 Add a way to partition file(s) into multiple, such as extracting all the
 n-level <div>s from HTML, all the classes from Python, etc.
@@ -439,7 +445,13 @@ C<RecordFile.pm> -- similar to internal 'Reader' package.
 
 =item * 2021-06-25: Clean up.
 
+<<<<<<< HEAD
 =item * 2021-12-24: Fix reporting bug with --fpat.
+=======
+=item * 2022-02-25ff: Fix bugs handling stdin. Drop --tickInterval.
+Working on --iterate and --insert.
+
+>>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
 
 =back
 
@@ -469,8 +481,8 @@ my %options = (
     "fpatNum"      => 1,         # Which instance of fpat counts
     "iencoding"    => "",
     "ilineends"    => "U",
-    "iterate|g"    => 0,         # Find start/end points repeatedly.
-    "insert"       => '--',      # Put this between --iterate blocks.
+    "iterate"      => 0,         # Find start/end points repeatedly.
+    "insert"       => '=' x 79,  # Put this between --iterate blocks.
     "lline"        => 0,         # Last line to retrieve
     "lchar"        => 0,         # Last char to copy
     "lpat"         => "",        # Regex for last line to retrieve
@@ -480,7 +492,6 @@ my %options = (
     "nlines"       => 0,         # Number of lines to retrieve
     "quiet"        => 0,
     "replace"      => 0,
-    "tickInterval" => 100000,
     "verbose"      => 0,
     );
 
@@ -492,7 +503,13 @@ my %getoptHash = (
     "fpatNum=o"        => \$options{"fpatNum"},
     "h|help"           => sub { system "perldoc $0"; exit; },
     "iencoding=s"      => \$options{"iencoding"},
+<<<<<<< HEAD
     "ilineends=s"      => \$options{"ilineends"},
+=======
+	"ilineends=s"      => \$options{"ilineends"},
+	"insert=s"         => \$options{"insert"},
+	"iterate|g!"       => \$options{"iterate"},
+>>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
     "listEncodings"    => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
@@ -516,7 +533,6 @@ my %getoptHash = (
     "olineends=s"      => \$options{"olineends"},
     "replace"          => \$options{"replace"},
     "q!"               => \$options{"quiet"},
-    "tickInterval=o"   => \$options{"tickInterval"},
     "unicode"          => sub { $options{"iencoding"} = "utf8"; },
     "v+"               => \$options{"verbose"},
     "version"          => sub {
@@ -525,7 +541,7 @@ my %getoptHash = (
     );
 
 Getopt::Long::Configure ("ignore_case");
-GetOptions(%getoptHash) || dieCleanly("Bad options.");
+GetOptions(%getoptHash) || die("Bad options.");
 sjdUtils::setVerbose($options{"verbose"});
 
 ($options{"replace"}) && die
@@ -597,12 +613,6 @@ else {
 
 if (scalar @ARGV > 1) { die "Extra arguments: " . join("|",@ARGV) ."\n"; }
 
-if (!$ARGV[0]) {
-    push @ARGV, "-";
-    (-t STDIN) && (!$options{"quiet"}) &&
-        vMsg(0,"Waiting on STDIN...");
-}
-
 if ($options{"iencoding"} ne "") {
     print "";
     binmode(STDOUT, ":encoding(" . $options{"iencoding"} . ")");
@@ -612,7 +622,7 @@ if ($options{"iencoding"} ne "") {
 ################################################################################
 # Main
 #
-my $reader    = undef;
+my $reader;
 my $firstLine = "";
 my $fileCount = 0;
 
@@ -622,66 +632,106 @@ my $fpatc = ($options{"fpat"}) ? qr/$options{"fpat"}/ : undef;
 my $lpatc = ($options{"lpat"}) ? qr/$options{"lpat"}/ : undef;
 my $recordSepc = ($options{"recordSep"}) ? qr/$options{"recordSep"}/ : undef;
 
-while (my $file = shift) {
-    if (!-f $file) {
-        warn "\n******* Can't find file '$file'.\n\n";
-        next;
+if ($ARGV[0]) {
+    while (my $file = shift) {
+        if (!-f $file) {
+            warn "\n******* Can't find file '$file'.\n\n";
+            next;
+        }
+        $reader = new Reader($file, $options{"iencoding"});
+        if (!$reader) {
+            warn "Can't open file '$file'.\n";
+            next;
+        }
+        $fileCount++;
+        doOneFile($reader);
+        $reader->close();
     }
+}
+else {
+    if (-t STDIN && !$options{"quiet"}) {
+        vMsg(0,"Waiting on STDIN...");
+    }
+    $reader = new Reader("-",  $options{"iencoding"});
+    doOneFile($reader);
+    $reader->close();
+}
+
+if (!$options{"quiet"}) {
+    if (!$fileCount) {
+        warn "body: No files found.\n";
+    }
+<<<<<<< HEAD
     $reader = new Reader($file, $options{"iencoding"});
     if (!$reader) {
         warn "Can't open file '$file'.\n";
         next;
+=======
+    elsif (-t STDOUT) {
+        bWarn(0,"body: Done after $fileCount file(s).");
+>>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
     }
-    $fileCount++;
+}
 
+
+###############################################################################
+#
+sub doOneFile {
+    my $nBlocks = 0;
     # If no line argument, interpret chars as raw file offsets.
     #
     $firstLine = "";
     if ($options{"fline"}==0 && $options{"lline"}==0 &&
         $options{"fpat"} eq "" && $options{"lpat"} eq "") {
         charOffsetsOnly();
+        $nBlocks++;
     }
     elsif ($options{"iterate"}) {
-        my $nBlocks = 0;
-        while (1) {
-            findStartPoint();
-            copyToEndPoint();
-            if ($options{"lchar"}) {
-                handleLchar();
+        my $rc = findStartPoint("SKIP");
+        while ($rc) {
+            if (haveEndPointOption()) {
+                copyToEndPoint();
+                if ($options{"lchar"}) {
+                    handleLchar();
+                }
+                outLine($options{'insert'} . "\n");
+                $rc = findStartPoint("SKIP");
             }
-            print($options{'insert'} . "\n");
+            else {
+                outLine($options{'insert'} . "\n");
+                $rc = findStartPoint("COPY");
+            }
             $nBlocks++;
         }
     }
     else {
-        findStartPoint();
-        copyToEndPoint();
-        if ($options{"lchar"}) {
-            handleLchar();
+        my $rc = findStartPoint("SKIP");
+        if ($rc != 0) {
+            copyToEndPoint();
+            if ($options{"lchar"}) {
+                handleLchar();
+            }
+            $nBlocks = 1;
         }
     }
+    
+    if  ($nBlocks == 0) {
+        bWarn(0, "-fpat /" . $options{"fpat"} . "/ #" .
+            $options{"fpatNum"} . " not found by EOF, nothing copied.");
+    }
     outFinalize();
-    $reader->close();
-} # per file
-
-if (!$options{"quiet"}) {
-    if (!$fileCount) {
-        warn "body: No files found.\n";
-    }
-    elsif (-t STDOUT) {
-        bWarn(0,"body: Done after $fileCount file(s).");
-    }
+    return $nBlocks;
 }
 
-exit;
-
+sub haveEndPointOption {
+}
 
 ###############################################################################
 #
 sub charOffsetsOnly {
     bWarn(1, "No line number args, just doing fchar/lchar");
 
-    findStartPoint();
+    my $rc = findStartPoint();
     outLine($firstLine);
 
     my $lastLine = "";
@@ -703,16 +753,20 @@ sub charOffsetsOnly {
 # Find the place to begin copying at.
 #
 # Upon returning:
+#     The return value will be 0 on fail (EOF), else 1.
 #     The first line or partial-line to be fetched is in $firstLine.
 #     It will be a complete line unless --fchar was specified, in which case
-#       any not-needed beginning part of it will have been removed.
+#         any not-needed beginning part of it will have been removed.
 #     No actual output will have been done.
 #
 sub findStartPoint {
+    my ($copyOrSkip) = @_;
+    my $copy = ($copyOrSkip eq "COPY");
+    
     # If *only* --fchar for start, it's relative to whole file.
     #
     my $fpatNumFoundSoFar = 0;
-    my $offset = 1; # unlike seek()!
+    my $offset = 1;  # unlike seek()!
     if ($options{"fchar"} && !$options{"fline"} && !$options{"fpat"}) {
         while (defined ($firstLine = $reader->readOneRecord())) {
             my $extras = $reader->{charPos} - $options{"fchar"};
@@ -720,9 +774,10 @@ sub findStartPoint {
                 $firstLine = substr($firstLine,$extras);
                 last;
             }
+            ($copy) && outLine($firstLine);
         }
         bWarn(1, "first line or part: '$firstLine'");
-        return;
+        return 1;
     }
 
     # Otherwise, do fline, then fpat, then fchar relative to line.
@@ -731,6 +786,7 @@ sub findStartPoint {
         bWarn(1, "Seeking fline " . $options{"fline"} . "...");
         while (defined ($firstLine = $reader->readOneRecord())) {
             if ($reader->{recnum} >= $options{"fline"}-1) { last; }
+            ($copy) && outLine($firstLine);
         }
         ($reader->{recnum} < $options{"fline"}-1) && alogging::eMsg(
             -1, "Couldn't reach starting line " . $options{"fline"} .
@@ -751,15 +807,19 @@ sub findStartPoint {
                     last;
                 }
             }
+<<<<<<< HEAD
         }
         if ($gotFpat) {
+=======
+            ($copy) && outLine($firstLine);
+    	}
+    	if ($gotFpat) {
+>>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
             bWarn(1, "Found --fpat /" . $options{"fpat"} .
               "/ #" . $options{"fpatNum"}, $firstLine);
         }
         else {
-            bWarn(0, "-fpat /" . $options{"fpat"} . "/ #" .
-                  $options{"fpatNum"} . " not found by EOF, nothing copied.");
-            die "\n";
+            return 0;
         }
         if ($options{"fpatBreak"} eq 'INCLUDELINE') {
             # Do nothing, leave whole line for fchar to chew on
@@ -777,6 +837,7 @@ sub findStartPoint {
         else {
             die "Bad --fpatBreak: " . $options{"fpatBreak"} . ".\n";
         }
+        ($copy) && outLine($firstLine);
     } # fpat
 
     if ($options{"fchar"}) { # fchar *within* line
@@ -792,6 +853,7 @@ sub findStartPoint {
         }
     }
     bWarn(1, "Copy starts at '$firstLine' (line " . $reader->{recnum} . ")");
+    return 1
 } # findStartPoint
 
 
@@ -800,6 +862,8 @@ sub findStartPoint {
 #
 # Assume initial line is in $firstLine, not yet output.
 # If fline=lline, both char offsets apply to same line.
+#
+# With --iterate, we may want to also stop if we hit another startPoint.
 #
 sub copyToEndPoint {
     # If we're only doing one line, by numbers...
@@ -828,13 +892,11 @@ sub copyToEndPoint {
     while (defined ($rec = $reader->readOneRecord())) {
         # Must stop *at* -lline, because we might be taking only part of it.
         if ($options{"lline"} && $reader->{recnum}>=$options{"lline"}) {
-            bWarn(
-                1, "lline (" . $options{"lline"} . ") reached: $rec");
+            bWarn(1, "lline (" . $options{"lline"} . ") reached: $rec");
             last;
         }
         if ($options{"nlines"}>0 && $ncopied>=$options{"nlines"}) {
-            bWarn(1,
-                "nlines (" . $options{"nlines"} . ") reached...");
+            bWarn(1, "nlines (" . $options{"nlines"} . ") reached...");
             last;
         }
         if ($options{"lpat"}) {
@@ -883,8 +945,8 @@ sub copyToEndPoint {
 
 
 ###############################################################################
-# Do --lchar and we're done (line to be chopped was already queued by somebody,
-# so pull it back, truncate, then re-queue).
+# Do --lchar and we're done (line to be chopped was already queued by
+# somebody, so pull it back, truncate, then re-queue).
 #
 sub handleLchar {
     bWarn(1, "Reached final line, doing lchar...");
@@ -902,8 +964,8 @@ sub handleLchar {
 
 
 ###############################################################################
-# Used to output a line. But, it keeps one buffered so we can go back and
-# implement --lchar (hands it back via outBack().
+# Use this to output a line. But, it keeps one buffered so we can
+# go back and implement --lchar (hands it back via outBack().
 #
 BEGIN {
     my $pendingLine = undef;
@@ -942,13 +1004,6 @@ sub bWarn {
                    $loc . ($msgLine2 ? ("\n    " . $msgLine2) : ""));
 }
 
-sub tick {
-    return unless ($options{tickInterval}>0);
-    if (($reader->{recnum} % $options{tickInterval}) == 0) {
-        vMsg(0, "At record " . $reader->{recnum});
-    }
-}
-
 
 ###############################################################################
 # Read lines, tracking line, character, and byte offsets.
@@ -957,7 +1012,11 @@ sub tick {
 # Seeking backwards is available, but little tested.
 # Code follows for doing character-level i/o, but is presently unused.
 #
+<<<<<<< HEAD
 # CF: RecordFile.pm, splitFiles, EntityManager.pm
+=======
+# Cf: RecordFile.pm, TabularFormats.pm, splitFiles, EntityManager.pm
+>>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
 #
 # Methods:
 #  $x = new(class, path, encoding)
@@ -999,11 +1058,20 @@ my %badEncodings = ( # Only includes ones also in Perl 'Encode'
 
 sub new {
     my ($class, $path, $enc) = @_;
-    open(my $fh, "<$path");
+    my $fh;
+    if ($path eq "-" || $path eq "") {  # STDIN
+        alogging::vMsg(1, "Using STDIN");
+        $fh = *STDIN;
+    }
+    else {
+        alogging::vMsg(1, "Opening $path");
+        open($fh, "<$path");
+    }
     if (!$fh) {
         die "Unable to open '$path'\n";
         return(undef);
     }
+    
     if ($enc) {
         binmode($fh, ":encoding($enc)");
     }
@@ -1038,8 +1106,9 @@ sub close {
 
 sub readOneRecord {
     my ($self) = @_;
-    if ($self->{bytePos} != tell($self->{fh})) {
-        warn "bytePos out of sync!\n";
+    if ($self->{bytePos} != tell($self->{fh})) {  # TODO: tell() on STDIN not ok?
+        warn sprintf("bytePos (%d) out of sync with tell (%d)!\n", 
+            $self->{bytePos}, tell($self->{fh}));
     }
     my $fh = $self->{fh};
     my $buf = undef;
@@ -1050,7 +1119,6 @@ sub readOneRecord {
     $self->{bytePos} = tell($self->{fh});
     $self->{charPos} += length($buf);
     $self->{recnum}++;
-    main::tick();
     return($buf);
 } # readOneRecord
 

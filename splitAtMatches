@@ -15,7 +15,7 @@ our %metadata = (
     "type"         => "http://purl.org/dc/dcmitype/Software",
     "language"     => "Perl 5",
     "created"      => "2007-02-02",
-    "modified"     => "2020-10-15",
+    "modified"     => "2022-03-03",
     "publisher"    => "http://github.com/sderose",
     "license"      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -28,13 +28,14 @@ our $VERSION_DATE = $metadata{"modified"};
 
 splitAtMatches [options] [-e 'regex'] [files?]
 
-Insert a line-break before each match of I<regex>. Previous line breaks can be
-kept or dropped. For example:
+Insert a line-break (or other separator) before ( or after, or both) 
+each match of I<regex>. 
+Pre-existing line breaks can be kept or dropped. For example:
 
     splitAtMatches -e '/  [A-Z]/' myFile.txt
 
-will put a line-break before each instance of 2 spaces followed by an
-ASCII capital letter. Thus
+will put a line-break before each instance of two spaces followed by an
+ASCII capital letter. So the following input:
 
     That's it.  Pretty simple.  Mostly.
 
@@ -53,7 +54,9 @@ Other options include:
 
 =item * I<--replace> each match with something,
 
-=item * insert an I<--indent> after inserted line-breaks, or
+=item * I<--insert> additional text before the new line-breaks.
+
+=item * insert an I<--indent> after the new line-breaks, or
 
 =item * add and remove line breaks so there is one sentence per line.
 
@@ -97,6 +100,10 @@ Unlike some of my scripts, this sets the output encoding too.
 Indent after inserted newlines, by I<n> spaces (default: 0).
 This does I<not> cause existing indentation to be removed, only added.
 To remove all existing indentation, set a negative value for this option.
+
+=item * B<--insert> I<string>
+
+Inset I<string> before the line-break.
 
 =item * B<--keep>
 
@@ -162,8 +169,8 @@ no spaces to be found. Then again, C<fold> doesn't even I<say> what it does.
 Does not support the equivalent of C<fold -b> (bytes). You really wouldn't
 want to do that with Unicode.
 
-C<--sentences> if simplistic. For example, it only knows a handful of
-specific abbreviations, and it separates list markers like "1. "
+C<--sentences> is simplistic. For example, it only knows a handful of
+specific abbreviations.
 
 
 =head1 To Do
@@ -209,6 +216,7 @@ Make C<--keep> default to on.
   2018-01-23: Add C<--both>.
   2020-09-16: New layout. Add C<--sentences>.
   2020-10-15: Improve help. Support C<--indent -1> to unindent.
+  2022-03-03: Add --insert. Tweak --sentences regex.
 
 
 =head1 Rights
@@ -220,6 +228,7 @@ L<https://creativecommons.org/licenses/by-sa/3.0>.
 
 For the most recent version, see L<http://www.derose.net/steve/utilities> or
 L<https://github.com/sderose>.
+
 
 =cut
 
@@ -233,6 +242,7 @@ my $expr                 = "";
 my $iencoding            = "";
 my $ignoreCase           = 0;
 my $indent               = 0;
+my $insert               = "";
 my $keepOriginalNewlines = 1;
 my $oLineends            = "U";
 my $quiet                = 0;
@@ -250,6 +260,7 @@ my $result = GetOptions(
     "h|help|?"                 => sub { system "perldoc $0"; exit; },
     "iencoding=s"              => \$iencoding,
     "i|indent=i"               => \$indent,
+    "insert=s"                 => \$insert,
     "ignoreCase!"              => \$ignoreCase,
     "listEncodings"    => sub {
         warn "\nEncodings available:\n";
@@ -281,10 +292,6 @@ my $result = GetOptions(
 
 ($result) || die "Bad options.\n";
 
-
-###############################################################################
-# Validate and default options
-#
 ($expr || $sentences) || die
     "Must provide a --expr to split at.\n";
 
@@ -317,7 +324,7 @@ if ($iencoding) {
 #
 my $filenum = 0;
 my $recnum  = 0;
-my $istring = $newline;
+my $istring = $insert . $newline;
 if ($indent > 0) { $istring .= (" " x $indent); }
 
 if (scalar @ARGV == 0) { # stdin
@@ -340,7 +347,7 @@ foreach my $f (@ARGV) {
         chomp $rec;
         if ($sentences) {
             # Consider --, :, and avoiding abbrs. Nice to also deal w/ list nums
-            $rec =~ s/(?<!Dr|Mr|Ms|Fr|Sr|Jr|rs)([.:?!])(\s+|$)?/$1\n/g;
+            $rec =~ s/(?<!Dr|Mr|Ms|Fr|Sr|Jr|rs|\d)([.:])(\s|$)?/$1\n/g;
             print $rec;  # No newline at end.
             next;
         }

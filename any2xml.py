@@ -12,7 +12,7 @@ from sjdUtils import sjdUtils
 su = sjdUtils()
 
 __metadata__ = {
-    'title'        : "any2xml.py",
+    'title'        : "any2xml",
     'description'  : "Convert anything to XML. Sort of.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",

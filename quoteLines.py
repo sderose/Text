@@ -12,7 +12,7 @@ import codecs
 from PowerWalk import PowerWalk, PWType
 
 __metadata__ = {
-    "title"        : "quoteLines.py",
+    "title"        : "quoteLines",
     "description"  : "Escape input lines and put in quotes.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

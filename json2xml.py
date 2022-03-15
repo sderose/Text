@@ -16,7 +16,7 @@ from alogging import ALogger
 lg = ALogger(1)
 
 __metadata__ = {
-    "title"        : "json2xml.py",
+    "title"        : "json2xml",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",

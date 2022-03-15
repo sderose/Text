@@ -47,28 +47,28 @@ before starting normal processing.
 
 =head1 Options
 
-(prefix 'no' to negate where applicable)
+(prefix 'no-' to negate where applicable)
 
 =over
 
 =item * B<--decode>
 
 In addition, turn sequences of '=' plus 2 hex digits to the correponding
-character code point (UTF-8 may still have to be expanded after that).
+byte value (UTF-8 may still have to be interpreted after that).
 This is mainly useful for MIME headers.
 
 This is done I<before> testing whether a line matches I<--expr>.
 
-=item * B<--expr> I<e>
+=item * B<--expr> I<regex> OR B<-e> I<regex> 
 
-The regular expression identifying lines to be joined with an adjacent line.
+Specify a regular expression identifying lines to be joined with an adjacent line.
 Matching lines are joined with the following line unless I<--previous>
-is specified, in which case there are joined with the previous line instead.
+is set, in which case they are joined with the previous line instead.
 Default: C<=$>.
 
 =item * B<--iencoding> I<e>
 
-Assume the input is in encoding I<e>. Output is always utf-8.
+Assume the input is in encoding I<e>. Output is utf-8 unless you set I<--oencoding>.
 
 =item * B<--keep>
 
@@ -177,7 +177,7 @@ my $verbose       = 0;
 
 my %getoptHash = (
     "decode!"                 => \$decode,
-    "expr=s"                  => \$expr,
+    "e|expr=s"                => \$expr,
     "keep!"                   => \$keep,
     "iencoding=s"             => \$iencoding,
     "mime!"                   => \$mime,
@@ -190,11 +190,11 @@ my %getoptHash = (
     "version"                 => sub {
         die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
-    );
+);
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die "Bad options.\n";
 
-(length($expr) >= 1) || die "-expr required.";
+(length($expr) >= 1) || die "--expr required.";
 
 print "";
 binmode(STDOUT, ":encoding($oencoding)");

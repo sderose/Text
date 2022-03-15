@@ -13,7 +13,7 @@ from alogging import ALogger
 lg = ALogger(1)
 
 __metadata__ = {
-    "title"        : "sort.py",
+    "title"        : "sort",
     "description"  : "Do a really, really plain sort.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

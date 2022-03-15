@@ -447,7 +447,7 @@ See also I<--firstPerFile>, I<--perFile>, I<--maxChanges>, I<--maxLinesChanged>.
 
 =item * B<--lineNumbers>
 
-If set, when I<--versbose> or <--dry-run> display the "before" and "after" forms of
+If set, when I<--verbose> or <--dry-run> display the "before" and "after" forms of
 a changed line, the "before" form is preceded by its line number (and the "after"
 form is indented to stay lined up).
 
@@ -1061,6 +1061,77 @@ to apply (ASCII, Default, Locale-based, or Unicode).
 =back
 
 
+=head1 To do
+
+  Move to Python, on top of PowerWalk and fsplit.
+
+  More testing:
+    Test and sync back-references with eval() code in renameFiles cmd.
+    Test features: --multidest, --dropEmptiedLines, --interactive changes.
+    Test piping in and out.
+    Test named capture groups.
+  
+  Reporting:
+    Option to suppress 'starting file' until first change
+    Option to suppress inidividual changes, just give total per file.
+    Report which files each change affected (not just total changes).
+    
+  Multi-dest support
+    Add multidest command to show line changed each way.
+    multidest with /g needs to iterate or something....
+    Maybe suppress final line-check with multiDest?
+    --multidest but applying to successive matches (in line or overall).
+    Separate RHS for successive instances of match (per line, overall).
+
+  Help:
+    Document how to do special chars in input exprs (-d, -e, --fileOfExprs).
+    Document how to refer to filename/path, and ser number, in exprs?
+
+  Field and component support:
+    Make --fieldChoice accept field *names*.
+    Option to restrict changes to XML gi/aname/avalue/markup/content?
+    
+  Miscellaneous:
+    Escaping in cases like: "s/::\\$options\\['\(\w+\)'\\]/::x('\1')/" *
+    Treat arg as -e if it has slashes.
+    Fix "number of changes" in line to count /g instances right.
+    Add way to insert a counter, or a file, into the replacement text.
+    Add "exchange with next line"?
+    Option to do literal, not regex, substitution.
+    Finish --pre, --post, --span (span x fields)?
+    Add option to keep but comment out original form of lines.
+    RHS access to match-number in line and total and of this change.
+    Handle compressed files transparently.
+    Feature to pad replacement text to original or specified width.
+    Finish range of occurrence numbers, --firstPerFile, --lastPerFile.
+
+  Possible regex extensions:
+    (\w+)**(\s+)   -->  (\w+)(\s+\w+)*  (maybe also '++')
+    ['"]^^  -->  (['"])[^\1]*\1
+    \h for hyphens/dashes
+    \q for quote character (and \l and \r)
+    \Q for balanced quoted string?
+    \p{Po} etc.
+    Option to catch variants of character in regex (&#65;, \x...)?
+    Use Perl (?adlupimsc)... to turn modifiers on/off in mid-pattern?
+
+  Perhaps add some vars to test or substitute, similar to `awk`:
+    CONVFMT  conversion format used when converting numbers (default %.6g).
+    ENVIRON  array of environment variables; subscripts are names.
+    FILENAME the name of the current input file.
+    FNR      ordinal number of the current record in the current file.
+    FS       regular expression used to separate fields; also settable by option -Ffs.
+    NF       number of fields in the current record.
+    NR       ordinal number of the current record.
+    OFMT     output format for numbers (default %.6g).
+    OFS      output field separator (default space).
+    ORS      output record separator (default newline).
+    RLENGTH  the length of a string matched by match.
+    RS       input record separator (default newline), or '' or regex
+    RSTART   the start position of a string matched by match.
+    SUBSEP   separates multiple subscripts (default 034).
+
+
 =head1 History
 
   2010-08-25: Written by Steven J. DeRose.
@@ -1121,68 +1192,7 @@ copied back to update the original. Set permissions on updated file explicitly.
 empty portions. Add --lineNumbers for makeDiffLine().
   2021-11-22: More fixes to -e parsing. Fix big in makeDiffLine() where it could
 print extra data.
-
-
-=head1 To do
-
-  Move to Python, on top of PowerWalk and fsplit.
-
-  Option to do literal, not regex, substitution.
-
-  Escaping in cases like:
-    "s/::\\$options\\['\(\w+\)'\\]/::x('\1')/" *
-    Treat arg as -e if it has slashes.
-    Test and sync back-references with eval() code in renameFiles cmd.
-    Fix "number of changes" in line to count /g instances right.
-    Test features: --multidest, --dropEmptiedLines, --interactive changes.
-    Test piping in and out.
-    Test named capture groups.
-    Add way to insert a counter, or a file, into the replacement text.
-    Add "exchange with next line"?
-    Add multidest command to show line changed each way.
-    multidest with /g needs to iterate or something....
-    Maybe suppress final line-check with multiDest?
-    Report which files each change affected (not just total changes).
-    Finish --pre, --post, --span (span x fields)?
-    Add option to keep but comment out original form of lines.
-
-  Extensions:
-    Document how to do special chars in input exprs (-d, -e, --fileOfExprs).
-    Document how to refer to filename/path, and ser number, in exprs?
-    Make --fieldChoice accept field *names*.
-    Separate RHS for successive instances of match (per line, overall).
-    --multidest but applying to successive matches (in line or overall).
-    RHS access to match-number in line and total and of this change.
-    Option to restrict changes to XML gi/aname/avalue/markup/content?
-    Handle compressed files transparently.
-    Option to catch variants of character in regex (&#65;, \x...)?
-    Use Perl (?adlupimsc)... to turn modifiers on/off in mid-pattern?
-    Feature to re-align replacement text somehow?
-    Finish range of occurrence numbers, --firstPerFile, --lastPerFile.
-
-  Possible regex extensions:
-    (\w+)**(\s+)   -->  (\w+)(\s+\w+)*  (maybe also '++')
-    ['"]^^  -->  (['"])[^\1]*\1
-    \h for hyphens/dashes
-    \q for quote character (and \l and \r)
-    \Q for balanced quoted string?
-    \p{Po} etc.
-
-  Perhaps add some vars to test or substitute, similar to `awk`:
-    CONVFMT  conversion format used when converting numbers (default %.6g).
-    ENVIRON  array of environment variables; subscripts are names.
-    FILENAME the name of the current input file.
-    FNR      ordinal number of the current record in the current file.
-    FS       regular expression used to separate fields; also settable by option -Ffs.
-    NF       number of fields in the current record.
-    NR       ordinal number of the current record.
-    OFMT     output format for numbers (default %.6g).
-    OFS      output field separator (default space).
-    ORS      output record separator (default newline).
-    RLENGTH  the length of a string matched by match.
-    RS       input record separator (default newline), or '' or regex
-    RSTART   the start position of a string matched by match.
-    SUBSEP   separates multiple subscripts (default 034).
+  2022-03-11: Minor cleanup.
 
 
 =head1 Rights
@@ -2650,7 +2660,6 @@ sub preIsSatisfied {
     }
     return(0);
 }
-
 
 sub toString {
     my ($self, $sep) = @_;

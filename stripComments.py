@@ -16,7 +16,7 @@ from alogging import ALogger
 lg = ALogger(1)
 
 __metadata__ = {
-    'title'        : "stripComments.py",
+    'title'        : "stripComments",
     'description'  : "Remove comments from a file, appropriate to its filetype.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
@@ -160,7 +160,7 @@ def getDelimiters(ext):
 def tryOneItem(path):
     """Try to open a file (or directory, if -r is set).
     """
-    lg.hMsg(1, "Starting item '%s'" % (path))
+    lg.info1("====Starting item '%s'" % (path))
     recnum = 0
     if (not os.path.exists(path)):
         lg.error("Couldn't find '%s'." % (path))

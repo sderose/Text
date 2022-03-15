@@ -537,7 +537,7 @@ if ($format ne "") {
     }
 }
 
-if (length($padchar) == 1) {
+if (length($padchar) != 1) {
     die "--padchar must be exactly one character (not '$padchar').\n";
 }
 if ($right && $padchar ne " ") {

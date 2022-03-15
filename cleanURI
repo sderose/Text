@@ -1,29 +1,126 @@
 #!/usr/bin/perl -w
 #
-# cleanURI
-#
+# cleanURI: Undo %xx escaping in a string.
 # 2010-09-29: Written by Steven J. DeRose.
-# 2010-10-07 sjd: Rename copy/paste.
-# 
-# To do:
 #
 use strict;
 use Getopt::Long;
 
-our $VERSION_DATE = "2012-10-22";
+our %metadata = (
+    'title'        => "cleanURI",
+    'description'  => "Undo %xx escaping in a string.",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5.18",
+    'created'      => "2010-09-29",
+    'modified'     => "2022-03-02",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
-my $copy          = 1;
-my $paste      = 0;
-my $quiet         = 0;
-my $verbose       = 0;
+
+=pod
+
+=head1 Usage
+
+    cleanURI [options] file
+
+Clean up a URI by interpreting %xx special character escapes. Also, for 
+URIs that encapsulate other URIs, remove any stuff before
+the last 'http'. Doesn't do anything special for UTF-8.
+
+
+=head1 Options
+
+(prefix 'no' to negate where applicable)
+
+=over 
+
+=item * B<--copy>
+
+Put the result on the clipboard (via C<xsel>).
+
+=item * B<--dropParams>
+
+Discard from the first ampersand to the end.
+
+=item * B<--dropQuerys>
+
+Discard from the first "?" to the end.
+
+=item * B<--paste>
+
+Take input from the cliboard (via C<xsel>).
+
+=item * B<--plus>
+
+Also re-code "+" to space.
+
+=item * B<--quiet> OR B<-q>
+
+Suppress most messages.
+
+=item * B<--verbose> OR B<-v>
+
+Add more messages (repeatable).
+
+=item * B<--version>
+
+Show version info and exit.
+
+=back
+
+
+=head1 Known Bugs and Limitations
+
+Google search links commonly have additional parameters at the end, which 
+are not necessarily removed correctly.
+
+
+=head1 Related commands
+
+
+=head1 History
+
+    2010-09-29: Written by Steven J. DeRose.
+    2010-10-07 sjd: Rename copy/paste.
+    2022-03-02: New layout. Add --plus, --dropParams, --dropQuerys.
+Fix reporting of non-URI characters. Undefault --copy.
+ 
+=head1 To do
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons 
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut
 
 
 ###############################################################################
+# Options
 #
+my $copy          = 0;
+my $dropParams    = 0;
+my $dropQuerys    = 0;
+my $paste         = 0;
+my $plus          = 0;
+my $quiet         = 0;
+my $verbose       = 0;
+
 Getopt::Long::Configure ("ignore_case");
 my $result = GetOptions(
     "copy!"                   => \$copy,
+    "dropParams!"             => \$dropParams,
+    "dropQuerys!"             => \$dropQuerys,
     "paste!"                  => \$paste,
+    "plus!"                   => \$plus,
     "h|help"                  => sub {
         system "perldoc $0";
         exit;
@@ -37,98 +134,35 @@ my $result = GetOptions(
 
 ($result) || die "Bad options.\n";
 
-
-###############################################################################
-# Set implied options, validate option values...
-#
 my $s = $ARGV[0];
 if ($paste) {
-    $s = `xclip -out`;
+    $s = `xsel -out`;
 }
 
-# http://go2.wordpress.com/?id=725X1342&site=quoderatech.wordpress.com&url=http%3A%2F%2F2006.xmlconference.org%2Fproceedings%2F162%2Fpresentation.html&sref=http%3A%2F%2Fquoderat.megginson.com%2F2007%2F01%2F11%2Fjon-bosaks-xml-2006-keynote-now-online%2F
 
+###############################################################################
+# Example: http://go2.wordpress.com/?id=725X1342&site=quoderatech.wordpress.com&url=http%3A%2F%2F2006.xmlconference.org%2Fproceedings%2F162%2Fpresentation.html&sref=http%3A%2F%2Fquoderat.megginson.com%2F2007%2F01%2F11%2Fjon-bosaks-xml-2006-keynote-now-online%2F
+#
 $s =~ s/^.*http/http/;
-$s =~ s/&.*$//;
-$s =~ s/%([0-9a-f][0-9a-f])/{ chr(hex($1)); }/ige;
+($dropQuerys) && $s =~ s/\?.*//;
+($dropParams) && $s =~ s/&.*$//;
 
-if (!$quiet && $s =~ m/[^-a-zA-Z0-9!\$&'()*+.:;=?]/) {
-    warn "Invalid character(s) in URI:\n$s.\n";
+# TODO Report non-URI characters before or after expanding %-escapes?
+if (!$quiet) {
+    my $badChars = $s;
+    $badChars =~ s/[-a-zA-Z0-9!$&'()*+.:;=?\/%& ]+//g;
+    $badChars =~ s/([^\w])/{ sprintf("\\x%02x", ord($1)); }/ge;
+    ($badChars) && warn "Invalid character(s) in URI:\n    '$badChars'\n";
 }
+
+$s =~ s/%([0-9a-f][0-9a-f])/{ chr(hex($1)); }/ige;
+if ($plus) { $s =~ s/\+/ /g; }
 
 print "\n$s";
 if ($copy) {
     $s =~ s/(['$!])/\\$1/g;
-    my $cmd = "echo \"$s\" | xclip -in";
+    #my $cmd = "echo \"$s\" | xclip -in";
+    my $cmd = "echo \"$s\" | xsel --clipboard --input";
     ($verbose) && warn "Running: $cmd\n";
     system $cmd || warn "\nxclip failed.\n";
 }
-
-exit;
-
-
-
-###############################################################################
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-cleanURI [options] file
-
-Clean up a URI such as from Google pointing to a PDF. Remove any stuff before
-the last 'http' (such as google's URI rather than the ultimate one), and 
-undo % escapes. Doesn't do anything special for UTF-8.
-
-
-=head1 Options
-
-(prefix 'no' to negate where applicable)
-
-=over 
-
-=item * B<--copy>
-
-Put the result on the clipboard (via xclip).
-
-=item * B<--paste>
-
-Take input from the cliboard (via xclip).
-
-=item * B<--quiet> OR B<-q>
-Suppress most messages.
-
-=item * B<--verbose> OR B<-v>
-Add more messages (repeatable).
-
-=item * B<--version>
-
-Show version info and exit.
-
-=back
-
-
-
-=head1 Known Bugs and Limitations
-
-Google search links commonly have additional parameters at the end, which 
-are not necessarily removed correctly.
-
-
-
-=head1 Related commands
-
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons 
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut
