@@ -20,11 +20,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-03-23",
-<<<<<<< HEAD
-    'modified'     => "2021-12-24",
-=======
     'modified'     => "2022-02-25",
->>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -377,6 +373,8 @@ Finish I<--fpatNum> and I<--lpatNum>.
 
 Lose requirement for sjdUtils, alogging, internal 'Reader'.
 
+Possibly allow multiple --lpat...--fpat pairs, esp. with --iterate?
+
 
 =head1 Related commands
 
@@ -445,13 +443,13 @@ C<RecordFile.pm> -- similar to internal 'Reader' package.
 
 =item * 2021-06-25: Clean up.
 
-<<<<<<< HEAD
 =item * 2021-12-24: Fix reporting bug with --fpat.
-=======
+
 =item * 2022-02-25ff: Fix bugs handling stdin. Drop --tickInterval.
 Working on --iterate and --insert.
 
->>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
+=item * 2022-03-14: Fix bugs in copyToEndPoint(), location reporting.
+
 
 =back
 
@@ -503,13 +501,9 @@ my %getoptHash = (
     "fpatNum=o"        => \$options{"fpatNum"},
     "h|help"           => sub { system "perldoc $0"; exit; },
     "iencoding=s"      => \$options{"iencoding"},
-<<<<<<< HEAD
-    "ilineends=s"      => \$options{"ilineends"},
-=======
 	"ilineends=s"      => \$options{"ilineends"},
 	"insert=s"         => \$options{"insert"},
 	"iterate|g!"       => \$options{"iterate"},
->>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
     "listEncodings"    => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
@@ -661,15 +655,8 @@ if (!$options{"quiet"}) {
     if (!$fileCount) {
         warn "body: No files found.\n";
     }
-<<<<<<< HEAD
-    $reader = new Reader($file, $options{"iencoding"});
-    if (!$reader) {
-        warn "Can't open file '$file'.\n";
-        next;
-=======
     elsif (-t STDOUT) {
-        bWarn(0,"body: Done after $fileCount file(s).");
->>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
+        warn "body: Done after $fileCount file(s).\n";
     }
 }
 
@@ -691,6 +678,7 @@ sub doOneFile {
         while ($rc) {
             if (haveEndPointOption()) {
                 copyToEndPoint();
+                bWarn("=====> Found end-point.");
                 if ($options{"lchar"}) {
                     handleLchar();
                 }
@@ -807,16 +795,11 @@ sub findStartPoint {
                     last;
                 }
             }
-<<<<<<< HEAD
         }
         if ($gotFpat) {
-=======
             ($copy) && outLine($firstLine);
-    	}
-    	if ($gotFpat) {
->>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
             bWarn(1, "Found --fpat /" . $options{"fpat"} .
-              "/ #" . $options{"fpatNum"}, $firstLine);
+                "/ #" . $options{"fpatNum"}, $firstLine);
         }
         else {
             return 0;
@@ -863,7 +846,7 @@ sub findStartPoint {
 # Assume initial line is in $firstLine, not yet output.
 # If fline=lline, both char offsets apply to same line.
 #
-# With --iterate, we may want to also stop if we hit another startPoint.
+# With --iterate, may  also stop for another startPoint.
 #
 sub copyToEndPoint {
     # If we're only doing one line, by numbers...
@@ -883,63 +866,71 @@ sub copyToEndPoint {
     # Else have to search for end, so continue doing more lines.
     #
     outLine($firstLine);
-    bWarn(2, "Seeking end line.", "From: $firstLine");
 
     my $rec = "";
     my $ncopied = 1;
-    my $lpatFound = 0;
 
+    my $lpat = $options{"lpat"};
+    my $nlines = $options{"nlines"};
+    my $lline = $options{"lline"};
+    my $lpatBreak = $options{"lpatBreak"};
+    bWarn(1, "copyToEndPoint (ll $lline; nl $nlines; lpat /$lpat/).", "From: $firstLine");
+    
+    my $stoppedBy = "EOF";
     while (defined ($rec = $reader->readOneRecord())) {
-        # Must stop *at* -lline, because we might be taking only part of it.
-        if ($options{"lline"} && $reader->{recnum}>=$options{"lline"}) {
-            bWarn(1, "lline (" . $options{"lline"} . ") reached: $rec");
+        bWarn(2, "Read: |$rec|");
+        # Must stop *at* --lline, because we might be taking only part of it.
+        if ($lline && $reader->{recnum}>=$lline) {
+            bWarn(1, "lline ($lline) reached: $rec");
+            $stoppedBy = "lline";
             last;
         }
-        if ($options{"nlines"}>0 && $ncopied>=$options{"nlines"}) {
-            bWarn(1, "nlines (" . $options{"nlines"} . ") reached...");
+        if ($nlines>0 && $ncopied >= $nlines) {
+            bWarn(1, "nlines ($nlines) reached: $rec");
+            $stoppedBy = "nlines";
             last;
         }
-        if ($options{"lpat"}) {
-            $rec =~ m/(.*?)($lpatc)(.*$)/;
+        if ($lpat ne "" && $rec =~ m/$lpat/) {
             my $PRE = $`;
             my $MAT = $&;
-            (!$MAT) || next;
-            bWarn(1, "lpat matched /" . $options{"lpat"} . "/", "    $rec");
-            warn " Got: $1, $2, $3.\n";
-            $lpatFound = 1;
+            #(!$MAT) || next;
+            bWarn(1, "lpat matched /$lpat/: $rec");
 
-            if ($options{"lpatBreak"} eq 'INCLUDELINE') {
+            if ($lpatBreak eq 'INCLUDELINE') {
                 bWarn(1, "lpatBreak INCLUDELINE");
             }
-            elsif ($options{"lpatBreak"} eq 'INCLUDEMATCH') {
+            elsif ($lpatBreak eq 'INCLUDEMATCH') {
+                bWarn(1, "lpatBreak INCLUDEMATCH");
                 $rec = ${'PRE'} . ${'MAT'};
             }
-            elsif ($options{"lpatBreak"} eq 'EXCLUDEMATCH') {
+            elsif ($lpatBreak eq 'EXCLUDEMATCH') {
+                bWarn(1, "lpatBreak EXCLUDEMATCH");
                 $rec = ${'PRE'};
             }
-            elsif ($options{"lpatBreak"} eq 'EXCLUDELINE') {
+            elsif ($lpatBreak eq 'EXCLUDELINE') {
                 bWarn(1, "lpatBreak EXCLUDELINE");
                 $rec = "";
             }
             else {
-                die "Bad  --lpatBreak: " . $options{"lpatBreak"} . ".\n";
+                die "Bad --lpatBreak: '$lpatBreak'.\n";
             }
-            outPeek();
+            #outPeek();
+            $stoppedBy = "lpat";
             last;
-        } # lpat
+        }
+        #warn "Writing '$rec'\n";
         outLine($rec);
         $ncopied++;
     } # while !EOF
     outFinalize();
 
-    if ($ncopied == $options{"nlines"}) {
+    if ($ncopied == $nlines) {
         # Possibly remove part of it?
         outLine($rec);
     }
 
-    if ($options{"lpat"} && !$lpatFound) {
-        bWarn(0,"EOF hit before --lpat pattern (" .
-            $options{"lpat"} . ") was found.");
+    if ($options{"verbose"} || $stoppedBy eq "EOF") {
+        bWarn(0, "copyToEndPoint stopped by $stoppedBy ($ncopied lines copied).");
     }
 } # copyToEndPoint
 
@@ -998,8 +989,8 @@ BEGIN {
 sub bWarn {
     my ($level, $msg, $msgLine2) = @_;
     if (!defined $msgLine2) { $msgLine2 = ''; }
-    my $loc = sprintf(" %s:%d:%d (byte %d):",
-        $0, $reader->{recnum}, $reader->{charPos}, $reader->{bytePos});
+    my $loc = ($options{'quiet'}) ? "" : sprintf(" [[AT %s:%d:%d (byte %d)]]\n",
+        $reader->{path}, $reader->{recnum}, $reader->{charPos}, $reader->{bytePos});
     alogging::vMsg($level, sjdUtils::showInvisibles($msg),
                    $loc . ($msgLine2 ? ("\n    " . $msgLine2) : ""));
 }
@@ -1012,11 +1003,7 @@ sub bWarn {
 # Seeking backwards is available, but little tested.
 # Code follows for doing character-level i/o, but is presently unused.
 #
-<<<<<<< HEAD
-# CF: RecordFile.pm, splitFiles, EntityManager.pm
-=======
 # Cf: RecordFile.pm, TabularFormats.pm, splitFiles, EntityManager.pm
->>>>>>> e2f5166 (New options for joinAt, splitAt, cleanURI. Fix body --fpat.)
 #
 # Methods:
 #  $x = new(class, path, encoding)
