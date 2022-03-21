@@ -22,7 +22,7 @@ from xml.dom import minidom
 from xml.dom.minidom import Node  #, Document, Element
 
 #from strBuf import StrBuf
-from DomExtensions.XMLStrings import escapeXml  #, escapeCDATA, escapeComment, escapePI, escapeXmlAttribute
+from DomExtensions import XMLStrings  #, escapeCDATA, escapeComment, escapePI, escapeXmlAttribute
 
 __metadata__ = {
     "title"        : "theScroll",
@@ -433,7 +433,7 @@ class ChangeId:
         os.getpid()
         mac=uuid.getnode()
     """
-    def __init__(self, user:str=None, seq:int=None, subuser:int=0):
+    def __init__(self, user: str = None, seq: int = None, subuser: int = 0):
         if (not user): user = os.environ["USER"] + "@" + os.environ["HOST"]
         self.user = user
         if (seq is None): seq = uuid.uuid1()
@@ -442,7 +442,7 @@ class ChangeId:
         self.subuser = subuser
 
     @classmethod
-    def fromstring(cls, s:str):
+    def fromstring(cls, s: str):
         user, seq, subuser = s.split(sep="_")
         return cls(user, int(seq), int(subuser))
 
@@ -523,11 +523,11 @@ class ChangeEvent:
             self.changeId,
             self.epochTime,
             self.target,
-            escapeXml(self.source)
+            XMLStrings.escapeXml(self.source)
         )
         return buf
 
-    def apply(self, doc:str) -> str:
+    def apply(self, doc: str) -> str:
         """Modify a document string by this changeEvent.
         TODO: For now, the only "source" is a literal string.
         """
@@ -539,7 +539,7 @@ class ChangeEvent:
             return None
         return doc[0:frChar] + srcString + doc[toChar:]
 
-    def getTargetBounds(self, doc:str, tgt:str) -> (int, int):
+    def getTargetBounds(self, doc: str, tgt: str) -> (int, int):
         """Interpret a 'target' specification, which says what contiguous span
         is to be replaced by the current change, into a (frChar, toChar) pair.
         Lots of ways you could specify, this just has a few. All use a scheme-prefix.
@@ -581,7 +581,7 @@ class ChangeEvent:
             raise KeyError("unknown target scheme '%s' in '%s'." % (scheme, tgt))
         return frChar, toChar
 
-    def getSource(self, doc:str, src:str) -> str:
+    def getSource(self, doc: str, src: str) -> str:
         """Get the literal string that will replace a target. It can either be
         just a quoted string, or a reference to another place in the same
         document (as of the same baseId), to be copied. Currently no trace
@@ -649,7 +649,7 @@ class ChangeLing(dict):
         cfh.close()
         self.tips = self.findAllTipVersions()
 
-    def addFromPlainRec(self, rec:str):
+    def addFromPlainRec(self, rec: str):
         fields = rec.split(sep=ChangeEvent.FIELDSEP, maxsplit=5)
         if len(fields) != ChangeEvent.NFIELDS:
             raise ValueError("Got %d fields, not %d: %s" %
@@ -702,7 +702,7 @@ class ChangeLing(dict):
                 if (args.verbose): warning0("%4d: %s" % (i, ce.tostring()))
         self.tips = self.findAllTipVersions()
 
-    def addChangeEvent(self, ce:ChangeEvent) -> None:
+    def addChangeEvent(self, ce: ChangeEvent) -> None:
         if not (ce.baseId in self or ce.baseId == NULL_CHANGE_ID):
             fatal("Unknown baseId '%s' in: %s" %
                 (ce.baseId, ce.tostring()))
@@ -710,7 +710,7 @@ class ChangeLing(dict):
         if ce.baseId in self.tips: del self.tips[ce.baseId]
         self.tips[ce.changeId] = True
 
-    def storeMeta(self, rec:str) -> None:
+    def storeMeta(self, rec: str) -> None:
         """Parse and record a #META entry in a dict keyed by field name. All META
         fields are repeatable, so the values are lists of strings.
         """
@@ -721,7 +721,7 @@ class ChangeLing(dict):
         if field not in self.meta: self.meta[field] = [ val ]
         else: self.meta[field].appen(val)
 
-    def save(self, path:str) -> None:
+    def save(self, path: str) -> None:
         """Append all the changes we have, that are not flagged as having been loaded
         from the existing chagelog, to the changelog.
         """
@@ -765,7 +765,7 @@ class ChangeLing(dict):
             if not ce.loaded: nc.append(k)
         return sorted(nc)
 
-    def getDocAsOfChangeId(self, cid:ChangeId) -> str:
+    def getDocAsOfChangeId(self, cid: ChangeId) -> str:
         """Get the entire text of the document, as of a specific changeId.
         """
         cpath = self.getPathToChangeId(cid)
@@ -773,7 +773,7 @@ class ChangeLing(dict):
         doc = self.path2Document(cpath)
         return doc
 
-    def getPathToChangeId(self, cid:ChangeId) -> list:
+    def getPathToChangeId(self, cid: ChangeId) -> list:
         """Trace backward from a given change, collecting all its ancestors.
         Until we introduce first-class merges, this is non-branching.
         """
@@ -789,7 +789,7 @@ class ChangeLing(dict):
                     (cur.baseChnge, cur))
         return thePath
 
-    def path2Document(self, thePath:list) -> str:
+    def path2Document(self, thePath: list) -> str:
         """Given a sequence of changes (such as extract by getPathTo), replay them
         to make a document.
         """

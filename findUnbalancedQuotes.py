@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # findUnbalancedQuotes.py: Report lines with odd quotation or indentation patterns.
 # 2017-07-03: Written by Steven J. DeRose.
@@ -44,7 +44,7 @@ multi-line quotations, here documents, etc.
 and indentation changes without a brace or command ending the previous line.
   With ''--triple'', suppresses reporting of triple-quotes a la Python.
   With ''--parens'', also reports lines with mismatched () [] {}.
-  
+
 
 =Related Commands=
 
@@ -217,7 +217,7 @@ def doOneFile(path):
                     # TODO: Following check gets some false positives....
                     if (not re.search(r"[{,]\s*(#.*)?$", lastRealRec)):
                         report(recnum, "Indent increasing but prev line does not end in [{,].", rec)
-            
+
         if (newIndent > indentStack[-1]):
             indentStack.append(newIndent)
 
@@ -229,7 +229,8 @@ def doOneFile(path):
         if (args.singlesok):
             rec = re.sub(r"""('"'|"'"|'`'|"`")""", "", rec)
         if (args.contractions):
-            rec = re.sub(r"""\w['‘]\w""", "", rec)
+            # Allow straight apostrophe and RIGHT SINGLE QUOTATION MARK
+            rec = re.sub(r"""\w['\u2019]\w""", "", rec)
         if (args.escaped):
             rec = re.sub(escapedExpr, "", rec)
 
@@ -254,9 +255,9 @@ def doOneFile(path):
         elif (args.parentheses):
             msg = checkParens(origRec)
             if (msg): report(recnum, msg, origRec)
-        
+
         lastRealRec = rec
-        
+
     fh.close()
     return(recnum)
 
@@ -264,7 +265,7 @@ def getIndentColumn(s):
     s = s.expandtabs(args.tabStops)
     s = re.sub(r"\S.*$", "", s)
     return len(s)
-    
+
 # Count how many times the character "c" occurs in "s".
 #
 def countChar(s, c):
@@ -290,14 +291,14 @@ def checkParens(s:str) -> str:
     if (pStack):
         return "Unclosed: %s" % (str(pStack))
     return None
-    
-        
+
+
 ###############################################################################
 # Main
 #
 def processOptions():
     import argparse
-    
+
     try:
         from BlockFormatter import BlockFormatter
         parser = argparse.ArgumentParser(
