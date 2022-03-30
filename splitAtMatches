@@ -28,13 +28,12 @@ our $VERSION_DATE = $metadata{"modified"};
 
 splitAtMatches [options] [-e 'regex'] [files?]
 
-Insert a line-break (or other separator) before ( or after, or both) 
-each match of I<regex>. 
-Pre-existing line breaks can be kept or dropped. For example:
+Insert a line-break (or other separator) before (or after, or both) 
+each match of I<regex>. For example:
 
     splitAtMatches -e '/  [A-Z]/' myFile.txt
 
-will put a line-break before each instance of two spaces followed by an
+puts a line-break before each instance of two spaces followed by an
 ASCII capital letter. So the following input:
 
     That's it.  Pretty simple.  Mostly.
@@ -45,7 +44,9 @@ becomes:
       Pretty simple.
       Mostly.
 
-But see C<--sentences> for a better approximation of sentence-breaking.
+That amounts to a rudimentary sentence-splitter. For a better one, improve
+the regex or try the C<--sentences> option.
+
 Other options include:
 
 =over
@@ -60,13 +61,15 @@ Other options include:
 
 =item * add and remove line breaks so there is one sentence per line.
 
-Original line-breaks are kept unless you specify I<--nokeep> or I<--sentence>.
+=item * Original line-breaks are kept unless you specify I<--nokeep> or I<--sentence>.
 
 Includes most of the functionality of *nix C<fold>.
 Handles character encodings (including knowing about
 various kinds of Unicode spaces with I<--spaces>).
 
 =back
+
+For splitting one file into separate files, see I<disaggregate> instead.
 
 
 =head1 Options
@@ -86,7 +89,7 @@ Takes precedence over I<--replace>.
 
 =item * B<-e> I<regex>
 
-A Perl regex to say what to split before (or after or around).
+A Perl regex to say what to split before (or after or both).
 See also C<--sentences> for better support of sentence-breaking.
 
 =item * B<--iencoding> I<e>
@@ -170,7 +173,7 @@ Does not support the equivalent of C<fold -b> (bytes). You really wouldn't
 want to do that with Unicode.
 
 C<--sentences> is simplistic. For example, it only knows a handful of
-specific abbreviations.
+specific (English) abbreviations.
 
 
 =head1 To Do
@@ -178,6 +181,9 @@ specific abbreviations.
 Change I<--keep> to allow setting what character (or none) to replace \n with.
 
 Add --bytes like C<fold>?
+
+Perhaps an option to insert spaces to align the start or end of the match to
+a specific column?
 
 
 =head1 Related commands
