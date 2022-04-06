@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# randomRecords: Select some records at random from a file.
+# randomRecords: Select some records at random from a source.
 # 2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
 # converter regression testing.
 #
@@ -10,17 +10,17 @@ use Encode;
 
 our %metadata = (
     'title'        => "randomRecords",
+    'description'  => "Select some records at random from a source.",
     'rightsHolder' => [ "Steven J. DeRose", "[public domain]" ],
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-09~18",
-    'modified'     => "2020-09-24",
+    'modified'     => "2022-04-06",
     'publisher'    => "http://github.com/sderose",
     'license'      => "Public Domain"
 );
 our $VERSION_DATE = $metadata{'modified'};
-
 
 =pod
 
@@ -28,7 +28,7 @@ our $VERSION_DATE = $metadata{'modified'};
 
 randomrecords [options] [file]
 
-Selects a certain number (I<-n>) or percentage (I<--pct>) of a file's records
+Selects a certain number (I<-n>) or percentage (I<--pct>) of input records
 at random; or every nth record (I<--mod>).
 
 The default is to pick 10 records at random.
@@ -36,26 +36,34 @@ The default is to pick 10 records at random.
 Records are selected I<without replacement>; that is, no record will show
 up more than once in the output.
 
-The I<--reservoir> option enables "reservoir sampling", by which random
-picks can be done without knowing in advance how many records there are to
-choose from. This is especially useful if you're sampling from stdin.
-But this option is still experimental.
+Alos has I<--fast> and I<--reservoir> sampling methods, which are especially
+good for sampling large input, or input coming via STDIN (where the program
+can't know how many lines there are in total, until after reading them all).
+See below for more detail on these.
 
 
 =head2 Notes
 
-You can select a random list of files out of a directory like this:
+You can select a random 10 lines out of a file like this:
+
+    randomRecords -n 10 --force myFile.txt
+
+The script first counts the total number of records, using the
+C<wc> command, then rewinds and runs through the collect the chosen records.
+
+To read from STDIN (which can't be rewound),
+it must instead load everything into memory and then count.
+Because of this oddness, you must specify C<--force> to use STDIN:
 
     ls | randomRecords -n 10 --force
 
-The script first counts the total number of records, using the
-C<wc> command (for STDIN, you must specify C<--force> because
-it must load everything into memory and then count).
+There are quite a few features for how records are chosen.
+With I<--mod N>, it just picks every N-th record in one pass (and
+STDIN is no longer special).
+The phase (essentially, which record you start counting from)
+can be rotated with I<--skip>.
 
-With I<--mod>, it just picks the right record numbers in one pass, and
-the phase can be rotated with I<--skip>.
-
-With the default (not I<--fast> or I<--reservoir>) method,
+With the default method, once it knows the total number of records,
 it generates random numbers
 and adds them to a list of "chosen" record numbers. If it re-chooses a
 record number already in the list, it tries again. This is fine unless
@@ -63,21 +71,8 @@ the percentage of records to be chosen is very high, in which case it will
 do a lot of re-tries towards the end.
 This method should get a very uniform distribution of records,
 and exactly the requested number of records.
-
-With I<--fast>, it runs through the record numbers once, and picks each one if
-a random number is under the percent requested. This is very quick, but may
-get slightly too few records (it will stop if it gets enough, so it never gets
-too many).
-
-With I<--reservoir>, it uses L<https://en.wikipedia.org/wiki/Reservoir_sampling>.
-This grabs the first I<n> records, then decides whether each later record
-should be ignored or should displace one of the previous records.
-For example, record I<n>+1 should have a 1 / (I<n>+1) chance of being in the
-result, so when it is read, it gets that change of replacing one of the
-first I<n> records. If that's the end of the file, you get a reasonable
-result; otherwise you go on, and record I<n>+2 gets a 1 / (I<n>+2) chance to
-displace a prior record. There's a bit more to it, but that's the general idea.
-This option is experimental.
+For large inputs or input via STDIN, you may want to use
+I<--fast> or I<--reservoir> instead.
 
 
 =head1 Options
@@ -86,7 +81,7 @@ This option is experimental.
 
 =item * B<--blanks>
 
-Don't include or even count blank (whitespace-only) lines. Unfinished.
+Don't include or even count blank (whitespace-only) lines.
 
 =item * B<--comments> I<regex>
 
@@ -99,9 +94,11 @@ adversely affect the use of I<--fast> combined with I<--pct>.
 
 Use a different choice method: this method
 is faster especially when picking a large % of all available records.
-However, it will only pick I<at most> the requested number of records
-(it's highly unlikely to get I<many> fewer than requested).
-See also I<--reservoir>, which will be better once it's working.
+It runs through the record numbers once, and picks each one if
+a random number is under the percent requested. This is very quick, but may
+get slightly too few records (it will stop if it gets enough, so it never gets
+too many). It's highly unlikely to get I<many> fewer than requested.
+See also I<--reservoir>, usually a better choice when reading from STDIN.
 
 =item * B<--force>
 
@@ -155,10 +152,14 @@ Character set to use for output.
 
 Write Unix, Dos, or Mac line-breaks for output.
 
-=item * B<--percent> I<n> or B<--pct> I<n>
+=item * B<--percent> I<f> or B<--pct> I<f>
 
 Pick this percentage of the records,
 instead of a particular number of records (for which see I<--n>).
+The value can be be non-integer, and must be between 0 and 100.
+Values under 1.0 produce a warning in case you accidentally meant
+them as a probability instead of a percentage, but work fine.
+You can suppress the warning with I<--quiet>.
 See also I<--mod>.
 
 =item * B<-q> or B<--quiet>
@@ -167,10 +168,19 @@ Suppress most messages.
 
 =item * B<--reservoir>
 
-Uses "reservoir sampling" (see above) so one always gets
-the right number (or percentage) of records.
-See L<here|"http://stackoverflow.com/questions/2218005">.
-Experimental. See also I<--fast>.
+Uses "reservoir sampling" to get
+the right number (or percentage) of records without having to know the
+total number of available records first.
+This grabs the first I<n> records, then decides whether each later record
+should be ignored or should displace one of the previous records.
+For example, record I<n>+1 should have a 1 / (I<n>+1) chance of being in the
+result, so when it is read, it gets that change of replacing one of the
+first I<n> records. If that's the end of the file, you get a reasonable
+result; otherwise you go on, and record I<n>+2 gets a 1 / (I<n>+2) chance to
+displace a prior record. There's a bit more to it, but that's the general idea.
+See L<here|"http://stackoverflow.com/questions/2218005"> and
+L<https://en.wikipedia.org/wiki/Reservoir_sampling>.
+See also I<--fast>.
 
 =item * B<--seed> I<n>
 
@@ -222,9 +232,6 @@ the whole input is read into memory.
 Except with I<--reservoir>, keeps a complete list of chosen record numbers
 in memory (though not the actual records, except as just noted).
 
-Reports wrong value for number of records picked,
-but seems to still do the sampling right (fixed?).
-
 
 =head1 History
 
@@ -241,12 +248,12 @@ Beef up encoding handling. Add $lineNumberFormat.
     2015-01-01: Fix several things I broke last time, like reading STDIN.
 Explain relation of --skip and --mod in help.
     2020-09-24: New layout. Fix another bug reading STDIN.
-
+    2022-04-06: Work on --reservoir. Make --pct take floats but warn
+on values under 1.0. Finish --blanks. Report basic stats at end. Improve doc.
+    
 
 =head1 To do
 
-  Reports wrong value for $picked?
-  Finish --reservoir.
   Add a partition feature (or use C<disaggregate>), for doing train/test/dev
   splits, n-way cross-validation splits, etc.
 
@@ -259,7 +266,7 @@ and thus is in the public domain.
 I have made various improvements since, and I hereby dedicate those
 improvements also to the public domain.
 
-For the most recent version, see L<here|"http://www.derose.net/steve/utilities/">.
+For the most recent version, see L<derose.net|"http://www.derose.net/steve/utilities/">.
 
 =cut
 
@@ -318,7 +325,7 @@ my %getoptHash = (
     "n|num=i"           => \$num,
     "oencoding=s"       => \$oencoding,
     "olineends=s"       => \$olineends,
-    "pct|percent=i"     => \$pct,
+    "pct|percent=f"     => \$pct,
     "q|quiet!"          => \$quiet,
     "reservoir!"        => \$reservoir,
     "seed=f"            => \$seed,
@@ -335,7 +342,7 @@ GetOptions(%getoptHash) || die("Bad options.\n");
 ($ignoreLines) && die
     "--ignoreLines option is not yet supported.\n";
 if ($num==0 && $pct<=0 && $mod<=0) {
-    warn "Defaulting to -num 10 (--num, --pct, or --mod not specified).\n";
+    warn "Defaulting to --num 10 (--num, --pct, or --mod not specified).\n";
     $num = 10;
 }
 ($num > 0 && $pct > 0) && die
@@ -344,8 +351,10 @@ if ($num==0 && $pct<=0 && $mod<=0) {
     "Can't specify both --fast and --reservoir.\n";
 ($pct > 99) && die
     "Can't specify --pct > 99.\n";
-($pct > 80 && !$fast) && warn
+($pct > 80 && !$fast && !$quiet) && warn
     "That's over 80% of the records. Consider the --fast option.\n";
+($pct > 0.0 && $pct < 1.0 && !$quiet) && warn
+    "--pct < 1.0 -- did you give a probability instead of a percentage?\n";
 
 if ($oencoding ne "") {
     print "";
@@ -391,13 +400,19 @@ if ($seed) { srand($seed); }
 #
 my @everything = ();                        # Buffer all input here if necessary
 my @pickedRecNums = ();
+my $totalRecords = 0;
+my $recNum = 0;
+my $nBlanks = 0;
+my $nComments = 0;
+my $nPicked = 0;
+
 
 # Figure out how many records there are in all.
 #
-my $totalRecords = 0;
 if ($reservoir) {                           # No record-counting required
     warn "\n******* Reservoir sampling is experimental *******\n\n";
     $totalRecords = doReservoirSample();
+    ($quiet) || warn "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
     exit;
 }
 elsif (!$file) {                            # Count records via 'wc'
@@ -454,11 +469,12 @@ if (scalar @everything == 0) {
     if ($iencoding ne "") {
         binmode(IN, ":encoding($iencoding)");
     }
-    my $recNum = 0;
     while (my $rec = <IN>) {
         $recNum++;
-        if ($comments && $rec =~ m/$commentsC/) { next; }
+        if ($blanks && $rec =~ m/^\s*$/) { $nBlanks++; next; }
+        if ($comments && $rec =~ m/$commentsC/) { $nComments++; next; }
         if (!$pickedRecNums[$recNum]) { next; }
+        $nPicked++;
         if ($lineNumbers) {
             printf($lineNumberFormat."%s",$recNum, $rec);
         }
@@ -469,8 +485,9 @@ if (scalar @everything == 0) {
     close IN;
 }
 else { # already loaded via bufferWholeFile()
-    for (my $recNum=0; $recNum<scalar(@everything); $recNum++) {
+    for ($recNum=0; $recNum<scalar(@everything); $recNum++) {
         if (!$pickedRecNums[$recNum]) { next; }
+        $nPicked++;
         if ($lineNumbers) {
             printf($lineNumberFormat."%s", $recNum, $everything[$recNum]);
         }
@@ -480,7 +497,7 @@ else { # already loaded via bufferWholeFile()
     }
 }
 
-($quiet) || warn "Done.\n";
+($quiet) || warn "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
 
 exit;
 
@@ -493,23 +510,29 @@ exit;
 # Code below may be slightly biased when using 'pct'.
 #
 sub doReservoirSample {
-    my $reservoirSize = $num;
+    my $reservoirSize = $num;  # Load this many before getting picky.
+    ($verbose) && warn "Reservoir sampling, initial size $reservoirSize.\n";
+    
     my $currentLine = "";
     my @reservoirList = [];
     my $count = 0;
     while ($currentLine = <>) {
-        if ($comments && $currentLine =~ m/$commentsC/) { next; }
+        $recNum++;
+        if ($blanks && $currentLine =~ m/^\s*$/) { $nBlanks++; next; }
+        if ($comments && $currentLine =~ m/$commentsC/) { $nComments++; next; }
         $count += 1;
         if ($pct and ($count*$pct/100.0 > $reservoirSize)) {
             $reservoirSize += 1;
+            $nPicked++;  # Remember we could run out before we get that far....
             push @reservoirList, $currentLine;
             next;
         }
-        if ($count<=$reservoirSize) {
+        if ($count<=$reservoirSize) {  # Still filling initial buffer
+            $nPicked++;  # Remember we could run out before we get that far....
             push @reservoirList, $currentLine;
             next;
         }
-        my $r = int(random()*$count);
+        my $r = rand($count);
         if ($r < $reservoirSize) {
             $reservoirList[$r] = $currentLine;
         }
@@ -548,11 +571,11 @@ sub bufferWholeFile {
         binmode(IN, ":encoding($iencoding)");
     }
 
-    my $recnum = 0;
     while (my $rec = <IN>) {
-        $recnum++;
-        if ($recnum>$skip) {
-            if ($comments && $rec =~ m/$commentsC/) { next; }
+        $recNum++;
+        if ($recNum>$skip) {
+            if ($blanks && $rec =~ m/^\s*$/) { $nBlanks++; next; }
+            if ($comments && $rec =~ m/$commentsC/) { $nComments++; next; }
             push @everything, $rec;
         }
         else { push @everything, ""; }
