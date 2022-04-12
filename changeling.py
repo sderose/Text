@@ -22,7 +22,7 @@ from xml.dom import minidom
 from xml.dom.minidom import Node  #, Document, Element
 
 #from strBuf import StrBuf
-from DomExtensions import XMLStrings  #, escapeCDATA, escapeComment, escapePI, escapeXmlAttribute
+from DomExtensions import XMLStrings  #, escapeCDATA, escapeComment, escapePI, escapeAttribute
 
 __metadata__ = {
     "title"        : "theScroll",
@@ -523,7 +523,7 @@ class ChangeEvent:
             self.changeId,
             self.epochTime,
             self.target,
-            XMLStrings.escapeXml(self.source)
+            XMLStrings.escapeText(self.source)
         )
         return buf
 
