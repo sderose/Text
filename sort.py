@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # sort.py: Do a really, really plain sort.
 # 2018-07-18: Written by Steven J. DeRose.

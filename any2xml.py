@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # any2xml.py: Convert anything to XML. Sort of.
 # 2018-07-25: Written by Steven J. DeRose.

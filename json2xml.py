@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # json2xml.py: Convert JSON to XML or other forms.
 # Written 2012-12-04 by Steven J. DeRose.

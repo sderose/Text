@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # PdfStupidityFix.py: Make spacing, hyphenation, etc. better.
 # 2020-09-25: Written by Steven J. DeRose.

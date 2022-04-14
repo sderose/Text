@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # annotsToHTML.py
 # 2018-07-16: Written by Steven J. DeRose.

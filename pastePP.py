@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # pastePP.py: Upgraded form of *nix 'paste'.
 # 2021-06-09: Written by Steven J. DeRose.

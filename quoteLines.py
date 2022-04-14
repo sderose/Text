@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # quoteLines.py: Escape input lines and/or put in quotes.
 # 2021-03-24: Written by Steven J. DeRose.

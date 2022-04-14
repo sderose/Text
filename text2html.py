@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # text2html.py: Convert simple text layouts to HTML.
 # Written 2018-07-21 by Steven J. DeRose

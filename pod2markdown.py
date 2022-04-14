@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # pod2md.py: Convert perldoc-style POD markup to MarkDown-ish.
 # Written 2019-02-19 by Steven J. DeRose.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # PSDF.py: An accessible PDF-like format, in PS.
 # 2021-06-10: Written by Steven J. DeRose.

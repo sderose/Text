@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # fixPairs.py: Try to fix common OCR errors.
 # 2015-08-25: Written by Steven J. DeRose.

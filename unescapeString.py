@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # unescpeString.py: Unbackslash stuff, as for a Python string.
 # 2021-08-12: Written by Steven J. DeRose.

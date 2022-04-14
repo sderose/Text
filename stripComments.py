@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # stripComments.py: Remove comments from a file, appropriate to its filetype.
 # 2017-11-08: Written by Steven J. DeRose.

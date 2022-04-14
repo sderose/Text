@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # text2strings.py Quote up a file to make Python string init.
 # 2018-11-05: Written by Steven J. DeRose.

@@ -1863,7 +1863,7 @@ sub doOneFile {
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
             Msg("some", sprintf(
                 "At line %12s (total), total changes: %12s, now in %s.",
-                 lpadc($totalRecs), lpadc($totalChanges), $file));
+                 lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why the /2?
         }
         if ($quit) {  # Quoth the user, "nevermore".
             outputALine($ofh, $originalRec);
