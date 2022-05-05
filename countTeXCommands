@@ -1,0 +1,7 @@
+#/usr/bin/env zsh
+#
+# countTeXCommands: make a ranklist of TeX \-commands used.
+# For newcommand and begin, also collect the arguments.
+# sjd
+#
+grep -hoE '\\((newcommand|begin)\s*{[^}]*}|[a-z0-9]*)' $@ | sort -f | uniq -c -i | sort -rn --key=1,1
