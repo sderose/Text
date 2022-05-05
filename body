@@ -336,8 +336,6 @@ Does not handle \\n, etc. in I<--insert> strings.
 
 =head1 To do
 
-Finish --iterate.
-
 Add a way to partition file(s) into multiple, such as extracting all the
 n-level <div>s from HTML, all the classes from Python, etc.
 
@@ -372,8 +370,6 @@ Add way to specify where to put the boundary:
 Finish I<--fpatNum> and I<--lpatNum>.
 
 Lose requirement for sjdUtils, alogging, internal 'Reader'.
-
-Possibly allow multiple --lpat...--fpat pairs, esp. with --iterate?
 
 
 =head1 Related commands
@@ -555,7 +551,7 @@ if ($options{"fline"} && ($options{"fchar"} > $options{"lchar"}) &&
 }
 
 if ($options{"iterate"} && ($options{"fchar"} || $options{"lchar"})) {
-    die "Don't mix --iterate with --fchar or --lchar.\n";
+    die "Can't mix --iterate with --fchar or --lchar.\n";
 }
 if ($options{"nlines"} && ($options{"lline"} || $options{"lpat"})) {
     die "Can't specify --nlines with either --lline or --lpat.\n";
@@ -677,8 +673,9 @@ sub doOneFile {
         my $rc = findStartPoint("SKIP");
         while ($rc) {
             if (haveEndPointOption()) {
+                bWarn(1, "Seeking endpoint...");
                 copyToEndPoint();
-                bWarn("=====> Found end-point.");
+                bWarn(1, "=====> Found end-point");  # TODO: show the line or match
                 if ($options{"lchar"}) {
                     handleLchar();
                 }
@@ -686,6 +683,7 @@ sub doOneFile {
                 $rc = findStartPoint("SKIP");
             }
             else {
+                bWarn(0, "--iterate but no --lpat or --nlines.");
                 outLine($options{'insert'} . "\n");
                 $rc = findStartPoint("COPY");
             }
@@ -711,7 +709,10 @@ sub doOneFile {
     return $nBlocks;
 }
 
+# Return whether we have an *iterable* enpoint specified.
+# lline and lchar don't count, since they're absolute.
 sub haveEndPointOption {
+    return ($options{"lpat"} || $options{"nlines"});
 }
 
 ###############################################################################

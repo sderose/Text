@@ -36,7 +36,7 @@ The default is to pick 10 records at random.
 Records are selected I<without replacement>; that is, no record will show
 up more than once in the output.
 
-Alos has I<--fast> and I<--reservoir> sampling methods, which are especially
+Also has I<--fast> and I<--reservoir> sampling methods, which are especially
 good for sampling large input, or input coming via STDIN (where the program
 can't know how many lines there are in total, until after reading them all).
 See below for more detail on these.
@@ -44,26 +44,27 @@ See below for more detail on these.
 
 =head2 Notes
 
-You can select a random 10 lines out of a file like this:
+You can select a random 20 lines out of a file like this:
 
-    randomRecords -n 10 --force myFile.txt
+    randomRecords -n 20 myFile.txt
 
 The script first counts the total number of records, using the
-C<wc> command, then rewinds and runs through the collect the chosen records.
+C<wc> command, then reads the file to collect the chosen records.
 
-To read from STDIN (which can't be rewound),
+To read from STDIN (which can't be rewound, or easily
+sent both to C<wc> and read),
 it must instead load everything into memory and then count.
 Because of this oddness, you must specify C<--force> to use STDIN:
 
     ls | randomRecords -n 10 --force
 
-There are quite a few features for how records are chosen.
+There are quite a few options to control how records are chosen.
 With I<--mod N>, it just picks every N-th record in one pass (and
 STDIN is no longer special).
 The phase (essentially, which record you start counting from)
 can be rotated with I<--skip>.
 
-With the default method, once it knows the total number of records,
+With the default method, once it knows the total number of records
 it generates random numbers
 and adds them to a list of "chosen" record numbers. If it re-chooses a
 record number already in the list, it tries again. This is fine unless
@@ -71,8 +72,8 @@ the percentage of records to be chosen is very high, in which case it will
 do a lot of re-tries towards the end.
 This method should get a very uniform distribution of records,
 and exactly the requested number of records.
-For large inputs or input via STDIN, you may want to use
-I<--fast> or I<--reservoir> instead.
+For large inputs or input via STDIN, you may want to use the
+I<--fast> or I<--reservoir> options instead (see details below).
 
 
 =head1 Options
@@ -86,9 +87,11 @@ Don't include or even count blank (whitespace-only) lines.
 =item * B<--comments> I<regex>
 
 Disregard any lines that match I<regex>.
-For example, '^#' would discard comments in some file formats.
+For example, '^\s*#' would discard comments in some file formats.
+However, in some contexts it might not suffice. For example,
+inside a Python """...""" string or a shell here-document.
 B<Note>: If a large share of input lines consists of comments, it may
-adversely affect the use of I<--fast> combined with I<--pct>.
+hurt the performance of I<--fast> combined with I<--pct>.
 
 =item * B<--fast>
 
@@ -96,20 +99,24 @@ Use a different choice method: this method
 is faster especially when picking a large % of all available records.
 It runs through the record numbers once, and picks each one if
 a random number is under the percent requested. This is very quick, but may
-get slightly too few records (it will stop if it gets enough, so it never gets
-too many). It's highly unlikely to get I<many> fewer than requested.
-See also I<--reservoir>, usually a better choice when reading from STDIN.
+get slightly too few records. It never gets
+too many, because it stops if it gets enough. 
+This suggests that records near the end have a slightly lower
+than expected chance of being selected. 
+I<--fast> is very unlikely to get I<many> fewer records than requested.
+See also I<--reservoir>, which is usually a better choice when reading from STDIN.
 
 =item * B<--force>
 
-Allow taking input from STDIN (still experimental).
+Allow taking input from STDIN.
 This is special because the input is otherwise read twice (once to measure,
-once to select). Since that doesn't work for STDIN, the input is read in its
+once to select). Since that is a pain for STDIN, the input is read in its
 entirety and stored. Then records are selected and printed as usual.
+This is odd enough that you must specify I<--force> to make it happen.
 
 =item * B<--iencoding> I<t>
 
-Charset to use for input.
+Character set to use for input.
 
 =item * B<--ilineends> I<t>
 
@@ -118,7 +125,7 @@ Assume Unix, Dos, or Mac line-breaks for input.
 =item * B<--lineNumberFormat> I<s>
 
 Use I<s> as the sprintf format string for line numbers generated via
-I<--lineNumbers>. Default: C<%06d:\t>.
+I<--lineNumbers>. Default: C<%06d:\\t>.
 
 =item * B<--lineNumbers>
 
@@ -126,6 +133,7 @@ Prefix each line with its original line-number (padded to at least 6 digits),
 plus ':' and a tab.
 This is useful so you can trace records back to the original input.
 See I<--lineNumberFormat> for how to change the exact format used.
+There is no way to put the numbers at the end rather than the start of records.
 
 =item * B<--listEncodings>
 
@@ -133,14 +141,15 @@ Show all the encodings supported by I<--iencoding> and I<--oencoding>, and exit.
 
 =item * B<--mod> I<n>
 
-Select every I<n>th record, instead of randomly. The first record of the file
+Select every I<n>th record, instead of random records. The first record of the file
 (record #0) is chosen; then every n-th one following. However, you can shift
 the start with I<--skip> (q.v.). See also I<--pct>.
 
 =item * B<--n> I<num>
 
 Set how many records to select. Default: 10.
-If this amounts to a large % of the input, consider the I<--fast> option.
+If this amounts to a large % of the input, consider the I<--fast> or
+I<--resrvoir> options.
 Not to be confused with I<--lineNumbers>, which prefixes the original line
 number to each output line.
 
@@ -174,7 +183,7 @@ total number of available records first.
 This grabs the first I<n> records, then decides whether each later record
 should be ignored or should displace one of the previous records.
 For example, record I<n>+1 should have a 1 / (I<n>+1) chance of being in the
-result, so when it is read, it gets that change of replacing one of the
+result, so when it is read, it gets that chance of replacing one of the
 first I<n> records. If that's the end of the file, you get a reasonable
 result; otherwise you go on, and record I<n>+2 gets a 1 / (I<n>+2) chance to
 displace a prior record. There's a bit more to it, but that's the general idea.
@@ -189,20 +198,20 @@ causes Perl to choose a semi-random seed of its own.
 
 =item * B<--skip> I<n>
 
-Don't pick any of the first I<n> records (useful for avoiding headers, and
-for shifting the phase when doing round-robin selection with I<--mod>).
+Don't pick any of the first I<n> records (this may be useful for avoiding headers,
+and for shifting the phase when doing round-robin selection with I<--mod>).
 
-With I<--mod>, the skipped records I<do not> count towards the record numbers
-used to decide which records are 0 modeI<n>.
+When used along with I<--mod>, the skipped records I<do not> count towards 
+the record numbers used to decide which records are 0 mod I<n>.
 For example, if you use I<--mod 10 --skip 25>, then the first record picked
 will be (physical) record number 25 (the 26th record), instead of
-record number 0 (the first record); then record 35, 45, etc.
+record number 0 (the first record); then records 35, 45, etc.
 
 Default: 0.
 
 =item * B<--unicode>
 
-Synonym for I<--iencoding utf8>
+Synonym for I<--iencoding utf8>.
 
 =item * B<--version>
 
@@ -235,8 +244,9 @@ in memory (though not the actual records, except as just noted).
 
 =head1 History
 
-    2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
-converter regression testing.
+    2006-09~18: Written by Steven J. DeRose for PubMedCentral at
+the L<US National Institutes of Health|http://nih.gov>. 
+It replaces many manual steps for converter regression testing.
     2010-11-01 sjd: Cleanup. Rename. iooptions. --fast, --pct.
     2011-12-28 sjd: Add --every.
     2012-07-09 sjd: Rename --every to --mod (to be same as for C<disaggregate>.
@@ -254,8 +264,8 @@ on values under 1.0. Finish --blanks. Report basic stats at end. Improve doc.
 
 =head1 To do
 
-  Add a partition feature (or use C<disaggregate>), for doing train/test/dev
-  splits, n-way cross-validation splits, etc.
+    Add a partition feature (or use C<disaggregate>) for doing train/test/dev
+splits, n-way cross-validation splits, etc.
 
 
 =head1 Ownership
@@ -266,7 +276,7 @@ and thus is in the public domain.
 I have made various improvements since, and I hereby dedicate those
 improvements also to the public domain.
 
-For the most recent version, see L<derose.net|"http://www.derose.net/steve/utilities/">.
+For the most recent version, see L<https://github.com/sderose>.
 
 =cut
 
@@ -406,13 +416,13 @@ my $nBlanks = 0;
 my $nComments = 0;
 my $nPicked = 0;
 
-
 # Figure out how many records there are in all.
 #
 if ($reservoir) {                           # No record-counting required
-    warn "\n******* Reservoir sampling is experimental *******\n\n";
+    ($quiet) || warn "\n******* Reservoir sampling is experimental *******\n\n";
     $totalRecords = doReservoirSample();
-    ($quiet) || warn "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
+    ($quiet) || warn 
+        "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
     exit;
 }
 elsif (!$file) {                            # Count records via 'wc'
@@ -462,7 +472,7 @@ if ($verbose>1) {
 }
 
 # Read the file and print only the records whose numbers are in the list.
-# For STDIN, it's all in @everything.
+# For STDIN, all the input records are in @everything.
 #
 if (scalar @everything == 0) {
     open(IN, "<$file") || die "Can't open input file '$file'\n";
@@ -497,14 +507,15 @@ else { # already loaded via bufferWholeFile()
     }
 }
 
-($quiet) || warn "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
+($quiet) || warn 
+    "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
 
 exit;
 
 
 ###############################################################################
 # Sample without knowing how big the source pool is.
-# Do this by grabbing the first n records, and then replacing them with later
+# Do this by grabbing the first n records and then replacing them with later
 #     records with linearly decreasing probability.
 #     See L<http://stackoverflow.com/questions/2218005>.
 # Code below may be slightly biased when using 'pct'.
