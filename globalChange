@@ -195,7 +195,7 @@ Operate even on binary (as opposed to text) files. Default: off.
 
 =item * B<--color>
 
-Colorize STDERR output. Defaults to on if environment variable C<USE_COLOR>
+Colorize STDERR output. Defaults to on if environment variable C<CLI_COLOR>
 is set and STDERR is going to a terminal. This is especially useful with
 I<--test>, since you then see the before/after versions of each changed line,
 with the changed portion colorized.
@@ -1217,7 +1217,7 @@ my $backup           = 1;
 my $backupDirectory  = '';
 my $backupExtension  = "bak";
 my $binary           = 0;
-my $color            = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
+my $color            = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
 my $compileRegex     = 1;
 my $delim            = "/";
 my $dropEmptiedLines = 0;

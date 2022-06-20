@@ -8,6 +8,7 @@ import sys
 import argparse
 import re
 import codecs
+from collections import defaultdict
 
 from PowerWalk import PowerWalk
 
@@ -66,6 +67,8 @@ or [https://github.com/sderose].
 
 =Options=
 """
+
+stats = defaultdict(int)
 
 def doOneFile(_path, fh):
     for rec in fh.readlines():

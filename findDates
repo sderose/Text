@@ -67,7 +67,7 @@ Fairly smart about numeric vs. text forms:
 =item * B<--color>
 
 Colorize the output. Default to on if
-environment variable C<USE_COLOR> is set and STDERR is going to the terminal.
+environment variable C<CLI_COLOR> is set and STDERR is going to the terminal.
 
 =item * B<--iencoding> I<e>
 
@@ -145,7 +145,7 @@ L<https://github.com/sderose>.
 
 ###############################################################################
 #
-my $color         = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
+my $color         = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
 my $iencoding     = "";
 my $ignoreCase    = 0;
 my $ilineends     = "U";

@@ -158,7 +158,7 @@ You can also give a Unicode character-class name (experimental) to colorize all
 characters that are members of that class (such as Bopomofo);
 or I<!> plus a character-class name to colorize all characters that are
 I<not> of that class. See I<man perlunicode> for more details.
-If environment variable I<USE_COLOR> is set and STDOUT is going to
+If environment variable I<CLI_COLOR> is set and STDOUT is going to
 a terminal, defaults to coloring newlines and control characters
 (unfortunately, "| more" is not a terminal).
 
@@ -619,7 +619,7 @@ my %args = (
     "colorClass"         => "",    # Perl name for Unicode color class
     "colorClassNegated"  => "",
     "carg"               =>
-        ($ENV{USE_COLOR} && -t STDOUT) ? "auto":"off",
+        ($ENV{CLI_COLOR} && -t STDOUT) ? "auto":"off",
 
     "dcolumns"           => $ENV{COLUMNS} || 80,
     "dlines"             => $ENV{LINES} || 40,

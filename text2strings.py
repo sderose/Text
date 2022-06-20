@@ -3,11 +3,11 @@
 # text2strings.py Quote up a file to make Python string init.
 # 2018-11-05: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import argparse
 import codecs
 import PowerWalk
+from collections import defaultdict
 
 __metadata__ = {
     "title"        : "text2strings",
@@ -22,7 +22,6 @@ __metadata__ = {
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__["modified"]
-
 
 descr = """
 =Description=
@@ -65,6 +64,8 @@ or [https://github.com/sderose].
 
 ###############################################################################
 #
+stats = defaultdict(int)
+
 def doOneFile(path, fh):
     """Read and deal with one individual file.
     """

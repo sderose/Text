@@ -86,13 +86,14 @@ This is a bare-bones implementation of a forking version space for documents or
 other data expressible as text strings.
 
 A document is represented as an append-only list of changes, one per record in
-a readable file. The file can also have metadata records at the to (no provision for
+a readable file. The file can also have metadata records at the top (no provision for
 changing them yet, short of editing the raw file), and comment records anywhere.
 
 The "real" records each represent a change and thus a version, which for now means replacing a
 contiguous range of zero or more characters in the document, by some other characters.
 Replacing an empty range is obviously an insertion; replacing a non-empty range with
 an empty one is a deletion. Moves are desirable but not yet implemented.
+As a side benefit, this enables a much more precise reconstruction of provenance.
 
 A version of the document is identical with the change that created it.
 
@@ -145,10 +146,11 @@ special-character escapes may be used inside.
 characters to be copied. Giving the same target specification under source copy:, as
 for the target itself, thus results in no net change.
 
-The possible changes should add a mechanism for moves, and possibly for importing
+The possible changes should perhaps add a mechanism for moves,
+and probably for importing (copy vs. link vs. hot transclusion?)
 from other documents and versions.
 
-The document itself, never appears in the change-log file. Any particular version can
+The document itself does not really appear in the change-log file. Any particular version can
 be constructed by finding the change that created it, tracing back to find the linear
 chain of prior changes that led there, and then re-playing those changes.
 
@@ -172,7 +174,8 @@ treated as a big string.
 =Design Notes=
 
 This should work fine for disconnected or otherwise conflicting users, but not for
-a single user who runs non-communicating processes doing simultaneous changes.
+a single user who runs non-communicating processes doing simultaneous changes (though
+their changes can be easily recorded as another forking path when they reconnect).
 * A userid+changenumber identifies a change.
 * Every change is based on (and explicitly chooses) one immediately-preceding change.
 * Thus, a change is a version.

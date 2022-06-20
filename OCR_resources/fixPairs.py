@@ -187,14 +187,14 @@ def doOneFile(path:str):
     try:
         fh = codecs.open(path, mode='r', encoding=args.iencoding)
     except IOError as e:
-        lg.error("Can't open '%s'." % (path), stat="CantOpen")
+        lg.error("Can't open '%s'." % (path)); stats["CantOpen"] += 1
         return(0)
     while (True):
         try:
             rec = fh.readline()
         except IOError as e:
             lg.error("Error (%s) reading record %d of '%s'." %
-                (type(e), recnum, path), stat="readError")
+                (type(e), recnum, path)); stats["readError"] += 1
             break
         if (len(rec) == 0): break # EOF
         recnum += 1
@@ -208,7 +208,8 @@ def doOneFile(path:str):
         freq = int(freq)
         stats['totalFreq'] += freq
         if (len(found) != len(fixed)):
-            lg.vMsg(1, "%s\tLength mismatch" % (rec), stat='typesLengthDifference')
+            lg.vMsg(1, "%s\tLength mismatch" % (rec));
+            stats["typesLengthDifference"] += 1
             stats['tokensLengthDifference'] += freq
             continue
 

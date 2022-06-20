@@ -110,7 +110,7 @@ For the most recent version, see L<http://www.derose.net/steve/utilities/>.
 
 ###############################################################################
 #
-my $color         = ($ENV{USE_COLOR} && -t STDERR) ? 1:0;
+my $color         = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
 my $iencoding     = "";
 my $ilineends     = "U";
 my $lines         = $ENV{LINES} || 0;

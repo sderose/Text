@@ -104,7 +104,7 @@ the I<--fline 1> part, but there's currently a bug and you do.
 You can specify any mix of I<--fline>, I<--fpat>, and I<--fchar>.
 If none of them is specified, data is extracted starting at the
 beginning of the file. Otherwise, these options  are used,
-in the order just stated, to move forward in the file. 
+in the order just stated, to move forward in the file.
 For example, you could skip to line 100, then to the first line after that
 which matches a given regex, then to the nth column of that matching line.
 
@@ -700,7 +700,7 @@ sub doOneFile {
             $nBlocks = 1;
         }
     }
-    
+
     if  ($nBlocks == 0) {
         bWarn(0, "-fpat /" . $options{"fpat"} . "/ #" .
             $options{"fpatNum"} . " not found by EOF, nothing copied.");
@@ -720,7 +720,7 @@ sub haveEndPointOption {
 sub charOffsetsOnly {
     bWarn(1, "No line number args, just doing fchar/lchar");
 
-    my $rc = findStartPoint();
+    my $rc = findStartPoint("SKIP");
     outLine($firstLine);
 
     my $lastLine = "";
@@ -751,7 +751,7 @@ sub charOffsetsOnly {
 sub findStartPoint {
     my ($copyOrSkip) = @_;
     my $copy = ($copyOrSkip eq "COPY");
-    
+
     # If *only* --fchar for start, it's relative to whole file.
     #
     my $fpatNumFoundSoFar = 0;
@@ -876,7 +876,7 @@ sub copyToEndPoint {
     my $lline = $options{"lline"};
     my $lpatBreak = $options{"lpatBreak"};
     bWarn(1, "copyToEndPoint (ll $lline; nl $nlines; lpat /$lpat/).", "From: $firstLine");
-    
+
     my $stoppedBy = "EOF";
     while (defined ($rec = $reader->readOneRecord())) {
         bWarn(2, "Read: |$rec|");
@@ -1059,7 +1059,7 @@ sub new {
         die "Unable to open '$path'\n";
         return(undef);
     }
-    
+
     if ($enc) {
         binmode($fh, ":encoding($enc)");
     }
@@ -1095,7 +1095,7 @@ sub close {
 sub readOneRecord {
     my ($self) = @_;
     if ($self->{bytePos} != tell($self->{fh})) {  # TODO: tell() on STDIN not ok?
-        warn sprintf("bytePos (%d) out of sync with tell (%d)!\n", 
+        warn sprintf("bytePos (%d) out of sync with tell (%d)!\n",
             $self->{bytePos}, tell($self->{fh}));
     }
     my $fh = $self->{fh};
