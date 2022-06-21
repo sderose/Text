@@ -4,4 +4,41 @@
 # For newcommand and begin, also collect the arguments.
 # sjd
 #
-grep -hoE '\\((newcommand|begin)\s*{[^}]*}|[a-z0-9]*)' $@ | sort -f | uniq -c -i | sort -rn --key=1,1
+for x in $@; do
+    echo "arg |$x|"
+done
+
+args=""
+verbose=""
+while [[ "$#" > 0 ]]; do case "$1" in
+    -h|--help) cat <<EOF
+Ussage:
+    countTeXCommands
+    This runs a pipe to extract TEX commands from a file(s), and report frequency.
+Options:
+    --args: Also include their arguments.
+EOF
+        return;;
+    -a|--args) args=1;;
+    -v|--verbose) verbose=1;;
+    *) break;;
+  esac; shift;
+done
+
+cmd='((begin|end)\{[^}]*\}|[a-zA-Z][a-zA-Z]*)'
+cb='\{[^}]*\}'
+sb='[^\\\\]*]'
+expr="(\\\\$cmd($cb|$sb)*)"
+
+[ $verbose ] && echo "cmd $cmd; cb $cb; sb $sb; expr $expr"
+
+for x in $*; do
+    echo "arg |$x|"
+done
+
+if ! [[ $args ]]; then
+    [ $verbose ] && echo "No args..."
+    command grep -hoE "(\\\\$cmd)" $@ | sort -f | uniq -c -i | sort -rn --key=1,1
+else
+    command grep -hoE "($expr)" "$@" | sort -f | uniq -c -i | sort -rn --key=1,1
+fi
