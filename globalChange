@@ -47,7 +47,7 @@ See the next section,
 L<Why globalChange instead of sed?>, for further highlights.
 
 To be queried for each change, see I<--interactive> and I<--multiDest>
-(the latter lets you choose among several pre-specified 
+(the latter lets you choose among several pre-specified
 replacements for each match).
 To see what changes I<would> be made, but not actually do them, see I<--test>.
 
@@ -161,7 +161,7 @@ feel a lot less like programming, and (hopefully) more descriptive.
 
 =over
 
-=item * B<--backup>
+=item * B<--backup> OR B<--bak>
 
 Make backups like the *nix C<cp -b> command.
 Default: on (turn off with I<--nobackup>).
@@ -1070,12 +1070,12 @@ to apply (ASCII, Default, Locale-based, or Unicode).
     Test features: --multidest, --dropEmptiedLines, --interactive changes.
     Test piping in and out.
     Test named capture groups.
-  
+
   Reporting:
     Option to suppress 'starting file' until first change
     Option to suppress inidividual changes, just give total per file.
     Report which files each change affected (not just total changes).
-    
+
   Multi-dest support
     Add multidest command to show line changed each way.
     multidest with /g needs to iterate or something....
@@ -1090,7 +1090,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
   Field and component support:
     Make --fieldChoice accept field *names*.
     Option to restrict changes to XML gi/aname/avalue/markup/content?
-    
+
   Miscellaneous:
     Escaping in cases like: "s/::\\$options\\['\(\w+\)'\\]/::x('\1')/" *
     Treat arg as -e if it has slashes.
@@ -1294,7 +1294,7 @@ my $tmpFile = "/tmp/globalChange_" . int(rand(100000)) . ".out";
 #
 my %getoptHash = (
     "askColor=s"            => \$askColor,
-    "backup!"               => \$backup,
+    "backup|bak!"           => \$backup,
     "backupDirectory=s"     => \$backupDirectory,
     "backupExtension=s"     => \$backupExtension,
     "binary!"               => \$binary,
@@ -1609,7 +1609,7 @@ sub saveChangeSpecFromExpr {
         $exprCopy =~ qr#$metaExpr#;
         @parts = ( $1, $2, $3, $4 );
     }
-    
+
     if ($verbose ge 1) {
         my $msg = "Change parsed to:\n";
         for (my $i=0; $i<scalar(@parts); $i++) {
@@ -1737,7 +1737,7 @@ sub doOneItem {
     if ($iencoding) {
         binmode($ifh, ":encoding($iencoding)");
     }
-    
+
     # Copy then overwrite, so the permissions get set right.
     # Change to do this later, if we indeed made changes.
     #my $cmd = "cp -P $file $tmpFile";
@@ -1767,7 +1767,7 @@ sub doOneItem {
     alogging::MsgPop();
     close $ifh;
     close $ofh;
-    
+
     if ($nc < 0) {
         vMsg(0, "  Changes failed for file '$file'");
         $failedChanges++;
@@ -1780,17 +1780,17 @@ sub doOneItem {
     $totalFilesChanged++;
     alogging::Msg("some", sprintf(">>> %3d change(s) in file '%s'%s",
         $nc, $file, $test ? " (DRY RUN)" : ''));
-    
+
     ###########################################################################
     #
     if ($test) {                                      ### DRY RUN ENDS HERE ###
         #alogging::vMsg(1, "(DRY RUN)");
         return(1);
     }
-    
+
     ###########################################################################
     # Make the backup if requested
-    # 
+    #
     if ($backup) {
         my $backupDest = "$backupDirectory$file.$backupExtension";
         alogging::vMsg(1, "Backing up '$file' to '$backupDest'.");
@@ -1800,7 +1800,7 @@ sub doOneItem {
             return(0);
         }
     }
-    
+
     ###########################################################################
     # Update the disk file(s)
     # Note: this mucks up the permission (cf. cp -a)
@@ -1955,10 +1955,10 @@ sub doOneFile {
             my $msg = "  Line $recnum: " . $lineStats->{'nChangesInLine'} . " total match(es).";
             if (scalar(@exprs) > 1) {
                 $msg .= " By expr: [" . join(",",  @{$lineStats->{'whichApplied'}}, "]");
-            } 
+            }
             vMsg(0, $msg);
         }
-        
+
         if (sjdUtils::getVerbose() >= 2) {
             my $diffLine = (scalar(@originalFields) == 1)
                 ? makeDiffLine($recnum, $originalFields[0], $newFields[0])
@@ -2026,7 +2026,7 @@ sub userApproves {
 
     main::ask(sprintf("  Record %d of '%s'?\n", $recnum, $file));
     print(makeDiffLine($recnum, $originalRec, $newRec) . "\n");
-    
+
     my $reallyDoit = 0;
     main::ask("Change? [ynq!+.h=]\n");
     while (1) {
@@ -2225,7 +2225,7 @@ sub makeDiffLine {
         $dl = $r1c . " | " . $r2c . "\n";
     }
     elsif ($lineNumbers) {
-        $dl = sprintf("%5d: %s<%s\n       %s>%s", 
+        $dl = sprintf("%5d: %s<%s\n       %s>%s",
             $recnum, ' ' x 0, $r1c, ' ' x $indent, $r2c);
     }
     else {
