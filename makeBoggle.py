@@ -107,7 +107,8 @@ boxDraws = {
     "LRCORNER" : ( "/"  , "\u251B", ),
 }
 
-"""
+"""See also Charsets/UnicodeLists/boxDrawing.py.
+
     /---------------\
     | T | O | L | B |
     |---+---+---+---|
