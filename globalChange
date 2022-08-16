@@ -80,6 +80,8 @@ option, and want a literal "$" inside the regex:
 
     globalChange -e "s/\\\$GLOBALS\['x'\]/$x/" *
 
+Also be careful to backslash "||" -- otherwise it looks like to regex OR operators,
+so will match at every character of any input -- which is not going to be what you want.
 
 =head2 Choice and treatment of files
 
@@ -1381,7 +1383,7 @@ my %getoptHash = (
     "d=s"                   => sub {      # delete matches
         saveChangeSpec($_[1], '', '');
     },
-    "e=s"                   => sub {      # sed-like -e
+    "e=s"                   => sub {      # sed-like -e for regular expression changes
         saveChangeSpecFromExpr($_[1]);
     },
     "f|fileOfExprs=s"       => sub {      # file of changes
@@ -1591,14 +1593,6 @@ sub saveChangeSpecFromExpr {
         @parts = split(/(?<![\\])$delim/, $expr);
         if (scalar @parts == 2) { push @parts, ""; }  # s/xyz//
     }
-    elsif (0) {  # Obsolete
-        while ($exprCopy =~ s/^(.*?[^\\])?$delim//) {
-            push @parts, $1;
-        }
-        if ($exprCopy ne '') {
-            push @parts, $exprCopy;
-        }
-    }
     else {
         my $metaExpr = "^(s)/([^/]*)/([^/]*)/([msixpgc]*)\$";
         if ($delim ne "/") {
@@ -1611,7 +1605,7 @@ sub saveChangeSpecFromExpr {
     }
 
     if ($verbose ge 1) {
-        my $msg = "Change parsed to:\n";
+        my $msg = "Change was parsed to:\n";
         for (my $i=0; $i<scalar(@parts); $i++) {
             $msg .= sprintf("    %d: '%s'\n", $i, $parts[$i]);
         }
@@ -1622,7 +1616,11 @@ sub saveChangeSpecFromExpr {
     my $problem = (scalar(@parts)<3 || scalar(@parts)>4) ? 1:0;
     if ($to =~ m/[\x01-\x08]/) {
         warn "***** Char from 0 to 8 in /to/ -- did you do \\1 instead of \\\\n?\n";
-        $problem = 1;
+        $problem += 1;
+    }
+    if ($from =~ m/\|\|/) {
+        warn "***** Found '||' in '$from' -- did you forget to backslash?\n";
+        $problem += 1;
     }
     if ($problem || $verbose>=2) {
         hMsg(0,"Expression #" . scalar(@exprs) . " parse:\n" .
@@ -1778,7 +1776,7 @@ sub doOneItem {
         return(1);
     }
     $totalFilesChanged++;
-    alogging::Msg("some", sprintf(">>> %3d change(s) in file '%s'%s",
+    alogging::Msg("green", sprintf(">>> %3d change(s) in file '%s'%s",
         $nc, $file, $test ? " (DRY RUN)" : ''));
 
     ###########################################################################
@@ -1861,7 +1859,7 @@ sub doOneFile {
 
         chomp $originalRec;
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
-            Msg("some", sprintf(
+            Msg("magenta/white", sprintf(
                 "At line %12s (total), total changes: %12s, now in %s.",
                  lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why the /2?
         }
