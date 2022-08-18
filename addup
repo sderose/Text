@@ -354,7 +354,7 @@ while (my $rec = <>) {
     # Clean and parse the record
     #
     chomp($rec);
-    alogging::hMsg(2, "Rec #$recnum: '$rec'");
+    alogging::vMsg(2, "====Rec #$recnum: '$rec'");
     $rec =~ s/^\s*//;                             # strip leading spaces
     if (($comment ne "") &&                       # skip line as comment
         ($rec =~ m/^$comment/)) {
@@ -530,7 +530,7 @@ sub handleNumber {
         }
         if ($roundMinutes)
         {
-            vMsg("--roundMinutes not yet supported.");
+            vMsg(0, "--roundMinutes not yet supported.");
         }
         addTime($hour, $min, $sec);
         return;

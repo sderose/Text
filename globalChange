@@ -13,7 +13,6 @@ use File::Copy;  # For move()
 
 use sjdUtils;
 use alogging;
-use alogging;
 use TabularFormats;
 
 our %metadata = (
@@ -1065,6 +1064,8 @@ to apply (ASCII, Default, Locale-based, or Unicode).
 
 =head1 To do
 
+  Add option to completely delete lines that match in full.
+
   Move to Python, on top of PowerWalk and fsplit.
 
   More testing:
@@ -1214,16 +1215,22 @@ L<https://github.com/sderose>.
 ###############################################################################
 # Options
 #
-my $askColor         = 'green';
+# Color settings (see ColorManager.pm):
+my $color            = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
+my $askColor         = 'green/white';
+my $errorColor       = 'red/white';
+my $matchColor       = 'yellow/white';
+my $resultColor      = 'red/white';
+my $sourceColor      = 'bold';
+#
+# Rest of options:
 my $backup           = 1;
 my $backupDirectory  = '';
 my $backupExtension  = "bak";
 my $binary           = 0;
-my $color            = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
 my $compileRegex     = 1;
 my $delim            = "/";
 my $dropEmptiedLines = 0;
-my $errorColor       = 'red';
 my $fileOfExprs      = '';
 my $fileStart        = 1;
 my $firstPerFile     = 0;
@@ -1240,7 +1247,6 @@ my $lastPerFile      = 0;
 my $lineNumbers      = 0;
 my $linux            = 0;
 my $list             = 0;
-my $matchColor       = 'yellow';
 my $maxChanges       = 0;
 my $maxLinesChanged  = 0;
 my $oencoding        = '';
@@ -1249,13 +1255,11 @@ my $perFile          = 0;
 my $prepend          = "";
 my $quiet            = 0;
 my $recursive        = 0;
-my $resultColor      = 'red';
 my $showAllMatches   = 0;
 my $showChanges      = 0;
 my $showMatchCounts  = 0;
 my $showResults      = 0;
 my $sideBySide       = 0;
-my $sourceColor      = 'bold';
 my $super            = 1; # Try to make changeInfo::apply faster.
 my $test             = 0;
 my $tickInterval     = 10000;
@@ -1428,19 +1432,16 @@ my $strictlyEquiv      = "\x{2263}";
 my $symmetry           = "\x{232f}";
 my $rCircled           = "\x{24c7}";
 
+my $noChangeColor = "black";
+my $someChangeColor = "green";
+my $rawColor = "black";
+
 
 ###############################################################################
 # Set implied options, validate option values...
 #
 sjdUtils::setVerbose($verbose);
 sjdUtils::setColors($color || $hiliteResults);
-if ($color) {
-    # type, color, lvl, pre, suf, escape, indent
-    alogging::defineMsgType("none", "black");              # "No changes"
-    alogging::defineMsgType("some", "green");              # "<n> changes"
-    alogging::defineMsgType("raw",  "black",0,'','',0,0);  # no indent
-}
-alogging::defineMsgType('prompt', 'green', 0, '    ', '', '', 0, 0);
 
 # Check on the changes, and see if there's any --fieldChoice going on.
 # If so, figure the highest field-number in use.
@@ -1468,7 +1469,7 @@ if ($nWithMultiDest>0) {
 }
 
 if ($verbose || $list) {
-    hMsg(0,"List of changes in effect:");
+    vMsg(0, "====List of changes in effect:");
     alogging::MsgPush();
     my $colorSlash = sjdUtils::colorize("yellow/bold", "/");
     for (my $i=0; $i<scalar(@exprs); $i++) {
@@ -1623,7 +1624,7 @@ sub saveChangeSpecFromExpr {
         $problem += 1;
     }
     if ($problem || $verbose>=2) {
-        hMsg(0,"Expression #" . scalar(@exprs) . " parse:\n" .
+        vMsg(0, "====Expression #" . scalar(@exprs) . " parse:\n" .
             "    expr:  '$expr'\n" .
             "    parts: #" . join("#", @parts) . "#\n" .
             "    delim: '" . ($delim || '') . "'\n" .
@@ -1723,7 +1724,7 @@ sub doOneItem {
     # Past filters, really do this file.
     #
     if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
-        hMsg(0, "Starting file '$file'");
+        vMsg(0, "====Starting file '$file'");
     }
     alogging::vMsg(1, "Opening input file $file.");
     my $ifh;
@@ -1776,7 +1777,11 @@ sub doOneItem {
         return(1);
     }
     $totalFilesChanged++;
+<<<<<<< HEAD
     alogging::Msg("green", sprintf(">>> %3d change(s) in file '%s'%s",
+=======
+    alogging::Msg($someChangeColor, sprintf(">>> %3d change(s) in file '%s'%s",
+>>>>>>> 6403dd7 (logging and color fixes.)
         $nc, $file, $test ? " (DRY RUN)" : ''));
 
     ###########################################################################
@@ -1809,7 +1814,7 @@ sub doOneItem {
         alogging::eMsg(0, "Failed to update: $@");
         $failedCopy++;
     }
-    chmod $permissions, $file || alogging::eMSg("Failed to reset permissions.");;
+    chmod $permissions, $file || alogging::eMSg(0, "Failed to reset permissions.");;
 
     return(1);
 } # doOneItem
@@ -1859,8 +1864,8 @@ sub doOneFile {
 
         chomp $originalRec;
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
-            Msg("magenta/white", sprintf(
-                "At line %12s (total), total changes: %12s, now in %s.",
+            Msg($someChangeColor, sprintf(
+                "At line %12s (total), total changes: %12s, now processing %s.",
                  lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why the /2?
         }
         if ($quit) {  # Quoth the user, "nevermore".
@@ -2121,7 +2126,7 @@ sub issueLine {
     my $outrec = ($needToParse) ?
         $tfmt->assembleRecord($newFields) : $newFields->[1];
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        alogging::hMsg(0,"--maxLinesChanged reached ($maxLinesChanged)".
+        alogging::vMsg(0, "====--maxLinesChanged reached ($maxLinesChanged)".
             ", stopping changes after record $recnum.");
         $quit = 1;
     }
@@ -2147,12 +2152,12 @@ sub issueLine {
         $totalChanges += $appCount;
     }
     if ($maxChanges && ($totalChanges > $maxChanges)) {
-        alogging::hMsg(0,"--maxChanges reached ($maxChanges), stopping.");
+        alogging::vMsg(0, "====--maxChanges reached ($maxChanges), stopping.");
         $quit = 1;
     }
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        alogging::hMsg(
-            0,"--maxLinesChanged reached ($maxLinesChanged), stopping.");
+        alogging::vMsg(
+            0, "====--maxLinesChanged reached ($maxLinesChanged), stopping.");
         $quit = 1;
     }
 
@@ -2286,7 +2291,7 @@ sub report {
 
     if (!$quiet) {
         vMsg(0,'');
-        Msg("some", "Done" . ($test ? " (DRY RUN)":'') . '.');
+        Msg($someChangeColor, "Done" . ($test ? " (DRY RUN)":'') . '.');
         vMsg(0, sprintf(
             "%d items: %d files, %d directories%s, %s, %s, %s.",
             $totalItems, $filesRegular, $dirs,
@@ -2307,7 +2312,7 @@ sub report {
     }
 
     if ($showMatchCounts) {
-        hMsg(0, "Number of matches to each expression:");
+        vMsg(0, "====Number of matches to each expression:");
         for (my $i=0; $i<scalar(@exprs); $i++) {
             vMsg(0, sprintf("    %3d: %6d s/%s/%s/",
                 $i, $exprs[$i]->{matchCount}, $exprs[$i]->{from},
@@ -2483,7 +2488,7 @@ sub apply {
     }
     my $newField = '';
 
-    #alogging::hMsg(2, "Evaling: " . $self->toString());
+    #alogging::vMsg(2, "====Evaling: " . $self->toString());
     if ($self->{'isMultiDest'}) {
         if ($oldField !~ m/$cfr/) { next; }  # No match
         $newField = $self->multiDestChoice($oldField, $-[0], $+[0]);

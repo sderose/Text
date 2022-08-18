@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #
-# list2htmlForm
+# list2htmlForm: Make an HTML form from a list of items.
+# 2012-04-26: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import os
 import re
@@ -10,12 +10,13 @@ import argparse
 
 __metadata__ = {
     'title'        : "list2htmlForm",
+    "description"  : "Make an HTML form from a list of items.",
     'rightsHolder' : "Steven J. DeRose",
     'creator'      : "http://viaf.org/viaf/50334488",
     'type'         : "http://purl.org/dc/dcmitype/Software",
     'language'     : "Python 3.7",
     'created'      : "2012-04-26",
-    'modified'     : "2020-03-04",
+    'modified'     : "2022-08-18",
     'publisher'    : "http://github.com/sderose",
     'license'      : "https://creativecommons.org/licenses/by-sa/3.0/",
 }
@@ -29,6 +30,7 @@ list2htmlForm [options]
 Make each line of a file into an item in an XHTML form.
 You can make radio buttons, checkboxes or a pop-up menu,
 and lay them out in various ways.
+
 
 =Options=
 
@@ -47,9 +49,20 @@ Add more detailed messages (doesn't do much at the moment).
 * B<--version>
 Display version info and exit.
 
+
 =Related Commands=
 
+
 =Known bugs and limitations=
+
+
+=History=
+
+* 2012-04-26: Written by Steven J. DeRose.
+* 2018-04-18: lint.
+* 2020-04-04: lint, new layout, POD to MarkDown.
+* 2022-08-18: Layout, lint, etc.
+
 
 =Rights=
 
@@ -61,23 +74,29 @@ For more information on this license, see [here|"https://creativecommons.org"].
 For the most recent version, see [http://www.derose.net/steve/utilities] or
 [http://github/com/sderose].
 
-=History=
-
-* 2012-04-26: Written by Steven J. DeRose.
-* 2018-04-18: lint.
-* 2020-04-04: lint, new layout, POD to MarkDown.
 
 =Options=
 """
 
 def vMsg(level, msg):
-    if (args.verbose >= level): sys.stderr.write(msg+"\n")
+    if (args.verbose < level): return
+    if (msg.startswith("====")): sys.stderr.write("\n" + "*" * 79 + '\n')
+    sys.stderr.write(msg+'\n')
 
 
 ###############################################################################
 # Process options
 #
-parser = argparse.ArgumentParser()
+try:
+    from BlockFormatter import BlockFormatter
+    parser = argparse.ArgumentParser(
+        description=descr, formatter_class=BlockFormatter)
+except ImportError:
+    parser = argparse.ArgumentParser(description=descr)
+
+parser.add_argument(
+    "--verbose", action='count', default=0,
+    help='Add more messages (repeatable).')
 parser.add_argument(
     "--break", action='store_true', dest="breakEm",
     help='Put a <br> before each item.')

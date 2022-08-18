@@ -3,7 +3,6 @@
 # json2xml.py: Convert JSON to XML or other forms.
 # Written 2012-12-04 by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import os
 import re
@@ -587,19 +586,16 @@ if __name__ == "__main__":
 
         parser.add_argument(
             "--homogeneity", action="store_true",
-            help='Add an attribute on collections, giving their item type if homogeneous.')
+            help='Add a homogeneity attribute on collections, giving the type.')
         parser.add_argument(
             "--lengths", action="store_true",
-            help='Add a length attribute on collections, giving their cardinality.')
+            help='Add a cardinality attribute on collections.')
         parser.add_argument(
             "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--istring", type=str, default="    ",
             help="Repeat this string to indent the output.")
-        parser.add_argument(
-            "--lengths", action="store_true",
-            help='Add a length attribute on collections, giving their cardinality.')
         parser.add_argument(
             "--notype", action="store_true",
             help='Delete the "type" attribute everywhere.')
