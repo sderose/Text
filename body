@@ -14,13 +14,13 @@ use alogging;
 
 our %metadata = (
     'title'        => "body",
-    'description'  => "Like 'head' and 'tail', but find ranges by line number or regex.",
+    'description'  => "Like 'head' and 'tail', but find ranges by line number, regex, etc.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-03-23",
-    'modified'     => "2022-02-25",
+    'modified'     => "2022-08-18",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -37,6 +37,15 @@ our $VERSION_DATE = $metadata{'modified'};
 Extract a range(s) of lines or characters from the input (somewhat like
 *nix C<head> and C<tail>, but for the middle).
 
+For example, to extract the "History" section of a Markdown-ish file:
+
+    body --fPat '^=History=' --lPat '^=' myFile.md
+
+This will include the '=History=' line, but not the ending '^=' line (to include
+the latter, set I<--lpatBreak INCLUDELINE>). To get the last non-blank line of such a history section, you could use:
+
+    body --fPat '^=History=' --lPat '^=' myFile.md | dropBlankLines | tail -n 1
+
 The starting and ending locations
 can be specified by line numbers, character offsets,
 and/or regular expression patterns.
@@ -51,7 +60,7 @@ them separately, not applied once to their concatenated data.
 
 You can probably do any of this with, C<awk> (and more), if you remember how.
 I like this approach better, in part because it fills the gap between
-C<head> and C<tail>, and can do their jobs, too, and supports Unicode
+C<head> and C<tail> (and can do their jobs, too), and supports Unicode
 (recent versions of C<gawk> do Unicode, too).
 
 =head2 Examples
@@ -128,7 +137,7 @@ The default is to include the entire line containing the match.
 If it is instead set to EXCLUDELINE, that line is entirely discarded,
 and the following line becomes the current line.
 
-=item # Then to offset I<--fchar> in the current lineor portion (depending on
+=item # Then to offset I<--fchar> in the current line portion (depending on
 I<--fpatBreak>, this might include only part of the matched input line).
 If the line (or part) is not wide enough, copying begins at the start of the
 next line and a warning is issued.
@@ -141,10 +150,8 @@ mixed with I<--iterate>.
 =back
 
 After locating the starting point, data is copied until stopped by EOF or by
-matching any ending condition.
-
-Similar to finding the starting point, if
-I<--fchar> is the only ending condition specified, then it is treated as a
+matching any ending condition. Similar to finding the starting point, if
+I<--lchar> is the only ending condition specified, then it is treated as a
 global file offset, and data is copied up to there. If other ending
 conditions are specified, the script copies data until:
 

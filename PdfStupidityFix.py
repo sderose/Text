@@ -3,7 +3,6 @@
 # PdfStupidityFix.py: Make spacing, hyphenation, etc. better.
 # 2020-09-25: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import os
 import codecs
@@ -368,6 +367,8 @@ a better word-list.
 
 Hook up to Zotero to fix titles, abstracts, etc.?
 See [https://pyzotero.readthedocs.io/en/latest].
+
+Delete dot-fills.
 
 
 =History=

@@ -23,7 +23,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2010-08-25",
-    'modified'     => "2021-11-22",
+    'modified'     => "2022-08-19",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -36,25 +36,30 @@ our $VERSION_DATE = $metadata{'modified'};
 
 globalChange [options] [files]
 
-Do a global-change(s) on the named file(s). For example:
+Do a global-change(s) on the named file(s). See the next section,
+L<Why globalChange instead of sed?>, for discussion of many more features.
 
-    globalChange -r -e 's/these (\w+) is/these $1 are/g' *
+A basic example:
 
-There are a lot of features. A summary of files checked, files changed, lines
-changed, and total changes appear at the end (unless C<--quiet>).
-See the next section,
-L<Why globalChange instead of sed?>, for further highlights.
+    globalChange -r -e 's/these (\w+) is/these $1 are/g' -e 's/fi/\\ufb01/g*
 
-To be queried for each change, see I<--interactive> and I<--multiDest>
-(the latter lets you choose among several pre-specified
-replacements for each match).
-To see what changes I<would> be made, but not actually do them, see I<--test>.
+The changes are expressed using Perl regex features (see below), and are
+performed in the order specified.
+A summary of files checked, files changed, lines
+changed, and total changes appears at the end (unless C<--quiet>).
 
-You can specify the change(s) using Perl regex features (see below).
-Multipe I<-e> expressions are applied in the order specified.
+To see what changes I<would> be made, but not actually do them, use I<--test>
+or its synonym I<--dry-run>.
 
-B<Note>: Remember to use the C<g> modifier
-if you want all occurrences on each line changed (see also I<--global>).
+To be queried for each change, use I<--interactive> and I<--multiDest>:
+
+=over
+
+=item I<--interactive> lets you respond "contiguous", to do further changes without
+asking I<until> hitting a line with no match but then go back to asking;
+
+=item I<--multiDest> lets you choose among several pre-specified
+replacements for each match.
 
 
 =head2 Backslashing your regexes
@@ -64,13 +69,13 @@ if you want all occurrences on each line changed (see also I<--global>).
 or backslashed. You may find single-quoting all your I<-e> options helpful.
 
 Once the "$" is past the shell so C<globalChange> actually sees it, it
-is still special to regex. To get a literal dollar sign, you'll need to
+is still special to Perl and to regex. To get a literal dollar sign, you'll need to
 backslash it (in addition to any shell backslashing you already did).
 On the left side of a regex, unescaped "$" means I<end of line>.
 On both sides, it is used to insert "capture" groups that were parenthesized
 on the left side.
 
-Use of $n instead of \n for inserting capture groups is Perl-specific.
+Use of $n instead of \\n for inserting capture groups is Perl-specific.
 This script should probably accept either form, but that has proven harder
 than anticipated, and for now, I<only> the $n form works.
 
@@ -79,15 +84,15 @@ option, and want a literal "$" inside the regex:
 
     globalChange -e "s/\\\$GLOBALS\['x'\]/$x/" *
 
-Also be careful to backslash "||" -- otherwise it looks like to regex OR operators,
-so will match at every character of any input -- which is not going to be what you want.
+Also be careful to backslash "||" -- otherwise it looks like two regex OR operators,
+so will match at every character of any input -- which is not likely what you want.
 
 =head2 Choice and treatment of files
 
 Files already ending in C<.bak> or C<#> or C<~> are not changed unless you
 specify I<--force>.
 Changed files replace the originals.
-The original files are backed up if I<--backup> is in effect.
+The original files are backed up unless you set I<--nobackup>.
 If there are already conflicting C<.bak> files, they are quietly deleted.
 BSD/OSX C<cp> lacks the I<--preserve> and I<-b> options,
 so they are not used.
@@ -106,23 +111,18 @@ For example, it:
 =over
 
 =item * Supports B<Unicode> and many other character encodings
-(see I<--listEncodings>)
+(see I<--iencoding>, I<--oencoding>, and I<--listEncodings>).
 
 =item * Supports full B<Perl-style regular expressions> (as of this writing,
-C<sed> at least on my machine, lacks a I<-P> option like some C<grep>s have)
+C<sed> on MacOS lacks a I<-P> option like some C<grep>s have).
 
 =item * Has I<--test> mode (aka I<--dry-run>), and
-can colorize the parts of lines that changed.
+can colorize the parts of lines that changed to see exactly what changed.
 
-=item * Allows you to specify B<multiple replacements>,
-so you can choose between
-them at each match. This is especially useful when annotating some existing
-phenomenon that you can match for, but where it takes human judgement to
-decide which exact thing to change to in each instance
+=item * Lets you drop lines which are reduce to nothing by the change(s),
+using I<--dropEmptiedLines>.
 
-=item * Can limit changes to B<certain fields> (experimental)
-
-=item * Provides B<interactive> query-replace
+=item * Provides I<interactive> query-replace
 (with an interface much like C<emacs query-replace>,
 except that you can't go back to 'undo' previous changes). You can also
 just tell it to skip certain potential changes
@@ -131,14 +131,24 @@ just tell it to skip certain potential changes
 =item * Provides an interactive response that causes the same change to be
 applied unconditionally, but B<only until> a line is reached where there is no
 such change to do. That is, contiguous lines that match are changed,
-but then it goes back to asking again
+but then it goes back to asking again.
+
+=item * Allows you to specify B<multiple replacements>,
+so with I<interactive> you can choose between
+them at each match. This is especially useful when annotating some existing
+phenomenon that takes human judgement to
+decide which exact thing to change to in each instance. For example, the same 
+word or name may occur in two different contexts, and you want to rename it
+to one thing in one context, but a different thing in the other.
 
 =item * Does the equivalent of C<sed>'s I<--separate>
-and I<--in-place=extension> by default
+and I<--in-place=extension> by default.
 
-=item * Has I<--recursive> (experimental)
+=item * Can limit changes to B<certain fields> (experimental).
 
-=item * Permits arbitrary Perl code on right hand side (experimental)
+=item * Has I<--recursive>.
+
+=item * Permits arbitrary Perl code on right hand side (experimental).
 
 =item * Simple I<multi-line matching> is in development, but not yet
 finished. See I<--spanLines>, I<--preLines>, I<--postLines>,
@@ -147,7 +157,7 @@ I<--pre>, and I<--post>, below.
 =back
 
 These and other features try to address limitations I've encountered with
-other tools; particularly the notion of constraining matches, contexts, etc.
+other tools, particularly the notion of constraining matches, contexts, etc.
 by additional regexes.
 
 This script does not have script-like capabilities like
@@ -217,6 +227,12 @@ color names are as provided by C<ColorManager.pm> (q.v.).
 =item * B<--resultColor> I<color> -- For changed lines
 
 =back
+
+=item * B<--compact>
+
+Make the 'starting file...' messages much more compact. Normally they show a
+separator line, then a message line. With I<--compact>, there is no separator line,
+and each message line overwrites the previous one if there were no changes there.
 
 =item * B<--compileRegex>
 
@@ -1064,8 +1080,6 @@ to apply (ASCII, Default, Locale-based, or Unicode).
 
 =head1 To do
 
-  Add option to completely delete lines that match in full.
-
   Move to Python, on top of PowerWalk and fsplit.
 
   More testing:
@@ -1075,7 +1089,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
     Test named capture groups.
 
   Reporting:
-    Option to suppress 'starting file' until first change
+    Option to suppress 'starting file' until first change (but see I<--compact>)
     Option to suppress inidividual changes, just give total per file.
     Report which files each change affected (not just total changes).
 
@@ -1196,7 +1210,8 @@ empty portions. Add --lineNumbers for makeDiffLine().
   2021-11-22: More fixes to -e parsing. Fix big in makeDiffLine() where it could
 print extra data.
   2022-03-11: Minor cleanup.
-
+  2022-08-19: Fix missed merge lines.
+  
 
 =head1 Rights
 
@@ -1219,7 +1234,7 @@ L<https://github.com/sderose>.
 my $color            = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
 my $askColor         = 'green/white';
 my $errorColor       = 'red/white';
-my $matchColor       = 'yellow/white';
+my $matchColor       = 'blue/white';
 my $resultColor      = 'red/white';
 my $sourceColor      = 'bold';
 #
@@ -1228,6 +1243,7 @@ my $backup           = 1;
 my $backupDirectory  = '';
 my $backupExtension  = "bak";
 my $binary           = 0;
+my $compact          = 0;
 my $compileRegex     = 1;
 my $delim            = "/";
 my $dropEmptiedLines = 0;
@@ -1305,6 +1321,7 @@ my %getoptHash = (
     "backupExtension=s"     => \$backupExtension,
     "binary!"               => \$binary,
     "color!"                => \$color,
+    "compact!"              => \$compact,
     "compileRegex!"         => \$compileRegex,
     "dropEmptiedLines!"     => \$dropEmptiedLines,
     "errorColor=s"          => \$errorColor,
@@ -1432,6 +1449,7 @@ my $strictlyEquiv      = "\x{2263}";
 my $symmetry           = "\x{232f}";
 my $rCircled           = "\x{24c7}";
 
+my $clearEOL = "\x1B[K";
 my $noChangeColor = "black";
 my $someChangeColor = "green";
 my $rawColor = "black";
@@ -1447,7 +1465,7 @@ sjdUtils::setColors($color || $hiliteResults);
 # If so, figure the highest field-number in use.
 #
 (scalar(@exprs)>0 || $prepend) ||
-    dieCleanly("No change(s) specified. Try the '-help' option.\n");
+    dieCleanly("No change(s) specified. Try -e, -d, or --help'.\n");
 
 if ($prepend) {
     $prepend = sjdUtils::unbackslash($prepend);
@@ -1724,9 +1742,13 @@ sub doOneItem {
     # Past filters, really do this file.
     #
     if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
-        vMsg(0, "====Starting file '$file'");
+        if ($compact) {
+            print("Starting file '$file'$clearEOL\r");
+        }
+        else {
+            vMsg(0, "====Starting file '$file'");
+        }
     }
-    alogging::vMsg(1, "Opening input file $file.");
     my $ifh;
     if (!open($ifh, "<$file")) {                  # Can't open
         eMsg(0, "Can't open input file '$file'.");
@@ -1768,7 +1790,7 @@ sub doOneItem {
     close $ofh;
 
     if ($nc < 0) {
-        vMsg(0, "  Changes failed for file '$file'");
+        vMsg(0, "\n  Changes failed for file '$file'");
         $failedChanges++;
         return(0);
     }
@@ -1776,12 +1798,9 @@ sub doOneItem {
         ($zero || $verbose) && alogging::vMsg(0, ">>> No change(s) in file '$file'");
         return(1);
     }
+    if ($compact) { print "\n"; }
     $totalFilesChanged++;
-<<<<<<< HEAD
-    alogging::Msg("green", sprintf(">>> %3d change(s) in file '%s'%s",
-=======
     alogging::Msg($someChangeColor, sprintf(">>> %3d change(s) in file '%s'%s",
->>>>>>> 6403dd7 (logging and color fixes.)
         $nc, $file, $test ? " (DRY RUN)" : ''));
 
     ###########################################################################
