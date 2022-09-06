@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 #
-# json2xml.py: Convert JSON to XML or other forms.
-# Written 2012-12-04 by Steven J. DeRose.
+# json2xml.py: Convert JSON (or Python data) to XML or other syntax.
+# 2012-12-04: Written by Steven J. DeRose.
 #
 import sys
 import os
 import re
-import codecs
+import math
 import json
+import codecs
 #import pyxser  # https://sourceforge.net/projects/pyxser/
 
 from PowerWalk import PowerWalk, PWType
@@ -16,12 +17,13 @@ lg = ALogger(1)
 
 __metadata__ = {
     "title"        : "json2xml",
+    "description"  : "Convert JSON (or Python data) to XML or other syntax.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2012-12-04",
-    "modified"     : "2020-20-09",
+    "modified"     : "2022-09-06",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -54,22 +56,45 @@ sampleJSON = """
 """
 
 descr = """
-=Description=
+=Usage=
+
+You can run this from the command line
+to load and convert a JSON file(s):
 
 json2xml.py [options] [files]
+
+You can also use this from Python code
+by calling `serialize2xml()` on most any Python object (whether it came from
+JSON or not). In that case, you'll get fancier output, that tells you what the
+classes were, handles complex numbers, tuples, etc.
+
+By default, it converts (losslessly, I hope) from JSON to XML. But use the
+`--oformat` option to choose other output formats (specifying `--oformat json`
+will get you pretty-printing).
+
 
 Simple but thorough conversion of JSON, or of pretty much any Python data,
 to XML syntax. It's smart enough to represent not only the list vs. dict
 distinction which comes naturally to JSON, but a variety of other Python types.
 
-A few other output formats are also provided, includinng pretty-printed JSON.
+Or you can import this script and call `serialize2xml()` on most any Python
+object, whether it came from JSON or not (in that case, not as much information
+can be saved with JSON output as with XML output).
 
 The basic goals are:
-    * Support JSON entirely
-    * Support most Python types, such as collections; but not necessarily references,
+
+* To support a much larger range of types, round-trippably.
+* To make the entire XML ecosystem (validation, transformation, rendering, databases,
+digital signing, query languages and engines, etc. etc.) easy to apply to Python data.
+* Support JSON entirely
+* Support most Python types, such as collections; but not necessarily references,
 and only the data, not code (for example, no functions, and only the data of objects)
-    * Enough information to round-trip correctly
-    * Fairly compact. but much mnore important, easy to read.
+* Enough information to round-trip correctly
+* Fairly compact. but much mnore important, easy to read.
+
+==The mapping==
+
+Use `--sample` to generate an actual sample.
 
 In short:
 * collection become container elements of the appropriate type:
@@ -84,28 +109,23 @@ a 'key' attribute to all the items directly, which I plan to add as an option.
 * The three special values True, False, and None become empty elements of the same names:
     <T/>, <F/>, <None/>
 
-==Why?==
+Scalar types generally are written as XML empty elements, with a single-character
+tag name indicating the type, and a `v` attribute holding the value (you can set
+format for each via options):
+    int      i
+    float    f (`inf`, `-inf`, and `nan` can occur)
+    str      u
+    complex  c (with @r for the real part, and @i for the imaginary part)
 
-* To support a much larger range of types, round-trippably.
-* To make the entire XML ecosystem (validation, transformation, rendering, databases,
-digital signing, query languages and engines, etc. etc.) easy to apply to Python data.
+The singleton types are written as XML emtpty elements:
+    True     <T/>
+    False    <F/>
+    None     <None/>
 
+tuples and lists are named as such, and contain their members directly.
 
-==Usage==
-
-You can run this from the command line
-to load and convert a JSON file(s).
-
-You can also use this from Python code
-by calling `serialize2xml()` on most any Python object (whether it came from
-JSON or not). In that case, you'll get fancier output, that tells you what the
-classes were, handles complex numbers, tuples, etc.
-
-By default, it converts (losslessly, I hope) from JSON to XML. But use the
-`--oformat` option to choose other output formats (specifying `--oformat json`
-will get you pretty-printing).
-
-==Notes==
+dicts are named as such, and contain a <ditem> element for each member,
+with a `key` attribute, and the value as the content of the <ditem>.
 
 There are 3 data models in play here: JSON, XML, and Python.
 The `json` decoder library produces exactly these Python types:
@@ -121,14 +141,20 @@ The `json` decoder library produces exactly these Python types:
     false         -- False
     null          -- None
 
-There are also differences such as that JSON dict keys can only be strings,
-and JSON files can of course have multiple entries with the same key (the
-result of which is not necessarily consistent across JSON tools).
+Thus, these are the only Python types passed to the XML serializer when you parse
+actual JSON. However, the XML output can identify any number of types. There are other
+differences as well, such as that JSON object keys must be string, while Python
+dict keys only need to be hashable.
 
-Thus, these are the only Python types passed to the XML serializer for data
-that was loaded by JSON. However, this package handles other Python types.
+==Additional types==
 
-==Example==
+When exporting more general Python structures to XML, this script adds some detail.
+For example, subclasses of dict and list are written similarly but include a `class`
+attribute whose value is the class name. tuples, complex numbers, and
+subclasses of object (if not already covered) also have information added.
+
+
+=Example output=
 
 """ + sampleJSON + """
 
@@ -187,6 +213,12 @@ bc   </u></ditem>
 
 =Options=
 
+* '''--noprop'''
+
+Untag the "pyxs:prop" elements from the XML output. Where they have names,
+the name is lost (should instead move these items onto the container element
+as named attributes, or something like that).
+
 * '''--nonamespace'''
 
 Delete the "pyxs:" namespace prefixes from all output XML elements.
@@ -210,9 +242,10 @@ Choose what form to write out. Choices include:
 ** 'report': a summary report, as produced by my `alogging.ALogger.formatRec()`.
 ** ...more to be added, such as Python and Perl dcls, maybe HTML list layout.
 
-* '''--pad''' `n`
 
-Left-pad integers with spaces, to a minimum of `n` columns.
+* '''--pad''' I<n>
+
+Left-pad integers with spaces, to a minimum of I<n> columns.
 (incomplete -- presently just puts a tab on each side instead).
 
 * '''--quiet''' OR '''-q'''
@@ -256,21 +289,23 @@ nice debugging display, and will likey add HTML and XML output options.
 as "3".
 ** Particular properties in objects cannot be restricted to a certain
 datatype, or even to be atomic or homogeneous or interconvertible.
-** JSONM objects have no identifiers, so no built-in way to refer to each other.
+** JSON objects have no identifiers, so no built-in way to refer to each other.
 
-* JSON objects are also unlike non-objects dictionaries or hashes in most languages:
+* JSON objects are also unlike non-object dictionaries or hashes in many languages:
 
-** You can ''only'' use strings, not ints, etc.
+** You can ''only'' use strings, not ints, etc. as keys
 ** You have to quote the names.
 ** You can't tell hashes apart from actual objects, or from other things you'd have to
 represent using them in JSON (Python namedtuple, C struct, etc.)
 
-Of course a JSON user can add invent conventions for anything on top, at
-some cost in verbosity, effective portability, and/or clarity.
+Of course a particular JSON user can add their own conventions on top.
+But then JSON ends up more verbose and less portable than other languages
+(all those quotes add up).
 
 
 =To do=
 
+* Fix -pad.
 * Add specific support for namedtuples.
     if (isinstance(x, tuple) and hasattr(x, '_fields'))... seems to be enough.
 * Test with non-string dict keys and other more complex Python data sources.
@@ -282,8 +317,10 @@ Or possibly, move scalar named items to parent attributes
 * Add a loader for round-tripping straight into Python structures.
 * Fix --pad.
 * Option to number items in lists, put len on collections
-* Option to optimize sparse lists (say, where item is same as prev, gen:
+* Option to optimize (numpy?) sparse lists (say, where item is same as prev, gen:
     <repeat n="200"/>
+* Possibly an option to save the typename of each dict key (in JSON they're always
+strings, but not in Python).
 
 
 =History=
@@ -295,8 +332,12 @@ Or possibly, move scalar named items to parent attributes
 distinct from "dicts", even though JSON doesn't know. Write out subclasses
 (even though they won't show up for data that was really JSON).
 * 2020-12-09: Clean up. Add --oformat, integrate PowerWalk and alogging.
+* 2021-03-08: Add `--jsonl`, `--sample`, `--oformat`, `--intFormat`,
+`--floatFormat`, and `--keyFormat` options.
 * 2021-08-12: Factor out tag names to enable options to set them. Type-hints.
 Add --lengths.
+* 2022-09-06: Big re-sync of divergent changes on copies in Text/ and XML/CONVERT/.
+Then retire the former.
 
 
 =Rights=
@@ -312,8 +353,12 @@ For the most recent version, see [http://www.derose.net/steve/utilities] or
 =Options=
 """
 
+def warning0(msg):
+    sys.stderr.write(msg+"\n")
+def warning1(msg):
+    if (args.verbose >= 1): sys.stderr.write(msg+"\n")
 
-# What to map various troublesome strings to.
+# What to map various troublesome strings to, in XML.
 #
 escMap = {
     '"'       : '&quo;',
@@ -342,17 +387,21 @@ def startTag(x:str, attrs:dict=None):
         for k, v in attrs.items():
             attlist += ' %s="%s"' % (k, escapeAttribute(v))
     return "<%s%s>" % (x, attlist)
+
 def emptyTag(x:str, attrs:dict=None):
     attlist = ""
     if (attrs):
         for k, v in attrs.items():
             attlist += ' %s="%s"' % (k, escapeAttribute(v))
     return "<%s/>" % (x)
+
 def endTag(x:str):
     return "</%s>" % (x)
 
 
 ###############################################################################
+# See http://stackoverflow.com/questions/1305532/convert-python-dict-to-object
+# Promotes a dict to an Object.
 #
 class Str:
     def __init__(self, **entries):
@@ -594,8 +643,35 @@ if __name__ == "__main__":
             "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
+            "--floatFormat", type=str, default="%8.4f",
+            help="Use this %-format for float values.")
+        parser.add_argument(
+            "--intFormat", type=str, default="%d",
+            help="Use this %-format for float values.")
+        parser.add_argument(
+            "--keyFormat", type=str, default="%-12s",
+            help="Use this %-format for string values.")
+        parser.add_argument(
             "--istring", type=str, default="    ",
             help="Repeat this string to indent the output.")
+        parser.add_argument(
+            "--jsonl", "--json-lines", action="store_true",
+            help="Treat each input record as a separate object.")
+        parser.add_argument(
+            "--keydrop", type=str, action="append",
+            help="Drop dict entries with this key. Repeatable.")
+        parser.add_argument(
+            "--maxl", "--max-lines", type=int, default=0,
+            help="With --jsonl, stop after loading this many lines.")
+        parser.add_argument(
+            "--noprop", action="store_true",
+            help='Untag the "pyxs:prop" element surrounding data atoms.')
+        parser.add_argument(
+            "--nonamespaces", action="store_true",
+            help='Delete the "pyxs:" namespace prefix.')
+        parser.add_argument(
+            "--nosize", action="store_true",
+            help='Delete the "size" attribute everywhere.')
         parser.add_argument(
             "--notype", action="store_true",
             help='Delete the "type" attribute everywhere.')
@@ -609,6 +685,9 @@ if __name__ == "__main__":
         parser.add_argument(
             "--quiet", "-q", action="store_true",
             help="Suppress most messages.")
+        parser.add_argument(
+            "--sample", action="store_true",
+            help="Generate and display some sample output.")
         parser.add_argument(
             "--sortkeys", "--sort_keys", "--sort-keys", action="store_true",
             help='Delete the "type" attribute everywhere.')
@@ -650,6 +729,13 @@ if __name__ == "__main__":
             sys.exit()
         writeIt(pyObj)
 
+    if (len(args.files) == 0):
+        fh = sys.stdin
+    elif (not os.path.isfile(args.files[0])):
+        warning0("Can't find file '" + args.files[0] + "'.")
+        sys.exit(0)
+    else:
+        fh = open(args.files[0], "r")
 
     def writeIt(pyObj):
         if (args.oformat == "xml"):
@@ -660,8 +746,11 @@ if __name__ == "__main__":
         elif (args.oformat == "report"):
             buf = lg.formatRec(pyObj)
         else:
-            lg.vMsg(-1, "Unknown --oformat value '%s'." % (args.oformat))
-
+            try:
+                pyObject0 = json.load(fh)
+            except json.decoder.JSONDecodeError as e:
+                warning0("JSON load failed:\n    %s" % (e))
+                sys.exit()
         print(buf)
         return
 
