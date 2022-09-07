@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # addup: Add up numbers that are tokens of each line, until EOF.
 # 2006-??-??: Written by Steven J. DeRose.

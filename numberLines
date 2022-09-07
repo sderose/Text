@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # numberLines: Add/remove numbers from lines.
 # 2009-06-08: Written by Steven J. DeRose.

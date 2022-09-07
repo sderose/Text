@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # globalChange: Do lots of regex changes to lots of files.
 # 2010-08-25: Written by Steven J. DeRose.
@@ -137,7 +137,7 @@ but then it goes back to asking again.
 so with I<interactive> you can choose between
 them at each match. This is especially useful when annotating some existing
 phenomenon that takes human judgement to
-decide which exact thing to change to in each instance. For example, the same 
+decide which exact thing to change to in each instance. For example, the same
 word or name may occur in two different contexts, and you want to rename it
 to one thing in one context, but a different thing in the other.
 
@@ -1091,7 +1091,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
   Reporting:
     Option to suppress 'starting file' until first change (but see I<--compact>)
     Option to suppress inidividual changes, just give total per file.
-    Report which files each change affected (not just total changes).
+    Report which files (each?) change affected (not just total changes).
 
   Multi-dest support
     Add multidest command to show line changed each way.
@@ -1211,7 +1211,7 @@ empty portions. Add --lineNumbers for makeDiffLine().
 print extra data.
   2022-03-11: Minor cleanup.
   2022-08-19: Fix missed merge lines.
-  
+
 
 =head1 Rights
 

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # dumpx: A better hex-dump utility, at least for 'text'.
 # Long ago (~1980?): Written in C by Steven J. DeRose, inspired by a version

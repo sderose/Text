@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # wrap: wrap STDIN to a given column, with padding (opposite of 'fold')
 # Written by Steven J. DeRose, 2006-08-29.

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # findDates
 # 2013-10-01: Written by Steven J. DeRose.

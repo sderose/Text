@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # joinAt: Join matching lines, with the next (or previous) line.
 # 2014-08-31f: Written by Steven J. DeRose.

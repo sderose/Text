@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # insertAt: Insert a string or file, at a given place in stdin.
 # Written ~2006 by Steven J. DeRose.

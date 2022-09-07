@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # iota: Generate data with sequential numbering/time-stamping inserted.
 # 2005-12-27: Written by Steven J. DeRose.

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # Delete all lines consisting only of whitespace.
 # 2006~02: Written by Steven J. DeRose.

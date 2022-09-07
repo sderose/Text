@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # cleanURI: Undo %xx escaping in a string.
 # 2010-09-29: Written by Steven J. DeRose.

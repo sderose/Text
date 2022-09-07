@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # body: Like 'head' and 'tail', but grab any range, given
 #    starting and ending line, column, pattern, etc.

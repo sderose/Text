@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # droplinebreak: remove newlines before/after lines containing regex.
 #

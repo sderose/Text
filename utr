@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # Make a 'tr' that works for Unicode.
 # 2010-06-03: Written by Steven J. DeRose.

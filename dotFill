@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # dotFill: Add dot-leader fills for readbility.
 # 2007-11-09: Written by Steven J. DeRose.

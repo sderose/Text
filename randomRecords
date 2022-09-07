@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl -w
 #
 # randomRecords: Select some records at random from a source.
 # 2006-09~18: Written by Steven J. DeRose. Eliminates many manual steps for
