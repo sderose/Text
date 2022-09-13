@@ -1092,6 +1092,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
     Option to suppress 'starting file' until first change (but see I<--compact>)
     Option to suppress inidividual changes, just give total per file.
     Report which files (each?) change affected (not just total changes).
+    Colorize each match/replacement, instead of differing central range.
 
   Multi-dest support
     Add multidest command to show line changed each way.
