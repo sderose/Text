@@ -3,7 +3,6 @@
 # sort.py: Do a really, really plain sort.
 # 2018-07-18: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import argparse
 import re
@@ -30,7 +29,8 @@ __version__ = __metadata__["modified"]
 descr = """
 =Description=
 
-*nix C<sort> is a little weird, so do something straughtforward, without locale.
+*nix C<sort> tries to adjust for locate, this just does
+something straughtforward, without locale.
 
 
 =Related Commands=
@@ -122,7 +122,7 @@ def doOneFile(path, fhp):
     """Read and deal with one individual file.
     """
     recs = fhp.readlines()
-    lg.vMsg(1, "File read: %s" % (path))
+    lg.info(1, "File read: %s" % (path))
     if (args.numeric):
         recs.sort(key=getKeyNumeric, reverse=args.reverse)
     elif (args.ignoreCase):

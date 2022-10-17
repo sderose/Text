@@ -3,7 +3,6 @@
 # stripComments.py: Remove comments from a file, appropriate to its filetype.
 # 2017-11-08: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import os
 import argparse
@@ -160,7 +159,7 @@ def getDelimiters(ext):
 def tryOneItem(path):
     """Try to open a file (or directory, if -r is set).
     """
-    lg.info1("====Starting item '%s'" % (path))
+    lg.info("====Starting item '%s'" % (path))
     recnum = 0
     if (not os.path.exists(path)):
         lg.error("Couldn't find '%s'." % (path))
@@ -170,7 +169,7 @@ def tryOneItem(path):
             for child in os.listdir(path):
                 recnum += tryOneItem(os.path.join(path,child))
         else:
-            lg.vMsg(0, "Skipping directory '%s'." % (path))
+            lg.info("Skipping directory '%s'." % (path))
     else:
         doOneFile(path)
     return(recnum)
@@ -206,11 +205,11 @@ def doOneFile(path):
     #
     if (ds.oneLine):
         expr = ds.oneLine + r'.*?$'
-        lg.vMsg(1, "oneLine expr: " + expr)
+        lg.info("oneLine expr: " + expr)
         data = re.sub(expr, ' ', data, 0, re.MULTILINE)  # re.DOTALL?
     if (ds.start):
         expr = ds.start + r'([^*]|\*[^/])*?' + ds.end
-        lg.vMsg(1, "multi-line expr: " + expr)
+        lg.info( "multi-line expr: " + expr)
         data = re.sub(expr, ' ', data, 0, re.MULTILINE)
     if (args.compact):
         data = re.sub(r'\n([ \t]*\n)+', "\n", data, 0, re.MULTILINE)
@@ -233,6 +232,3 @@ for f in (args.files):
     lg.bumpStat("totalFiles")
     recs = doOneFile(f)
     lg.bumpStat("totalRecords", amount=recs)
-
-if (not args.quiet):
-    lg.vMsg(0,"Done.")

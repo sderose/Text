@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 #
-# wcPP.py: An enhance 'wc'.
+# wcPP.py: An enhanced 'wc'.
 # 2021-10-14: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import re
 #import codecs
@@ -14,7 +13,7 @@ from PowerWalk import PowerWalk, PWType
 
 __metadata__ = {
     "title"        : "wcPP",
-    "description"  : "An enhance 'wc'.",
+    "description"  : "An enhanced 'wc'.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
     "type"         : "http://purl.org/dc/dcmitype/Software",
@@ -218,8 +217,6 @@ def tokenize(s:str):
 #
 if __name__ == "__main__":
     import argparse
-    def anyInt(x:str) -> int:
-        return int(x, 0)
 
     def processOptions() -> argparse.Namespace:
         try:

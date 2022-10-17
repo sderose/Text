@@ -149,7 +149,7 @@ escapedExpr = re.compile(r"""\\[%s]""" % (allQuoteChars))
 def tryOneItem(path):
     """Try to open a file (or directory, if -r is set).
     """
-    lg.info1("====Starting item '%s'" % (path))
+    lg.info("====Starting item '%s'" % (path))
     recnum = 0
     if (not os.path.exists(path)):
         lg.error("Couldn't find '%s'." % (path))
@@ -159,7 +159,7 @@ def tryOneItem(path):
             for child in os.listdir(path):
                 recnum += tryOneItem(os.path.join(path,child))
         else:
-            lg.vMsg(0, "Skipping directory '%s'." % (path))
+            lg.info("Skipping directory '%s'." % (path))
     else:
         doOneFile(path)
     return(recnum)
