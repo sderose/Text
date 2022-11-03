@@ -29,7 +29,6 @@ our %metadata = (
 );
 our $VERSION_DATE = $metadata{'modified'};
 
-
 =pod
 
 =head1 Usage
@@ -1235,6 +1234,7 @@ L<https://github.com/sderose>.
 my $color            = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
 my $askColor         = 'green/white';
 my $errorColor       = 'red/white';
+my $progressColor    = 'green/white/bold';
 my $matchColor       = 'blue/white';
 my $resultColor      = 'red/white';
 my $sourceColor      = 'bold';
@@ -1451,9 +1451,9 @@ my $symmetry           = "\x{232f}";
 my $rCircled           = "\x{24c7}";
 
 my $clearEOL = "\x1B[K";
-my $noChangeColor = "black";
-my $someChangeColor = "green";
-my $rawColor = "black";
+my $noChangeColor = "black/white";
+my $someChangeColor = "blue/white";
+my $rawColor = "black/white";
 
 
 ###############################################################################
@@ -1884,9 +1884,10 @@ sub doOneFile {
 
         chomp $originalRec;
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
-            Msg($someChangeColor, sprintf(
+            alogging:showMsg(sprintf(
                 "At line %12s (total), total changes: %12s, now processing %s.",
-                 lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why the /2?
+                 lpadc($totalRecs), lpadc($totalChanges)/2, $file),
+                 $progressColor);  # TODO: Why the /2?
         }
         if ($quit) {  # Quoth the user, "nevermore".
             outputALine($ofh, $originalRec);
@@ -1918,7 +1919,7 @@ sub doOneFile {
         my @newFields = @originalFields;  # REALLY COPIES
         #print "The fields:\n    " . ("\n   ".join(@newFields));
 
-        # ====================================================================
+        ######################################################################
         # Factor out
         #
         my $lineStats = {
@@ -1963,9 +1964,8 @@ sub doOneFile {
             }
         } # exprs
         #
+        ######################################################################
         # Factor out
-        # ====================================================================
-
         # Were the really any changes? If not we're done.
         if ($lineStats->{'nChangesInLine'} == 0) {
             $doContig = 0; # Stop any "contiguous" changing
@@ -2288,7 +2288,7 @@ BEGIN {
             print $ofh "$buf\n";
             if ($showResults) {
                 print(($itChanged && $hiliteResults) ?
-                    sjdUtils::colorize('blue', "$buf\n") : "$buf\n");
+                    sjdUtils::colorize($matchColor, "$buf\n") : "$buf\n");
             }
         }
         push @outBuf, $s;
@@ -2311,7 +2311,7 @@ sub report {
 
     if (!$quiet) {
         vMsg(0,'');
-        Msg($someChangeColor, "Done" . ($test ? " (DRY RUN)":'') . '.');
+        Msg($someChangeColor, "Done" . ($test ? " (DRY RUN)":'') . '.\n');
         vMsg(0, sprintf(
             "%d items: %d files, %d directories%s, %s, %s, %s.",
             $totalItems, $filesRegular, $dirs,
@@ -2352,7 +2352,7 @@ sub report {
 sub colorIf {
     my ($cond, $msg) = @_;
     if ($color && $cond) {
-        return(sjdUtils::colorize("red", $msg));
+        return(sjdUtils::colorize($resultColor, $msg));
     }
     return($msg);
 }
