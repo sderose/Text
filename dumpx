@@ -119,6 +119,7 @@ B<Note>: The C<od>-like options are described in a later section.
 
 How many columns to allow for displaying the offset of each chunk.
 Default 8; specify 0 to suppress offset display.
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 See also B<--addressRadix>, aka I<--address-radix> and I<-A>.
 
 =item * B<--blankLine>
@@ -132,7 +133,7 @@ Start a new output line at each input newline character (not finished).
 =item * B<--cc> I<char>
 
 Colorize the character specified (repeatable).
-Allows notations such as \\0777, 0xFFFF, etc.
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--charForSpace> I<spec>
 
@@ -168,14 +169,17 @@ B<Note>: In transition, may not completely work.
 
 Display columns to allow per character. For example, 8-bit characters take 2
 hexadecimal digits, so I<--cwidth 3> is nice (and is the default).
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--dcolumns> I<n>
 
 Number of character spaces in the display. Default: $COLUMNS or 80.
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--dlines> I<n>
 
 Number of lines in the display. Default: $LINES or 40.
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--G1ok>
 
@@ -196,6 +200,7 @@ Are input line-ends m(ac), d(os), or default u(nix)?
 =item * B<--jl> I<n> or B<--skip-lines>
 
 Start at line I<n> (see also I<--ilineends>, I<-j>).
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--listchars>
 
@@ -264,7 +269,7 @@ Show a line with the UCS2 numeric equivalent of any UTF-8 sequences.
 
 Synonym for I<--iencoding utf8>.
 
-=item * B<--useCarat> or B<--uc>
+=item * B<--useCaret> or B<--uc>
 
 Show control characters as 0x01 through 0x1A as "^A" through "^Z".
 
@@ -559,7 +564,7 @@ I think was written by Peter DiCamillo.
     2010-05-07 sjd: Control pictures/control symbols. Color fixes. perldoc.
     2010-10-26ff sjd: Packagize 'reader'. Start -break. Rename -codePage to
 -iencoding, -ltype to -ilineends. Break out dumpOneChunk().
-Separate -verbose from (od-like) -v. Add -substitute, -useCarat.
+Separate -verbose from (od-like) -v. Add -substitute, -useCaret.
 Null-pad at EOF. Fix color bug.
     2010-11-02ff sjd: Yet more color bugs. Clean up -user macro stack handling.
 Work on -user mode. Offset printing in -user. Add -colHeaderBase.
@@ -584,7 +589,7 @@ Sync color options w/ recently-added 'colorizer' package. Lose $cRed, etc.
     2014-09-01: Make --decimal not break due to colorizer.
     2017-02-08: Switch to my ColorManager package.
     2021-09-16: New layout, cleanup.
-    
+
 
 =head1 Rights
 
@@ -650,7 +655,7 @@ my %args = (
     # "subst"            => chr(0x2426);
     "subst"              => chr(0xA4),
 
-    "useCarat"           => 0,     # Show controls as ^A-^Z
+    "useCaret"           => 0,     # Show controls as ^A-^Z
     "useControlSymbols"  => 1,     # Show controls as Unicode symbols
     "user"               => 0,     # Run in interactive mode?
     "voption"            => 0,     # Don't leave out duplicate lines
@@ -670,16 +675,16 @@ my %args = (
 #
 my %getoptHash = (
     # non-od-like options
-    "addressWidth=i"           => \$args{addressWidth},
+    "addressWidth=o"           => \$args{addressWidth},
     "blankLine!"               => \$args{blankLine},
     "break|newlines!"          => \$args{break},
     "color=s"                  => sub { $args{carg}; },
     "nocolor"                  => sub { $args{carg} = "off"; },
     "cc=s"                     => sub { $args{cc} .= strcvt($_[1]); },
-    "charForSpace=n"           => \$args{charForSpace},
-    "cwidth=i"                 => \$args{cwidth},
+    "charForSpace=o"           => \$args{charForSpace},
+    "cwidth=o"                 => \$args{cwidth},
     "G1ok|g1ok!"               => \$args{G1ok},
-    "headerBase=i"             => \$args{headerBase},
+    "headerBase=o"             => \$args{headerBase},
     "help"                     => sub { system "perldoc $0"; exit; },
     "iencoding=s"              => \$args{iencoding},
     "ilineends=s"              => \$args{ilineends},
@@ -714,7 +719,7 @@ my %getoptHash = (
 
     "u"                        => sub { $args{linesToShow} .= "u "; },
     "unicode!"                 => sub { $args{iencoding} = "utf8"; },
-    "useCarat|uc!"             => \$args{useCarat},
+    "useCaret|uc!"             => \$args{useCaret},
     "useControlSymbols|pix!"   => \$args{useControlSymbols},
     "user|interactive!"        => \$args{user},
     "utf8!"                    => sub { $args{iencoding} .= "u "; },
@@ -734,10 +739,10 @@ my %getoptHash = (
         ($args{quiet}) || warn
             "(did you mean '-help'? '-h' = hexadecimal)\n";
     },
-    "j=i"                      => \$args{skipBytes},
+    "j=o"                      => \$args{skipBytes},
     "jl|skip-lines=i"          => sub { $args{skip_lines} = $_[1]; },
     "linenum!"                 => \$args{showLineNumber},
-    "N|read-bytes|readBytes=i" => \$args{readBytes},
+    "N|read-bytes|readBytes=o" => \$args{readBytes},
     "o"                        => sub { $args{linesToShow} .= "o "; },
     "v|output-duplicates"      => sub {
         $args{outputDuplicates} = $_[1];
@@ -745,7 +750,7 @@ my %getoptHash = (
             "(did you mean '-verbose'? -v = -output-duplicates)\n";
     },
     "V+"                       => \$args{voption},
-    "w|width=i"                => \$args{width},
+    "w|width=o"                => \$args{width},
     "x"                        => sub { $args{linesToShow} .= "h "; },
     ); # process options
 
@@ -1501,7 +1506,7 @@ sub getCName {
    elsif ($n>255) {                 # Too high
        $charName = "+++";
    }
-   elsif ($args{useCarat} && $n>0 && $n<26) {     # Control chars
+   elsif ($args{useCaret} && $n>0 && $n<26) {     # Control chars
        $charName = "^" . substr(" ABCDEFGHIJKLMNOPQRSTUVWXYZ",$n,1);
    }
    elsif ($n==0)    {  $charName = " \\0";   } # NULL

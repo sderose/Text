@@ -180,7 +180,7 @@ my %getoptHash = (
     "olineends=s"             => \$olineends,
     "q!"                      => \$quiet,
     "recursive!"              => \$recursive,
-    "tick=i"                  => \$tickInterval,
+    "tickInterval=o"          => \$tickInterval,
     "unicode!"                => sub { $iencoding = $oencoding = "utf8"; },
     "v+"                      => \$verbose,
     "version"                 => sub {

@@ -61,7 +61,7 @@ my %getoptHash = (
     "sort!"           => \$sort,
     "split!"          => \$split,
     "table!"          => \$table,
-    "tick=i"          => \$tickInterval,
+    "tickInterval=o"  => \$tickInterval,
     "v|verbose+"      => \$verbose,
     "version"         => sub {
         die "Version of $VERSION_DATE, by Steven J. DeRose.\n";

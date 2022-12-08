@@ -17,7 +17,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-08-29",
-    'modified'     => "2020-09-03",
+    'modified'     => "2020-12-08",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -78,13 +78,15 @@ short already, such as having one word per line).
 =item * B<--free>
 
 If an item is too wide, do I<not> bump over to the next
-multiple of I<--lpadWidth> or I<--rpadWidth>. Instead, just put in a gutter (see I<--gutterChar> and I<--gutterWidth>)
+multiple of I<--lpadWidth> or I<--rpadWidth>. Instead, just put in a
+er (see I<--gutterChar> and I<--gutterWidth>)
 and go on (leaving later items in the line, if any, unaligned).
 See also I<--truncate>.
 
 =item * B<--gutterWidth> I<n>
 
 Set how much space between columns (default: 1).
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--gutterChar> I<c>
 
@@ -98,6 +100,7 @@ Assume this character set for input.
 =item * B<--lpadWidth> I<n>
 
 Pad on the left to width I<n> (default: no pad),
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 See also I<--rpadWidth> and I<--padChar>.
 
 =item * B<--listEncodings>
@@ -134,6 +137,7 @@ Suppress most messages.
 
 Pad on the right to width I<n> (default: no pad).
 Use to make multi-column layouts line up.
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 See also I<--lpadWidth> and I<--padChar>.
 
 =item * B<--stripItems>
@@ -158,6 +162,7 @@ Synonym for I<--ls>.
 
 Wrap to fill a maximum display width of I<w>-1 characters.
 Default: environment variable $COLUMNS if set, otherwise 80.
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 Set to 0 to wrap up all sequences of non-blank lines.
 
 =back
@@ -261,7 +266,7 @@ my %getoptHash = (
     "blank!"           => \$blank,
     "fieldSep=s"        => \$fieldSep,
     "free!"             => \$free,
-    "gutterwidth=n"     => \$gutterWidth,
+    "gutterwidth=o"     => \$gutterWidth,
     "gutterchar=s"      => \$gutterChar,
     "h|help|?"          => sub { system "perldoc $0"; exit; },
     "iencoding=s"       => \$iencoding,
@@ -279,21 +284,21 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
-    "lpad=i"            => \$lpadWidth,
+    "lpad=o"            => \$lpadWidth,
     "oencoding=s"       => \$oencoding,
     "olinends=s"        => \$olineends,
     "padchar=s"         => \$padChar,
     "q|quiet!"          => \$quiet,
-    "rpad=n"            => \$rpadWidth,
+    "rpad=o"            => \$rpadWidth,
     "stripItems!"       => \$stripItems,
-    "tabstops=n"        => \$tabstops,
+    "tabstops=o"        => \$tabstops,
     "truncate!"         => \$truncate,
     "v|verbose+"        => \$verbose,
     "version"            => sub {
       die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
     "ls|vertical!"       => \$vertical,
-    "w|width=n"          => \$width,
+    "w|width=o"          => \$width,
     );
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die "Bad options.\n";

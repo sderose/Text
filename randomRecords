@@ -100,9 +100,9 @@ is faster especially when picking a large % of all available records.
 It runs through the record numbers once, and picks each one if
 a random number is under the percent requested. This is very quick, but may
 get slightly too few records. It never gets
-too many, because it stops if it gets enough. 
+too many, because it stops if it gets enough.
 This suggests that records near the end have a slightly lower
-than expected chance of being selected. 
+than expected chance of being selected.
 I<--fast> is very unlikely to get I<many> fewer records than requested.
 See also I<--reservoir>, which is usually a better choice when reading from STDIN.
 
@@ -200,8 +200,9 @@ causes Perl to choose a semi-random seed of its own.
 
 Don't pick any of the first I<n> records (this may be useful for avoiding headers,
 and for shifting the phase when doing round-robin selection with I<--mod>).
+I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
-When used along with I<--mod>, the skipped records I<do not> count towards 
+When used along with I<--mod>, the skipped records I<do not> count towards
 the record numbers used to decide which records are 0 mod I<n>.
 For example, if you use I<--mod 10 --skip 25>, then the first record picked
 will be (physical) record number 25 (the 26th record), instead of
@@ -245,7 +246,7 @@ in memory (though not the actual records, except as just noted).
 =head1 History
 
     2006-09~18: Written by Steven J. DeRose for PubMedCentral at
-the L<US National Institutes of Health|http://nih.gov>. 
+the L<US National Institutes of Health|http://nih.gov>.
 It replaces many manual steps for converter regression testing.
     2010-11-01 sjd: Cleanup. Rename. iooptions. --fast, --pct.
     2011-12-28 sjd: Add --every.
@@ -260,7 +261,8 @@ Explain relation of --skip and --mod in help.
     2020-09-24: New layout. Fix another bug reading STDIN.
     2022-04-06: Work on --reservoir. Make --pct take floats but warn
 on values under 1.0. Finish --blanks. Report basic stats at end. Improve doc.
-    
+    2022-12-08: Make --skip, --num, --mod accept any base.
+
 
 =head1 To do
 
@@ -331,15 +333,15 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
-    "mod=i"             => \$mod,
-    "n|num=i"           => \$num,
+    "mod=o"             => \$mod,
+    "n|num=o"           => \$num,
     "oencoding=s"       => \$oencoding,
     "olineends=s"       => \$olineends,
     "pct|percent=f"     => \$pct,
     "q|quiet!"          => \$quiet,
     "reservoir!"        => \$reservoir,
     "seed=f"            => \$seed,
-    "skip=n"            => \$skip,
+    "skip=o"            => \$skip,
     "unicode!"          => sub { $iencoding = "utf8"; },
     "v|verbose+"        => \$verbose,
     "version"           => sub {
@@ -421,7 +423,7 @@ my $nPicked = 0;
 if ($reservoir) {                           # No record-counting required
     ($quiet) || warn "\n******* Reservoir sampling is experimental *******\n\n";
     $totalRecords = doReservoirSample();
-    ($quiet) || warn 
+    ($quiet) || warn
         "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
     exit;
 }
@@ -507,7 +509,7 @@ else { # already loaded via bufferWholeFile()
     }
 }
 
-($quiet) || warn 
+($quiet) || warn
     "Done. Records $recNum, blank $nBlanks, comment $nComments, picked $nPicked.\n";
 
 exit;
@@ -523,7 +525,7 @@ exit;
 sub doReservoirSample {
     my $reservoirSize = $num;  # Load this many before getting picky.
     ($verbose) && warn "Reservoir sampling, initial size $reservoirSize.\n";
-    
+
     my $currentLine = "";
     my @reservoirList = [];
     my $count = 0;

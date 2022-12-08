@@ -1372,7 +1372,7 @@ my %getoptHash = (
     "sideBySide=i"          => \$sideBySide,
     "sourceColor=s"         => \$sourceColor,
     "test|dry-run|dryrun!"  => \$test,
-    "tickInterval=i"        => \$tickInterval,
+    "tickInterval=o"        => \$tickInterval,
     "unicode!"              => sub { $iencoding = $oencoding = "utf8"; },
     "v|verbose"             => sub {
         $verbose++;
