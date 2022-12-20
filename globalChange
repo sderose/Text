@@ -1885,7 +1885,7 @@ sub doOneFile {
 
         chomp $originalRec;
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
-            alogging:showMsg(sprintf(
+            alogging:info(0, sprintf(
                 "At line %12s (total), total changes: %12s, now processing %s.",
                  lpadc($totalRecs), lpadc($totalChanges)/2, $file),
                  $progressColor);  # TODO: Why the /2?

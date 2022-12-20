@@ -673,46 +673,66 @@ sub doOneFile {
     $firstLine = "";
     if ($options{"fline"}==0 && $options{"lline"}==0 &&
         $options{"fpat"} eq "" && $options{"lpat"} eq "") {
-        charOffsetsOnly();
-        $nBlocks++;
+        bWarn(1, "char offsets only");
+        $nBlocks = charOffsetsOnly();
     }
-    elsif ($options{"iterate"}) {
-        my $rc = findStartPoint("SKIP");
-        while ($rc) {
-            if (haveEndPointOption()) {
-                bWarn(1, "Seeking endpoint...");
-                copyToEndPoint();
-                bWarn(1, "=====> Found end-point");  # TODO: show the line or match
-                if ($options{"lchar"}) {
-                    handleLchar();
-                }
-                outLine($options{'insert'} . "\n");
-                $rc = findStartPoint("SKIP");
-            }
-            else {
-                bWarn(0, "--iterate but no --lpat or --nlines.");
-                outLine($options{'insert'} . "\n");
-                $rc = findStartPoint("COPY");
-            }
-            $nBlocks++;
-        }
+    elsif (!$options{"iterate"}) {
+        bWarn(1, "non-iterate.");
+        $nBlocks = doSingleBlock();
     }
     else {
-        my $rc = findStartPoint("SKIP");
-        if ($rc != 0) {
-            copyToEndPoint();
-            if ($options{"lchar"}) {
-                handleLchar();
-            }
-            $nBlocks = 1;
-        }
+        bWarn(1,  "iterate, seeking start point.");
+        $nBlocks = doMultipleBlocks();
     }
 
     if  ($nBlocks == 0) {
-        bWarn(0, "-fpat /" . $options{"fpat"} . "/ #" .
-            $options{"fpatNum"} . " not found by EOF, nothing copied.");
+        bWarn(0, sprintf("%s-fpat #%d: nothing found, nothing copied.",
+            $reader->rpt(), $options{"fpatNum"}, $options{"fpat"}));
     }
     outFinalize();
+    return $nBlocks;
+}
+
+# Find the start of a desired part, copy to the following endpoint,
+# and then skip to the next start point.
+sub doSingleBlock {
+    my $rc = findStartPoint("SKIP");
+    if ($rc == 0) {  # Fail
+        bWarn(1, "non-iterate, FAILED to find start point.");
+        return 0;
+    }
+    my $endRC = copyToEndPoint();
+    bWarn($endRC ? 0:1, "non-iterate, after copy to end point, rc $endRC.");
+    if ($options{"lchar"}) {
+        bWarn(1, "seeking lchar");
+        handleLchar();
+    }
+    return 1;
+}
+
+sub doMultipleBlocks {  # Return # of blocks successfully found.
+    my $nBlocks = 0;
+    my $rc = findStartPoint("SKIP");
+    while ($rc) {
+        bWarn(1,  "seeking start point #$nBlocks.");
+        if (haveEndPointOption()) {
+            bWarn(1, "Seeking endpoint...");
+            copyToEndPoint();
+            bWarn(1, "Found end-point");  # TODO: show the line or match
+            if ($options{"lchar"}) {
+                handleLchar();
+            }
+            outLine($options{'insert'} . "\n");
+            $rc = findStartPoint("SKIP");
+        }
+        else {
+            bWarn(0, "--iterate but no --lpat or --nlines.");
+            outLine($options{'insert'} . "\n");
+            $rc = findStartPoint("COPY");
+        }
+        $nBlocks++;
+        bWarn(1,  "done with block #$nBlocks.");
+    }
     return $nBlocks;
 }
 
@@ -721,6 +741,7 @@ sub doOneFile {
 sub haveEndPointOption {
     return ($options{"lpat"} || $options{"nlines"});
 }
+
 
 ###############################################################################
 #
@@ -742,42 +763,43 @@ sub charOffsetsOnly {
         }
         outLine($rec);
     }
+    return 1;
 } # charOffsetsOnly
 
 
 ###############################################################################
-# Find the place to begin copying at.
+# Find the place to begin copying at (characters, not fseek-style bytes!)
 #
 # Upon returning:
 #     The return value will be 0 on fail (EOF), else 1.
 #     The first line or partial-line to be fetched is in $firstLine.
 #     It will be a complete line unless --fchar was specified, in which case
-#         any not-needed beginning part of it will have been removed.
-#     No actual output will have been done.
+#         any not-needed beginning part of it will have been removed/copied.
+#     No actual output will have been done for the new block.
 #
 sub findStartPoint {
-    my ($copyOrSkip) = @_;
+    my ($copyOrSkip) = @_;  # What to do with data BEFORE the start point.
     my $copy = ($copyOrSkip eq "COPY");
 
     # If *only* --fchar for start, it's relative to whole file.
     #
-    my $fpatNumFoundSoFar = 0;
-    my $offset = 1;  # unlike seek()!
     if ($options{"fchar"} && !$options{"fline"} && !$options{"fpat"}) {
         while (defined ($firstLine = $reader->readOneRecord())) {
-            my $extras = $reader->{charPos} - $options{"fchar"};
-            if ($extras>=0) {
-                $firstLine = substr($firstLine,$extras);
-                last;
+            my $extraChars = $reader->{charPos} - $options{"fchar"};
+            if ($extraChars >= 0) {
+                bWarn(1, "reached absolute fchar (extra in line: $extraChars).");
+                ($copy) && outLine(substr($firstLine, 0, $extraChars));
+                $firstLine = substr($firstLine, $extraChars);  # Global buffer
+                return 1;
             }
-            ($copy) && outLine($firstLine);
         }
-        bWarn(1, "first line or part: '$firstLine'");
-        return 1;
+        bWarn(1, "Absolute fchar position not found before EOF.");
+        return 0;  # FAIL
     }
 
     # Otherwise, do fline, then fpat, then fchar relative to line.
     #
+    my $fpatNumFoundSoFar = 0;
     if ($options{"fline"} > 1) {
         bWarn(1, "Seeking fline " . $options{"fline"} . "...");
         while (defined ($firstLine = $reader->readOneRecord())) {
@@ -790,66 +812,71 @@ sub findStartPoint {
         bWarn(1, "At fline " . $reader->{recnum});
     }
 
-    if ($options{"fpat"}) { # scan for first matching line
+    if ($options{"fpat"}) { # scan for first (or n-th) matching line
         bWarn(1, "Seeking fpat /" . $options{"fpat"} .
               "/ #" . $options{"fpatNum"} . "...");
         my $gotFpat = 0;
         while (defined ($firstLine = $reader->readOneRecord())) {
-            # bWarn(1,  "Trying '$firstLine'");
+            bWarn(2,  "Trying '$firstLine'");
             if ($firstLine =~ m/$fpatc/) {
                 $fpatNumFoundSoFar++;
-                if ($fpatNumFoundSoFar >= $options{"fpatNum"}) {
+                if ($fpatNumFoundSoFar >= $options{"fpatNum"}) {  # Wait for n matches?
                     $gotFpat = 1;
                     last;
                 }
             }
-        }
-        if ($gotFpat) {
             ($copy) && outLine($firstLine);
-            bWarn(1, "Found --fpat /" . $options{"fpat"} .
-                "/ #" . $options{"fpatNum"}, $firstLine);
         }
-        else {
-            return 0;
-        }
+        bWarn(1, sprintf("--fpat #%d: /%s/ %sfound.", $options{"fpatNum"}, 
+            $options{"fpat"}, $gotFpat ? "":"not "));
+        ($gotFpat) || return 0;  # FAIL
+        
+        # Manage splitting the line itself, if needed.
+        #
         if ($options{"fpatBreak"} eq 'INCLUDELINE') {
             # Do nothing, leave whole line for fchar to chew on
         }
         elsif ($options{"fpatBreak"} eq 'INCLUDEMATCH') {
+                ($copy) && outLine(${'PREMATCH'});
                 $firstLine = ${'MATCH'} . ${'POSTMATCH'};
         }
         elsif ($options{"fpatBreak"} eq 'EXCLUDEMATCH') {
+                ($copy) && outLine(${'PREMATCH'});
                 $firstLine = ${'POSTMATCH'};
         }
         elsif ($options{"fpatBreak"} eq 'EXCLUDELINE') {
-                # Move to next line
+                ($copy) && outLine($firstLine);
                 $firstLine = $reader->readOneRecord();
         }
         else {
-            die "Bad --fpatBreak: " . $options{"fpatBreak"} . ".\n";
+            bWarn(0, "Bad --fpatBreak: $options{'fpatBreak'}.");
+            die "Fatal error.\n";
         }
-        ($copy) && outLine($firstLine);
     } # fpat
 
+    # $firstLine may be all or part of the matched line, or the next line.
+    # Now apply fchar within that.
     if ($options{"fchar"}) { # fchar *within* line
-        bWarn(1, "Seeking fchar " . $options{"fchar"});
+        bWarn(1, "Seeking fchar $options{'fchar'} with: '$firstLine'.");
         my $flinelen = length($firstLine);
         if ($options{"fchar"} > $flinelen) {
-            alogging::eMsg(0, "fline (" . $options{"fline"} .
-                ") too short ($flinelen) for fchar (" .
-                $options{"fchar"} . ").");
+            bWarn(0, sprintf(
+                "Line (found by fline %d, fpat /%s/) too short (%d) for fchar (%d).",
+                $options{"fline"}, $options{"fpat"}, $flinelen, $options{"fchar"}));
+            return 0;  # FAIL
         }
         else {
-            $firstLine = substr($firstLine,$options{"fchar"}-1);
+            ($copy) && outLine(substr($firstLine, 0, $options{"fchar"}-1));
+            $firstLine = substr($firstLine, $options{"fchar"}-1);
         }
     }
-    bWarn(1, "Copy starts at '$firstLine' (line " . $reader->{recnum} . ")");
+    bWarn(1, "Copy starts at '$firstLine'.");
     return 1
 } # findStartPoint
 
 
 ###############################################################################
-# Copy until we hit the appropriate end condition.
+# Copy until we hit the appropriate end condition. Return 0 on FAIL, 1 on success.
 #
 # Assume initial line is in $firstLine, not yet output.
 # If fline=lline, both char offsets apply to same line.
@@ -868,7 +895,7 @@ sub copyToEndPoint {
         }
         outLine($firstLine);
         outFinalize();
-        return;
+        return 1;
     }
 
     # Else have to search for end, so continue doing more lines.
@@ -882,7 +909,7 @@ sub copyToEndPoint {
     my $nlines = $options{"nlines"};
     my $lline = $options{"lline"};
     my $lpatBreak = $options{"lpatBreak"};
-    bWarn(1, "copyToEndPoint (ll $lline; nl $nlines; lpat /$lpat/).", "From: $firstLine");
+    bWarn(1, "copyToEndPoint (ll $lline; nl $nlines; lpat /$lpat/).\n    From: $firstLine");
 
     my $stoppedBy = "EOF";
     while (defined ($rec = $reader->readOneRecord())) {
@@ -940,6 +967,7 @@ sub copyToEndPoint {
     if ($options{"verbose"} || $stoppedBy eq "EOF") {
         bWarn(0, "copyToEndPoint stopped by $stoppedBy ($ncopied lines copied).");
     }
+    return ($stoppedBy ne "EOF");  # 0 for FAIL
 } # copyToEndPoint
 
 
@@ -995,12 +1023,10 @@ BEGIN {
 
 
 sub bWarn {
-    my ($level, $msg, $msgLine2) = @_;
-    if (!defined $msgLine2) { $msgLine2 = ''; }
-    my $loc = ($options{'quiet'}) ? "" : sprintf(" [[AT %s:%d:%d (byte %d)]]\n",
+    my ($level, $msg) = @_;
+    my $loc = ($options{'quiet'}) ? "" : sprintf("[[AT %s:%d:%d (byte %d)]]:\n    ",
         $reader->{path}, $reader->{recnum}, $reader->{charPos}, $reader->{bytePos});
-    alogging::vMsg($level, sjdUtils::showInvisibles($msg),
-                   $loc . ($msgLine2 ? ("\n    " . $msgLine2) : ""));
+    alogging::vMsg($level, $loc . sjdUtils::showInvisibles($msg));
 }
 
 
@@ -1028,6 +1054,19 @@ sub bWarn {
 #  UNUSED $x->seekChar(n)
 #  UNUSED $x->backChar(n)
 #
+sub lengthInBytes {
+    my ($s) = @_;
+    use bytes;
+    return length($s);
+}
+
+sub lengthInChars {
+    my ($s) = @_;
+    use Encode;
+    Encode::_utf8_on($s);
+    return length($s);
+}
+
 package Reader;
 
 # Could these be supported by reading, re-coding the char into the encoding,
@@ -1101,18 +1140,19 @@ sub close {
 
 sub readOneRecord {
     my ($self) = @_;
-    if ($self->{bytePos} != tell($self->{fh})) {  # TODO: tell() on STDIN not ok?
-        warn sprintf("bytePos (%d) out of sync with tell (%d)!\n",
-            $self->{bytePos}, tell($self->{fh}));
-    }
+    #if ($self->{bytePos} != tell($self->{fh})) {  # TODO: tell() on STDIN not ok?
+    #    warn sprintf("bytePos (%d) out of sync with tell (%d)!\n",
+    #        $self->{bytePos}, tell($self->{fh}));
+    #}
     my $fh = $self->{fh};
     my $buf = undef;
     # $buf = $self->readCharsThrough($self->{recordSep});
     if (!defined($buf = readline($fh))) {
         return(undef);
     }
-    $self->{bytePos} = tell($self->{fh});
-    $self->{charPos} += length($buf);
+    #$self->{bytePos} = tell($self->{fh});
+    $self->{bytePos} += lengthInBytes($buf);
+    $self->{charPos} += length($buf);         # TODO: Check that this does UTF/UCS chars
     $self->{recnum}++;
     return($buf);
 } # readOneRecord
@@ -1128,4 +1168,9 @@ sub gotoNthRecord {
         if ($self->{recnum} >= $n) { return(1); }
     }
     return(0); # EOF
+}
+
+sub rpt {
+    my ($self) = @_;
+    return "At rec " . $self->{recnum} . ": ";
 }
