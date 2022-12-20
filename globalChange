@@ -60,6 +60,7 @@ asking I<until> hitting a line with no match but then go back to asking;
 =item I<--multiDest> lets you choose among several pre-specified
 replacements for each match.
 
+=back
 
 =head2 Backslashing your regexes
 
