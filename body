@@ -1,7 +1,6 @@
 #!/usr/bin/env perl -w
 #
-# body: Like 'head' and 'tail', but grab any range, given
-#    starting and ending line, column, pattern, etc.
+# body: Like 'head' and 'tail', but find ranges by line number, regex, etc.
 # 2006-03-23: Written by Steven J. DeRose.
 #
 use strict;
@@ -9,7 +8,6 @@ use Getopt::Long;
 use Encode;
 use Fcntl;
 
-use sjdUtils;
 use alogging;
 
 our %metadata = (
@@ -20,12 +18,11 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-03-23",
-    'modified'     => "2022-08-18",
+    'modified'     => "2022-12-19",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
 our $VERSION_DATE = $metadata{'modified'};
-
 
 =pod
 
@@ -37,20 +34,26 @@ our $VERSION_DATE = $metadata{'modified'};
 Extract a range(s) of lines or characters from the input (somewhat like
 *nix C<head> and C<tail>, but for the middle).
 
-For example, to extract the "History" section of a Markdown-ish file:
+For example, to extract the "History" section of a Markdown-ish file, give patterns
+for its first line and for the line after it:
 
-    body --fPat '^=History=' --lPat '^=' myFile.md
+    body --fPat '^=History=' --lPat '^=[^=]' myFile.md
 
-This will include the '=History=' line, but not the ending '^=' line (to include
-the latter, set I<--lpatBreak INCLUDELINE>). To get the last non-blank line of such a history section, you could use:
+This will include the '=History=' line that starts the section,
+but not the '=' line intended to end it (to include the latter, 
+set I<--lpatBreak INCLUDELINE>). To get the last non-blank line of 
+such a history section, you could use:
 
     body --fPat '^=History=' --lPat '^=' myFile.md | dropBlankLines | tail -n 1
 
 The starting and ending locations
-can be specified by line numbers, character offsets,
-and/or regular expression patterns.
-If both line and character offsets are specified,
-the character offset is counted relative to (that is, within) the line.
+can be specified by line and/or character numbers (both counting from 1),
+and/or regular expression patterns. Note that actual characters (generally Unicode
+code points) are counted, not bytes.
+
+If both line and character numbers are specified,
+the character offset is counted relative to (that is, within) the line; 
+but if only a character offset is specified (and no line offset), it is absolute.
 
 By default only the first such range is returned, but I<--iterate> (aka I<-g>)
 repeats the process until EOF.
@@ -59,8 +62,9 @@ If multiple files are specified, the whole process is applied to each of
 them separately, not applied once to their concatenated data.
 
 You can probably do any of this with, C<awk> (and more), if you remember how.
-I like this approach better, in part because it fills the gap between
-C<head> and C<tail> (and can do their jobs, too), and supports Unicode
+I like this approach better, because it fills the gap between
+C<head> and C<tail> (and can do their jobs, too), does operations I think
+are mostly intuitive, and supports Unicode
 (recent versions of C<gawk> do Unicode, too).
 
 =head2 Examples
@@ -69,14 +73,14 @@ C<head> and C<tail> (and can do their jobs, too), and supports Unicode
 
 =item * body --fline 100 --lline 204 foo.txt
 
-Gets lines 100 through 204 from the file.
+Get lines 100 through 204 from the file.
 This is similar to the following C<awk> script:
 
     $ awk 'NR >= 100 && NR <= 204 { print $0 }'
 
 =item * body --fchar 0xBEEF --nlines 100 foo.txt
 
-Gets a block of 100 lines starting at the character
+Get a block of 100 lines starting at the character
 at hexadecimal character offset 0xBEEF in the input.
 The first line output may be only part of the input line that included that
 offset, because the offset may point to the middle of a line.
@@ -88,7 +92,7 @@ starting offset being mid-line more accurately):
 
 =item * body --fpat '^#START' --lpat '#END' *.txt
 
-Gets (entire) lines from the one in which "#START" is found (because of the "^",
+Get (entire) lines from the one in which "#START" is found (because of the "^"
 it must be at the start of the line), up to
 the line in which "#END" is found (not necessarily at start of line).
 This is done separately for B<each> of the C<.txt> files in
@@ -102,7 +106,7 @@ and I<--lpatNum>). This is similar to the following C<awk> script:
 
 =item * body --fline 1 --nlines 5 foo.txt
 
-Does the same as C<head -n 5 foo.text>. You shouldn't have to specify
+Do the same as C<head -n 5 foo.text>. You shouldn't have to specify
 the I<--fline 1> part, but there's currently a bug and you do.
 
 =back
@@ -112,7 +116,7 @@ the I<--fline 1> part, but there's currently a bug and you do.
 
 You can specify any mix of I<--fline>, I<--fpat>, and I<--fchar>.
 If none of them is specified, data is extracted starting at the
-beginning of the file. Otherwise, these options  are used,
+beginning of the file. Otherwise these options are used
 in the order just stated, to move forward in the file.
 For example, you could skip to line 100, then to the first line after that
 which matches a given regex, then to the nth column of that matching line.
@@ -126,10 +130,8 @@ A starting point is reached by seeking:
 
 =item # First, to the line number (counting from 1) specified by I<--fline>.
 
-=item # Then to a match to I<--fpat> (the first match, unless
-I<--fpatNum> is specified).
-A match I<can> be found in the current line (that is, the I<--fline> line,
-or if that is not specified, the first line).
+=item # Then, starting on the *following* line, to a match to I<--fpat>
+(the first matching line, unless I<--fpatNum> is specified).
 
 =item # If I<--fpatBreak> is specified (which requires that I<--fpat> is also
 specified), then to the chosen place relative to the found match.
@@ -143,7 +145,7 @@ If the line (or part) is not wide enough, copying begins at the start of the
 next line and a warning is issued.
 
 B<However>, if I<--fline> and I<--fpat> are both omitted,
-then I<--fchar> is treated as an offset in the I<file> rather than in
+then I<--fchar> is treated as an absolute offset in the I<file> rather than in
 the starting (in this case, first) <line>. This feature should not be
 mixed with I<--iterate>.
 
@@ -151,8 +153,8 @@ mixed with I<--iterate>.
 
 After locating the starting point, data is copied until stopped by EOF or by
 matching any ending condition. Similar to finding the starting point, if
-I<--lchar> is the only ending condition specified, then it is treated as a
-global file offset, and data is copied up to there. If other ending
+I<--lchar> is the only ending condition specified then it is treated as a
+global file offset and data is copied up to there. If other ending
 conditions are specified, the script copies data until:
 
 =over
@@ -253,7 +255,8 @@ Input line-breaks as for Unix (default), Mac, or DOS.
 
 With I<--iterate>, the value of this option (default: "") is inserted between
 separate matches, as a separate line.
-Known bug: you cannot use \\n, etc. in I<s>.
+Default: a line of "=" and a newline. 
+I<s> may include backslashed special characters.
 
 =item * B<--iterate> OR I<-g> (not yet supported)
 
@@ -313,7 +316,8 @@ Synonym for I<--iencoding utf8>.
 
 =item * B<--verbose> OR B<-v>
 
-More detailed messages.
+More detailed messages. Repeatable. 
+C<-v -v> will report what's happening line-by-line.
 
 =item * B<--version>
 
@@ -324,21 +328,12 @@ Report version date and exit.
 
 =head1 Known bugs and limitations
 
-The I<--nlines> and I<--lline> options have off-by-one errors.
+I<--nlines> copies one too few records if no other options are specified.
 
-I<--nlines> doesn't seem to work if it's the only option specified.
-
-The I<--lPat> option will not catch the pattern if it is on the same line
-matched by I<--fpat>.
-
-Some combinations of start/end options have not been tested much.
+Some combinations of options have not been tested much.
 
 Starting conditions are applied sequentially, but copying stops whenever
 I<any> of the ending conditions is met. This might not always be as desired.
-
-Fix STDIN!!!
-
-Does not handle \\n, etc. in I<--insert> strings.
 
 
 =head1 To do
@@ -376,7 +371,7 @@ Add way to specify where to put the boundary:
 
 Finish I<--fpatNum> and I<--lpatNum>.
 
-Lose requirement for sjdUtils, alogging, internal 'Reader'.
+Lose requirement for alogging, internal 'Reader'.
 
 
 =head1 Related commands
@@ -453,6 +448,9 @@ Working on --iterate and --insert.
 
 =item * 2022-03-14: Fix bugs in copyToEndPoint(), location reporting.
 
+=item * 2022-12-19: Lose requirement for sjdUtils. Improve -v -v tracing.
+Fix off-by-ones on line-counting. Add lastByte(), lastChar(), lastRec(),
+lengthInBytes(), lengthInChars(). Add unbackslashing for --insert.
 
 =back
 
@@ -468,6 +466,17 @@ or L<http://github.com/sderose>.
 
 
 =cut
+
+sub unbackslash {
+    my ($s) = @_;
+    if (index($s,"\\")<0) { return($s); }  # Nothing to do
+    #use String::Escape qw(unbackslash);
+    #my $s = unbackslash('hello\tworld\n');
+    $s =~ s/(^|[^\\])"/$1\\"/g; # Esc. unescaped quotes
+    $s = eval('"'.$s.'"');                    # Quote it and eval
+    if ($@) { utilWarn("unbackslash: eval problem for '$s': $@.\n"); }
+    return($s);
+} # unbackslash
 
 
 ###############################################################################
@@ -539,7 +548,7 @@ my %getoptHash = (
 
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die("Bad options.");
-sjdUtils::setVerbose($options{"verbose"});
+alogging::setLogVerbose($options{"verbose"});
 
 ($options{"replace"}) && die
     "-replace option is not yet implemented. Sorry.\n";
@@ -567,6 +576,8 @@ if ($options{"lpat"} && ($options{"lline"} || $options{"lchar"})) {
     die "Can't specify both --lpat and (--lline (" . $options{"lline"} .
         ") or --lchar (" . $options{"lchar"} . ")).\n";
 }
+
+$options{"iterate"} = unbackslash($options{"iterate"});
 
 #if ($options{"fpatBreak"} && !$options{"fpat"}) {
 #    die "Can't specify --fpatBreak without --fpat.\n";
@@ -671,7 +682,7 @@ sub doOneFile {
     # If no line argument, interpret chars as raw file offsets.
     #
     $firstLine = "";
-    if ($options{"fline"}==0 && $options{"lline"}==0 &&
+    if ($options{"fline"}==0 && $options{"lline"}==0 && $options{"nlines"}==0 &&
         $options{"fpat"} eq "" && $options{"lpat"} eq "") {
         bWarn(1, "char offsets only");
         $nBlocks = charOffsetsOnly();
@@ -702,7 +713,7 @@ sub doSingleBlock {
         return 0;
     }
     my $endRC = copyToEndPoint();
-    bWarn($endRC ? 0:1, "non-iterate, after copy to end point, rc $endRC.");
+    bWarn(($endRC ? 2:0), "non-iterate, after copy to end point, rc $endRC.");
     if ($options{"lchar"}) {
         bWarn(1, "seeking lchar");
         handleLchar();
@@ -799,25 +810,30 @@ sub findStartPoint {
 
     # Otherwise, do fline, then fpat, then fchar relative to line.
     #
-    my $fpatNumFoundSoFar = 0;
     if ($options{"fline"} > 1) {
         bWarn(1, "Seeking fline " . $options{"fline"} . "...");
+        my $gotFline = 0;
         while (defined ($firstLine = $reader->readOneRecord())) {
-            if ($reader->{recnum} >= $options{"fline"}-1) { last; }
+            bWarn(2, "Read: " . mkVis($firstLine));
+            if ($reader->lastRec() >= $options{"fline"}) {
+                $gotFline = 1;
+                last;
+            }
             ($copy) && outLine($firstLine);
         }
-        ($reader->{recnum} < $options{"fline"}-1) && alogging::eMsg(
+        ($gotFline) || alogging::eMsg(
             -1, "Couldn't reach starting line " . $options{"fline"} .
-            ", EOF after line " . $reader->{recnum} . ".");
-        bWarn(1, "At fline " . $reader->{recnum});
+            ", EOF after line " . $reader->lastRec() . ".");
+        bWarn(1, "Read fline (may still split) as " . mkVis($firstLine));
     }
 
     if ($options{"fpat"}) { # scan for first (or n-th) matching line
         bWarn(1, "Seeking fpat /" . $options{"fpat"} .
               "/ #" . $options{"fpatNum"} . "...");
+        my $fpatNumFoundSoFar = 0;
         my $gotFpat = 0;
         while (defined ($firstLine = $reader->readOneRecord())) {
-            bWarn(2,  "Trying '$firstLine'");
+            bWarn(2,  "Trying fpat in " . mkVis($firstLine));
             if ($firstLine =~ m/$fpatc/) {
                 $fpatNumFoundSoFar++;
                 if ($fpatNumFoundSoFar >= $options{"fpatNum"}) {  # Wait for n matches?
@@ -857,7 +873,7 @@ sub findStartPoint {
     # $firstLine may be all or part of the matched line, or the next line.
     # Now apply fchar within that.
     if ($options{"fchar"}) { # fchar *within* line
-        bWarn(1, "Seeking fchar $options{'fchar'} with: '$firstLine'.");
+        bWarn(1, "Seeking fchar $options{'fchar'} with: " . mkVis($firstLine));
         my $flinelen = length($firstLine);
         if ($options{"fchar"} > $flinelen) {
             bWarn(0, sprintf(
@@ -870,7 +886,7 @@ sub findStartPoint {
             $firstLine = substr($firstLine, $options{"fchar"}-1);
         }
     }
-    bWarn(1, "Copy starts at '$firstLine'.");
+    bWarn(1, "Copy starts at " . mkVis($firstLine));
     return 1
 } # findStartPoint
 
@@ -890,8 +906,7 @@ sub copyToEndPoint {
         $options{"nlines"} == 1) {
         bWarn(1, "Doing char offsets in a single line.");
         if ($options{"lchar"} > 0) {
-            $firstLine = substr($firstLine, 0,
-                                $options{"lchar"}-$options{"fchar"});
+            $firstLine = substr($firstLine, 0, $options{"lchar"}-$options{"fchar"});
         }
         outLine($firstLine);
         outFinalize();
@@ -902,26 +917,26 @@ sub copyToEndPoint {
     #
     outLine($firstLine);
 
-    my $rec = "";
-    my $ncopied = 1;
-
     my $lpat = $options{"lpat"};
     my $nlines = $options{"nlines"};
     my $lline = $options{"lline"};
     my $lpatBreak = $options{"lpatBreak"};
-    bWarn(1, "copyToEndPoint (ll $lline; nl $nlines; lpat /$lpat/).\n    From: $firstLine");
+    bWarn(1, "copyToEndPoint (lline $lline; nlines $nlines; lpat /$lpat/).\n" .
+        "    From: " . mkVis($firstLine));
 
+    my $rec = "";
+    my $ncopied = 1;
     my $stoppedBy = "EOF";
     while (defined ($rec = $reader->readOneRecord())) {
-        bWarn(2, "Read: |$rec|");
+        bWarn(2, "Read (ncopied $ncopied): " . mkVis($rec));
         # Must stop *at* --lline, because we might be taking only part of it.
-        if ($lline && $reader->{recnum}>=$lline) {
-            bWarn(1, "lline ($lline) reached: $rec");
+        if ($lline && $reader->lastRec() >= $lline) {
+            bWarn(1, "lline ($lline) reached: " . mkVis($rec));
             $stoppedBy = "lline";
             last;
         }
-        if ($nlines>0 && $ncopied >= $nlines) {
-            bWarn(1, "nlines ($nlines) reached: $rec");
+        if ($nlines>0 && $ncopied >= $nlines-1) {
+            bWarn(1, "nlines ($nlines) reached: " . mkVis($rec));
             $stoppedBy = "nlines";
             last;
         }
@@ -929,7 +944,7 @@ sub copyToEndPoint {
             my $PRE = $`;
             my $MAT = $&;
             #(!$MAT) || next;
-            bWarn(1, "lpat matched /$lpat/: $rec");
+            bWarn(1, "lpat matched /$lpat/: " . mkVis($rec));
 
             if ($lpatBreak eq 'INCLUDELINE') {
                 bWarn(1, "lpatBreak INCLUDELINE");
@@ -957,6 +972,7 @@ sub copyToEndPoint {
         outLine($rec);
         $ncopied++;
     } # while !EOF
+    outLine($rec);
     outFinalize();
 
     if ($ncopied == $nlines) {
@@ -1021,12 +1037,17 @@ BEGIN {
     }
 } # END
 
-
 sub bWarn {
     my ($level, $msg) = @_;
     my $loc = ($options{'quiet'}) ? "" : sprintf("[[AT %s:%d:%d (byte %d)]]:\n    ",
-        $reader->{path}, $reader->{recnum}, $reader->{charPos}, $reader->{bytePos});
-    alogging::vMsg($level, $loc . sjdUtils::showInvisibles($msg));
+        $reader->{path}, $reader->lastRec(), $reader->lastChar(), $reader->lastByte());
+    alogging::vMsg($level, $loc . $msg);
+}
+
+sub mkVis {
+    my ($s) = @_;
+    $s =~ s/([\x00-\x20])/{ chr(ord($1)+0x2400); }/ge;
+    return $s;
 }
 
 
@@ -1054,6 +1075,8 @@ sub bWarn {
 #  UNUSED $x->seekChar(n)
 #  UNUSED $x->backChar(n)
 #
+package Reader;
+
 sub lengthInBytes {
     my ($s) = @_;
     use bytes;
@@ -1066,8 +1089,6 @@ sub lengthInChars {
     Encode::_utf8_on($s);
     return length($s);
 }
-
-package Reader;
 
 # Could these be supported by reading, re-coding the char into the encoding,
 # and measuring it?
@@ -1115,6 +1136,7 @@ sub new {
         encoding  => $enc,
         recordSep => "\n",
 
+        # These are all what you're *about* to read, not what you *just* read.
         bytePos   => 0,
         charPos   => 1,
         recnum    => 1,
@@ -1152,9 +1174,9 @@ sub readOneRecord {
     }
     #$self->{bytePos} = tell($self->{fh});
     $self->{bytePos} += lengthInBytes($buf);
-    $self->{charPos} += length($buf);         # TODO: Check that this does UTF/UCS chars
+    $self->{charPos} += length($buf);  # TODO: Check that this does UTF/UCS chars
     $self->{recnum}++;
-    return($buf);
+    return $buf;
 } # readOneRecord
 
 sub gotoNthRecord {
@@ -1165,12 +1187,22 @@ sub gotoNthRecord {
 
     # Scan forward, counting bytes/chars/recs
      while (defined $self->readOneRecord()) {
-        if ($self->{recnum} >= $n) { return(1); }
+        if ($self->{recnum} >= $n) { return 1; }
     }
-    return(0); # EOF
+    return 0; # EOF
 }
 
-sub rpt {
+sub lastByte {
     my ($self) = @_;
-    return "At rec " . $self->{recnum} . ": ";
+    return $self->{bytePos} - 1;
+}
+
+sub lastChar {
+    my ($self) = @_;
+    return $self->{charPos} - 1;
+}
+
+sub lastRec {
+    my ($self) = @_;
+    return $self->{recnum} - 1;
 }
