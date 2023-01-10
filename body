@@ -1,6 +1,6 @@
 #!/usr/bin/env perl -w
 #
-# body: Like 'head' and 'tail', but find ranges by line number, regex, etc.
+# body: Like 'head' and 'tail', but find range(s) by offset, regex, etc.
 # 2006-03-23: Written by Steven J. DeRose.
 #
 use strict;
@@ -12,7 +12,7 @@ use alogging;
 
 our %metadata = (
     'title'        => "body",
-    'description'  => "Like 'head' and 'tail', but find ranges by line number, regex, etc.",
+    'description'  => "Like 'head' and 'tail', but find range(s) by offset, regex, etc.",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
@@ -31,11 +31,11 @@ our $VERSION_DATE = $metadata{'modified'};
 
     body [options] file(s)
 
-Extract a range(s) of lines or characters from the input (somewhat like
-*nix C<head> and C<tail>, but for the middle).
+Extract a range(s) of lines or characters from the input. This is somewhat like
+*nix C<head> and C<tail>, but mainly for the middle, and also does searching.
 
 For example, to extract the "History" section of a Markdown-ish file, give patterns
-for its first line and for the line after it:
+for its first line and for the line after it (say, the next first-level heading):
 
     body --fPat '^=History=' --lPat '^=[^=]' myFile.md
 
@@ -46,9 +46,9 @@ such a history section, you could use:
 
     body --fPat '^=History=' --lPat '^=' myFile.md | dropBlankLines | tail -n 1
 
-The starting and ending locations
-can be specified by line and/or character numbers (both counting from 1),
-and/or regular expression patterns. Note that actual characters (generally Unicode
+The starting and ending locations can be specified 
+by line and/or character numbers (both counting from 1 in various bases),
+and/or by regular expression patterns. Note that actual characters (generally Unicode
 code points) are counted, not bytes.
 
 If both line and character numbers are specified,
@@ -61,10 +61,10 @@ repeats the process until EOF.
 If multiple files are specified, the whole process is applied to each of
 them separately, not applied once to their concatenated data.
 
-You can probably do any of this with, C<awk> (and more), if you remember how.
+You can probably do any of this with C<awk> if you remember how.
 I like this approach better, because it fills the gap between
-C<head> and C<tail> (and can do their jobs, too), does operations I think
-are mostly intuitive, and supports Unicode
+C<head> and C<tail> (and can do their jobs, too, I think slightly better), 
+and uses operations I think are mostly intuitive, and supports Unicode
 (recent versions of C<gawk> do Unicode, too).
 
 =head2 Examples
@@ -85,7 +85,7 @@ at hexadecimal character offset 0xBEEF in the input.
 The first line output may be only part of the input line that included that
 offset, because the offset may point to the middle of a line.
 This is similar to the following C<awk> script (but supports the
-starting offset being mid-line more accurately):
+starting offset being mid-line more accurately, and counts Unicode characters):
 
     $ awk 'offset < 0xBEEF && nlines < 100 {
         print $0; offset += length($0); nlines++ }'
@@ -228,16 +228,15 @@ Choose where to start copying relative to the match for I<--fpat>
 
 =item * EXCLUDEMATCH or EM -- break line to exclude the match
 
-=item * EXCLUDE or EX -- exclude the entire matched line.
+=item * EXCLUDELINE or EL -- exclude the entire matched line.
 
 =back
 
-Don't include the line matched by I<--fpat>. Instead start just after it.
-Default: the matched line itself is included.
+Default: INCLUDELINE.
 
 =item * B<--fpatNum> I<n>
 
-Wait for the I<n>th match of the I<--fpat> pattern (default: 1).
+Wait for the I<n>th match of the I<--fpat> pattern. Default: 1.
 
 =item * B<-g>
 
@@ -247,9 +246,13 @@ Synonym for I<--iterate>.
 
 Assume the input file is in this character encoding.
 
+=item * B<--ignoreCase> OR B<-i>
+
+Ignore case distinctions for I<--lPat> and I<--fPat> (there are not separate controls).
+
 =item * B<--ilineends> I<t>
 
-Input line-breaks as for Unix (default), Mac, or DOS.
+Assume input line-breaks are as for Unix (default), Mac, or DOS.
 
 =item * B<--insert> I<s>
 
@@ -258,7 +261,7 @@ separate matches, as a separate line.
 Default: a line of "=" and a newline. 
 I<s> may include backslashed special characters.
 
-=item * B<--iterate> OR I<-g> (not yet supported)
+=item * B<--iterate> OR I<-g>
 
 [experimental/unfinished].
 After finding an entire start...end block as described above, repeat the
@@ -292,7 +295,7 @@ in the result.
 =item * B<--lpatBreak> I<where>
 
 Choose where to stop copying relative to the match for I<--lpat>.
-I<where> takes the same values as for B<--lpatBreak>.
+I<where> takes the same values as for B<--fpatBreak> (q.v.).
 
 =item * B<--lpatNum> I<n>
 
@@ -335,10 +338,12 @@ Some combinations of options have not been tested much.
 Starting conditions are applied sequentially, but copying stops whenever
 I<any> of the ending conditions is met. This might not always be as desired.
 
+No Unicode normalization is done, character counts are of the data as-is.
+
 
 =head1 To do
 
-Add a way to partition file(s) into multiple, such as extracting all the
+Add a way to partition a file(s) into multiple, such as extracting all the
 n-level <div>s from HTML, all the classes from Python, etc.
 
 A way to invert patterns, so you start/end at the first I<non>-matching line.
@@ -351,9 +356,6 @@ Way to get all I<but> the last N lines?
 
 Allow counting by tokens?
 
-Finish I<--iterate> option for fpat...lpat blocks repeatedly,
-and separate each instance into its own file? Add max iterations?
-
 Add I<--replace> [file]: Instead of fetching the range, fetch everything else,
 and *replace* the specified range with the contents of [file].
 Likewise, option to invert what's retrieved.
@@ -363,15 +365,7 @@ Options to match fpat/lpat only in certain fields?
 Add iterative options like for 'tail'?
 (--retry, --follow, --max-unchanged, --pid, --sleep-internal)
 
-Replace internal Reader package with RecordFile.pm?
-
-Add way to specify where to put the boundary:
-    exactly before/after match
-    before/after line with match
-
-Finish I<--fpatNum> and I<--lpatNum>.
-
-Lose requirement for alogging, internal 'Reader'.
+Lose requirement for alogging, internal 'Reader'?
 
 
 =head1 Related commands
@@ -399,25 +393,25 @@ C<RecordFile.pm> -- similar to internal 'Reader' package.
 
 =item * 2007-04-27 sjd: fix bunch of bugs on line-counting.
 
-=item * 2007-06-19 sjd: Add--fpat.
+=item * 2007-06-19 sjd: Add --fpat.
 
 =item * 2007-12-11 sjd: strict.
 
 =item * 2007-09-03 sjd: Testing. Improve doc. Getopt::Long. --lpat, --fpatnot,
- --lpatnot. Reorganize/clean up logic.
- Options for whether to include the --fpat/--lpat lines themselves, or not.
+--lpatnot. Reorganize/clean up logic.
+Options for whether to include the --fpat/--lpat lines themselves, or not.
 
 =item * 2008-09-18 sjd: Add --lineends, --outlineends.
 
 =item * 2009-12-09 sjd: Fix test of --lpat option conflict.
 
 =item * 2010-03-28 sjd: Add --iencoding and --unicode. perldoc. Fix several bugs
- with --nlines/--fline, line-counting, line-length. Add 'use strict' and
- restructure logic for --char using output buffering. Modularize.
+with --nlines/--fline, line-counting, line-length. Add 'use strict' and
+restructure logic for --char using output buffering. Modularize.
 
 =item * 2012-07-10 sjd: Bugs in --fchar/--lchar. Standardize naming, options.
- fchar/lchar/fline/lline/nlines accept hex, octal, binary. Better doc.
- Better handling of multiple combined conditions.
+fchar/lchar/fline/lline/nlines accept hex, octal, binary. Better doc.
+Better handling of multiple combined conditions.
 
 =item * 2012-07-11 sjd: Add Reader package.
 
@@ -448,9 +442,10 @@ Working on --iterate and --insert.
 
 =item * 2022-03-14: Fix bugs in copyToEndPoint(), location reporting.
 
-=item * 2022-12-19: Lose requirement for sjdUtils. Improve -v -v tracing.
+=item * 2022-12-19ff: Lose requirement for sjdUtils. Improve -v -v tracing.
 Fix off-by-ones on line-counting. Add lastByte(), lastChar(), lastRec(),
 lengthInBytes(), lengthInChars(). Add unbackslashing for --insert.
+Add --ignoreCase for --fPat and --lPat.
 
 =back
 
@@ -478,6 +473,14 @@ sub unbackslash {
     return($s);
 } # unbackslash
 
+# User's --fpat and --lpat may contain slashes, which they might not expect to
+# be troublesome; so escape them first.
+#
+sub escapeRegex {
+    my ($s) = @_;
+    $s =~ s@/@\\/@g;
+    return $s;
+}
 
 ###############################################################################
 # Options
@@ -490,6 +493,7 @@ my %options = (
     "fpatBreak"    => 'INCLUDELINE', # Include --fpat matched line?
     "fpatNum"      => 1,         # Which instance of fpat counts
     "iencoding"    => "",
+    "ignoreCase"   => 1,         # For fpat, lpat, etc.
     "ilineends"    => "U",
     "iterate"      => 0,         # Find start/end points repeatedly.
     "insert"       => '=' x 79,  # Put this between --iterate blocks.
@@ -503,16 +507,17 @@ my %options = (
     "quiet"        => 0,
     "replace"      => 0,
     "verbose"      => 0,
-    );
+);
 
 my %getoptHash = (
     "fchar=o"          => \$options{"fchar"},
     "fline=o"          => \$options{"fline"},
     "fpat=s"           => \$options{"fpat"},
-    "fpatBreak!"       => \$options{"fpatBreak"},
+    "fpatBreak=s"      => \$options{"fpatBreak"},
     "fpatNum=o"        => \$options{"fpatNum"},
     "h|help"           => sub { system "perldoc $0"; exit; },
     "iencoding=s"      => \$options{"iencoding"},
+    "ignoreCase|i!"    => \$options{"ignoreCase"},
 	"ilineends=s"      => \$options{"ilineends"},
 	"insert=s"         => \$options{"insert"},
 	"iterate|g!"       => \$options{"iterate"},
@@ -533,7 +538,7 @@ my %getoptHash = (
     "lchar=o"          => \$options{"lchar"},
     "lline=o"          => \$options{"lline"},
     "lpat=s"           => \$options{"lpat"},
-    "lpatBreak!"       => \$options{"lpatBreak"},
+    "lpatBreak=s"      => \$options{"lpatBreak"},
     "lpatNum=o"        => \$options{"lpatNum"},
     "nlines|lines=o"   => \$options{"nlines"},
     "olineends=s"      => \$options{"olineends"},
@@ -544,7 +549,7 @@ my %getoptHash = (
     "version"          => sub {
         die "Version of $VERSION_DATE by Steven J. DeRose.\n";
     }
-    );
+);
 
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die("Bad options.");
@@ -589,7 +594,7 @@ my %abbrMap = (
     "IL" => "INCLUDELINE",
     "IM" => "INCLUDEMATCH",
     "EM" => "EXCLUDEMATCH",
-    "EX" => "EXCLUDE",
+    "EL" => "EXCLUDELINE",
 );
 $options{"fpatBreak"} = uc($options{"fpatBreak"});
 if (length($options{"fpatBreak"}) == 2) {
@@ -634,10 +639,19 @@ my $reader;
 my $firstLine = "";
 my $fileCount = 0;
 
-# Compile the regexes
+# Prepare the regexes
 #
-my $fpatc = ($options{"fpat"}) ? qr/$options{"fpat"}/ : undef;
-my $lpatc = ($options{"lpat"}) ? qr/$options{"lpat"}/ : undef;
+$options{"fpat"} = escapeRegex($options{"fpat"});
+$options{"lpat"} = escapeRegex($options{"lpat"});
+my $fpatc = undef;
+if ($options{"fpat"}) {
+    $fpatc = $options{"ignoreCase"} ? qr/$options{"fpat"}/i : qr/$options{"fpat"}/;
+}
+my $lpatc = undef;
+if ($options{"lpat"}) {
+    $lpatc = $options{"ignoreCase"} ? qr/$options{"lpat"}/i : qr/$options{"lpat"}/;
+}
+
 my $recordSepc = ($options{"recordSep"}) ? qr/$options{"recordSep"}/ : undef;
 
 if ($ARGV[0]) {
@@ -658,11 +672,12 @@ if ($ARGV[0]) {
 }
 else {
     if (-t STDIN && !$options{"quiet"}) {
-        vMsg(0,"Waiting on STDIN...");
+         warn "Waiting on STDIN...\n";
     }
     $reader = new Reader("-",  $options{"iencoding"});
     doOneFile($reader);
     $reader->close();
+    $fileCount = 1;
 }
 
 if (!$options{"quiet"}) {
@@ -697,15 +712,15 @@ sub doOneFile {
     }
 
     if  ($nBlocks == 0) {
-        bWarn(0, sprintf("%s-fpat #%d: nothing found, nothing copied.",
-            $reader->rpt(), $options{"fpatNum"}, $options{"fpat"}));
+        bWarn(0, sprintf("Line %d, fpat #%d /%s/: nothing found, nothing copied.",
+            $reader->lastRec(), $options{"fpatNum"}, $options{"fpat"}));
     }
     outFinalize();
     return $nBlocks;
 }
 
-# Find the start of a desired part, copy to the following endpoint,
-# and then skip to the next start point.
+# Find the start of a desired part, copy to the following endpoint.
+#
 sub doSingleBlock {
     my $rc = findStartPoint("SKIP");
     if ($rc == 0) {  # Fail
@@ -962,7 +977,7 @@ sub copyToEndPoint {
                 $rec = "";
             }
             else {
-                die "Bad --lpatBreak: '$lpatBreak'.\n";
+                die "Bad --lpatBreak value: '$lpatBreak'.\n";
             }
             #outPeek();
             $stoppedBy = "lpat";
@@ -1018,6 +1033,9 @@ BEGIN {
         $pendingLine = $_[0];
     }
 
+    # Hand back the queued line (if any), and unqueue it. Mainly to easy splitting
+    # of the "last" line of a retrieved block.
+    #
     sub outBack {
         if (!defined $pendingLine) {
             alogging::eMsg(0, "outback: no line to recover.");
@@ -1052,28 +1070,12 @@ sub mkVis {
 
 
 ###############################################################################
-# Read lines, tracking line, character, and byte offsets.
+# Read lines while tracking line, character, and byte offsets.
 # In theory, Perl "$." is the current record number....
 #
 # Seeking backwards is available, but little tested.
-# Code follows for doing character-level i/o, but is presently unused.
 #
 # Cf: RecordFile.pm, TabularFormats.pm, splitFiles, EntityManager.pm
-#
-# Methods:
-#  $x = new(class, path, encoding)
-#  $x->rewind()
-#  $x->close()
-#  $x->readOneRecord()
-#  $x->gotoNthRecord(n)
-#
-#  UNUSED $x->peekRec()
-#  UNUSED $x->backRec(n)
-#
-#  UNUSED $x->readChars(n)
-#  UNUSED $x->seekByte(n)
-#  UNUSED $x->seekChar(n)
-#  UNUSED $x->backChar(n)
 #
 package Reader;
 
@@ -1136,7 +1138,7 @@ sub new {
         encoding  => $enc,
         recordSep => "\n",
 
-        # These are all what you're *about* to read, not what you *just* read.
+        # What you're *about* to read, not what you *just* read.
         bytePos   => 0,
         charPos   => 1,
         recnum    => 1,
@@ -1192,6 +1194,8 @@ sub gotoNthRecord {
     return 0; # EOF
 }
 
+# Following return offsets of what you *already* just read, not what's next.
+#
 sub lastByte {
     my ($self) = @_;
     return $self->{bytePos} - 1;
