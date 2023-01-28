@@ -216,15 +216,20 @@ color names are as provided by C<ColorManager.pm> (q.v.).
 
 =over
 
-=item * B<--sourceColor> I<color> -- For unchanged input lines
+=item * B<--startFileColor> Icolor> -- For "starting file F" messages
+
+=item * B<--sourceColor> I<color> -- For original input lines
 
 =item * B<--matchColor> I<color> -- For matched portions of lines
+
+=item * B<--resultColor> I<color> -- For changed lines
 
 =item * B<--askColor> I<color> -- For prompts (I<--interactive>, I<--multiDest>)
 
 =item * B<--errorColor> I<color> -- For interactive error messages
 
-=item * B<--resultColor> I<color> -- For changed lines
+=item * B<--infoColor> I<color> -- For interactive progress and verbose messages
+
 
 =back
 
@@ -624,6 +629,13 @@ However, it can be inaccurate (see L<#Known bugs and limitations>).
 
 Display the matched text for each match (even if, for example,
 pre-conditions are not fulfilled).
+
+=item * B<--showColors>
+
+Display a sample of each of the settable colors, with the option name.
+See also: I<--startFileColor>, I<--sourceColor>, I<--matchColor>,
+I<--resultColor>, I<--askColor>, I<--errorColor>, I<--infoColor>,
+I<--progressColor>, I<--noChangeColor>, I<--someChangeColor>, I<--rawColor>.
 
 =item * B<--showMatchCounts>
 
@@ -1212,6 +1224,8 @@ empty portions. Add --lineNumbers for makeDiffLine().
 print extra data.
   2022-03-11: Minor cleanup.
   2022-08-19: Fix missed merge lines.
+  2023-01-28: Improve colors, make options for rest of them. Add --showColors.
+Centralize color display via cprint() and cwarn().
 
 
 =head1 Rights
@@ -1233,12 +1247,22 @@ L<https://github.com/sderose>.
 #
 # Color settings (see ColorManager.pm):
 my $color            = ($ENV{CLI_COLOR} && -t STDERR) ? 1:0;
+my $showColors       = 0;
+
+my $startFileColor   = 'white/black/bold';
+my $sourceColor      = 'red/black/bold';
+my $matchColor       = 'yellow/black/bold';
+my $resultColor      = 'green/black/bold';
+
 my $askColor         = 'green/white';
 my $errorColor       = 'red/white';
+my $infoColor        = 'magenta/white';
+
 my $progressColor    = 'green/white/bold';
-my $matchColor       = 'blue/white';
-my $resultColor      = 'red/white';
-my $sourceColor      = 'bold';
+
+my $noChangeColor    = "red/black/bold";
+my $someChangeColor  = "blue/black/bold";
+my $rawColor         = "red/black/bold";
 #
 # Rest of options:
 my $backup           = 1;
@@ -1317,16 +1341,31 @@ my $tmpFile = "/tmp/globalChange_" . int(rand(100000)) . ".out";
 ###############################################################################
 #
 my %getoptHash = (
+    # Color-related options
+    "color!"                => \$color,
+    "showColors!"           => \$showColors,
+
+    "startFileColor=s"      => \$startFileColor,
+    "sourceColor=s"         => \$sourceColor,
+    "matchColor=s"          => \$matchColor,
+    "resultColor=s"         => \$resultColor,
+
     "askColor=s"            => \$askColor,
+    "errorColor=s"          => \$errorColor,
+    "infoColor=s"           => \$infoColor,
+    "progressColor=s"       => \$progressColor,
+    "noChangeColor=s"       => \$noChangeColor,
+    "someChangeColor=s"     => \$someChangeColor,
+    "rawColor=s"            => \$rawColor,
+
+    # Other options
     "backup|bak!"           => \$backup,
     "backupDirectory=s"     => \$backupDirectory,
     "backupExtension=s"     => \$backupExtension,
     "binary!"               => \$binary,
-    "color!"                => \$color,
     "compact!"              => \$compact,
     "compileRegex!"         => \$compileRegex,
     "dropEmptiedLines!"     => \$dropEmptiedLines,
-    "errorColor=s"          => \$errorColor,
     "fileStart!"            => \$fileStart,
     "firstPerFile=i"        => \$firstPerFile,
     "force!"                => \$force,
@@ -1355,7 +1394,6 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
-    "matchColor=s"          => \$matchColor,
     "maxChanges=i"          => \$maxChanges,
     "maxLinesChanged=i"     => \$maxLinesChanged,
     "oencoding=s"           => \$oencoding,
@@ -1364,14 +1402,12 @@ my %getoptHash = (
     "prepend=s"             => \$prepend,
     "q|quiet!"              => \$quiet,
     "reset"                 => sub { Term::ReadKey::ReadMode 1; },
-    "resultColor=s"         => \$resultColor,
     "r|recursive!"          => \$recursive,
     "showAllMatches!"       => \$showAllMatches,
     "showChanges!"          => \$showChanges,
     "showMatchCounts!"      => \$showMatchCounts,
     "showResults!"          => \$showResults,
     "sideBySide=i"          => \$sideBySide,
-    "sourceColor=s"         => \$sourceColor,
     "test|dry-run|dryrun!"  => \$test,
     "tickInterval=o"        => \$tickInterval,
     "unicode!"              => sub { $iencoding = $oencoding = "utf8"; },
@@ -1436,7 +1472,7 @@ my %getoptHash = (
             }
         } # EOF
         close F;
-        vMsg(1,"Added $fcount changes from file $fileOfExprs.");
+        cwarn(1, $infoColor, "Added $fcount changes from file $fileOfExprs.");
     }, # fileOfExprs
 );
 
@@ -1452,9 +1488,44 @@ my $symmetry           = "\x{232f}";
 my $rCircled           = "\x{24c7}";
 
 my $clearEOL = "\x1B[K";
-my $noChangeColor = "black/white";
-my $someChangeColor = "blue/white";
-my $rawColor = "black/white";
+
+sub showSample {
+    my ($optName, $optValue, $sample) = @_;
+    printf("   --%-16s %-20s '%s'\n",
+        $optName, $optValue, sjdUtils::colorize($optValue, $sample));
+}
+
+if ($showColors) {
+    print("Colors currently set:\n\n");
+    showSample("startFileColor", $startFileColor, "Starting file F\n");
+    showSample("sourceColor", $sourceColor, "The original line\n");
+    showSample("matchColor", $matchColor, "    original\n");
+    showSample("resultColor", $resultColor, "The final line\n");
+
+    showSample("askColor", $askColor, "Shall I change this?\n");
+    showSample("errorColor", $errorColor, "Error: file not found\n");
+    showSample("progressColor", $progressColor,
+        "At line 1000 (total), total changes: 3, now processing FILE.\n");
+    showSample("noChangeColor", $noChangeColor, "The unchanged line\n");
+    showSample("someChangeColor", $someChangeColor, "sample\n");
+    showSample("rawColor", $rawColor, "sample\n");
+    exit;
+}
+
+
+###############################################################################
+#
+sub cprint {
+    my ($colorName, $msg) = @_;
+    print(sjdUtils::colorize($colorName, $msg) . "\n");
+}
+
+sub cwarn {
+    my ($level, $colorName, $msg) = @_;
+    ($level < 0 || $verbose < $level) && return;
+    warn(sjdUtils::colorize($colorName, $msg) . "\n");
+    ($level < 0) && die "\nError is fatal.\n\n";
+}
 
 
 ###############################################################################
@@ -1471,7 +1542,7 @@ sjdUtils::setColors($color || $hiliteResults);
 
 if ($prepend) {
     $prepend = sjdUtils::unbackslash($prepend);
-    alogging::vMsg(1, "Prepend string is '$prepend'.\n");
+    cwarn(1, $errorColor, "Prepend string is '$prepend'.");
 }
 
 my $maxFieldChoice = 0;
@@ -1489,13 +1560,11 @@ if ($nWithMultiDest>0) {
 }
 
 if ($verbose || $list) {
-    vMsg(0, "====List of changes in effect:");
-    alogging::MsgPush();
+    cwarn(0, $infoColor, , "====List of changes in effect:");
     my $colorSlash = sjdUtils::colorize("yellow/bold", "/");
     for (my $i=0; $i<scalar(@exprs); $i++) {
-        vMsg(0, $exprs[$i]->toString($colorSlash));
+        cwarn(0, $infoColor, , "    " . $exprs[$i]->toString($colorSlash));
     }
-    alogging::MsgPop();
 }
 
 if ($backupDirectory && !-d $backupDirectory) {
@@ -1514,10 +1583,10 @@ if ($backupDirectory && !-d $backupDirectory) {
     my %opts = { "error"=>\$errsRef };
     make_path($backupDirectory, \%opts);
     if (scalar(@{$errsRef})) {
-        vMsg(0, "Can't create backup directory at '$backupDirectory'.");
-        vMsg(-1, "Errs: " . "\n".join(@{$errsRef}));
+        cwarn(0, $infoColor, , "Can't create backup directory at '$backupDirectory'.");
+        cwarn(-1, $errorColor, "Errs: " . "\n".join(@{$errsRef}));
     }
-    vMsg(0, "Backups going to '$backupDirectory'.");
+    cwarn(0, $infoColor, , "Backups going to '$backupDirectory'.");
 }
 
 $ilineends = uc(substr($ilineends."U",0,1));
@@ -1583,9 +1652,7 @@ else {
     if ($oencoding) {
         binmode(*STDOUT, ":encoding($oencoding)");
     }
-    alogging::MsgPush();
     my $nc = doOneFile("-", *STDIN, *STDOUT);
-    alogging::MsgPop();
 }
 
 Term::ReadKey::ReadMode 1;
@@ -1603,8 +1670,7 @@ sub saveChangeSpecFromExpr {
     ($expr =~ m/^s(\W)/) || main::dieCleanly(
         "Expression must start with 's' and a non-word-char delimiter:\n    $expr\n");
     if ($delim ne "/") {
-        alogging::vMsg(0,
-            "(internal-use) delim '$delim' for eval() is experimental.");
+        cwarn(0, $infoColor, , "(internal-use) delim '$delim' for eval() is experimental.");
     }
 
     # Parse and slightly validate.
@@ -1630,7 +1696,7 @@ sub saveChangeSpecFromExpr {
         for (my $i=0; $i<scalar(@parts); $i++) {
             $msg .= sprintf("    %d: '%s'\n", $i, $parts[$i]);
         }
-        vMsg(1, $msg);
+        cwarn(1, $errorColor, $msg);
     }
 
     my ($theS, $from, $to, $mods) = @parts;
@@ -1644,14 +1710,14 @@ sub saveChangeSpecFromExpr {
         $problem += 1;
     }
     if ($problem || $verbose>=2) {
-        vMsg(0, "====Expression #" . scalar(@exprs) . " parse:\n" .
+        cwarn(0, $infoColor, , "====Expression #" . scalar(@exprs) . " parse:\n" .
             "    expr:  '$expr'\n" .
             "    parts: #" . join("#", @parts) . "#\n" .
             "    delim: '" . ($delim || '') . "'\n" .
             "    1. s:     '" . ($theS  || '') . "'\n" .
             "    2. from:  '" . ($from  || '') . "'\n" .
             "    3. to:    '" . ($to    || '') . "'\n" .
-            "    4. mods:  '" . ($mods  || '') . "'\n"
+            "    4. mods:  '" . ($mods  || '') . "'"
             );
         ($problem) && dieCleanly(
             "  Could not parse regex change, found " . (scalar(@parts)) . " parts (need 3 or 4).\n");
@@ -1668,11 +1734,11 @@ sub saveChangeSpec {
     my ($from, $to, $mods) = @_;
     if (!$mods) { $mods = ''; }
     if ($mods && $mods =~ m/([^igmsexadlu])/) {
-        eMsg(0, "Bad modifier in change: '$mods'");
+        cwarn(0, $errorColor, "Bad modifier in change: '$mods'");
     }
     if (!$to)   { $to   = ''; }
     if (!$quiet && $to =~ m/\\\d/) {
-        eMsg(0, "Warning: \\+digit on right-hand side '$to'. Should be \$?");
+        cwarn(0, $errorColor, "Warning: \\+digit on right-hand side '$to'. Should be \$?");
     }
     my $chg = ChangeInfo::new ChangeInfo(
         scalar(@exprs), $from, $to, $mods, scalar(@exprs));
@@ -1689,13 +1755,13 @@ sub doOneItem {
     $totalItems++;
 
     if (!-e $file) {                              # Can't find
-        eMsg(0, "Can't find file '$file'.");
+        cwarn(0, $errorColor, "Can't find file '$file'.");
         $filesMissing++;
         return(0);
     }
 
     if (!$force && $file =~ m/(\.bak|~|#)$/) {    # Types to ignore
-        vMsg(1, "Apparent backup file skipped: '$file'");
+        cwarn(1, $errorColor, "Apparent backup file skipped: '$file'");
         $filesBackup++;
         return(0);
     }
@@ -1703,18 +1769,16 @@ sub doOneItem {
     if (-d $file) {                               # Directory
         $dirs++;
         if (!$recursive) {
-            vMsg(1, "Directory '$file' skipped.");
+            cwarn(1, $errorColor, "Directory '$file' skipped.");
             return(0);
         }
-        vMsg(1, "Recursing into directory '$file'");
+        cwarn(1, $errorColor, "Recursing into directory '$file'");
         my $theDir;
         opendir($theDir, $file);
-        alogging::MsgPush();
         while (my $subitem = readdir($theDir)) {
             ($subitem =~ m/^\./) && next;
             doOneItem("$file/$subitem", $depth+1);
         }
-        alogging::MsgPop();
         closedir($theDir);
         return(1);
     }
@@ -1745,15 +1809,15 @@ sub doOneItem {
     #
     if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
         if ($compact) {
-            print("Starting file '$file'$clearEOL\r");
+            print(sjdutils::colorize($startFileColor, "Starting file '$file'$clearEOL\n"));
         }
         else {
-            vMsg(0, "====Starting file '$file'");
+            cprint($startFileColor, "====Starting file '$file'");
         }
     }
     my $ifh;
     if (!open($ifh, "<$file")) {                  # Can't open
-        eMsg(0, "Can't open input file '$file'.");
+       cwarn(0, $infoColor, , "Can't open input file '$file'.");
         $failedOpen++;
         return(0);
     }
@@ -1764,18 +1828,18 @@ sub doOneItem {
     # Copy then overwrite, so the permissions get set right.
     # Change to do this later, if we indeed made changes.
     #my $cmd = "cp -P $file $tmpFile";
-    #vMsg(1, "Copying: '$cmd'");
-    #system $cmd || eMsg(0, "Failed to create temp file: ", $cmd);
-    #vMsg(1, "    temp file created, size " . (-s $tmpFile));
+    #cwarn(1, $errorColor, "Copying: '$cmd'");
+    #system $cmd || cwarn(0, $errorColor, "Failed to create temp file: ", $cmd);
+    #cwarn(1, $errorColor, "    temp file created, size " . (-s $tmpFile));
 
-    alogging::vMsg(1, "Opening temp file $tmpFile.");
+    cwarn(1, $errorColor, "Opening temp file $tmpFile.");
     my $ofh;
     if (!open($ofh, ">$tmpFile")) {
-        eMsg(0, "Can't open temp output file '$tmpFile'.");
+        cwarn(0, "Can't open temp output file '$tmpFile'.");
         $failedTempOpen++;
         return(0);
     }
-    #vMsg(1, "    temp file opened, size " . (-s $tmpFile));
+    #cwarn(1, $errorColor, "    temp file opened, size " . (-s $tmpFile));
     if ($oencoding) {
         binmode($ofh, ":encoding($oencoding)");
     }
@@ -1783,32 +1847,30 @@ sub doOneItem {
     ###########################################################################
     # Do the changes, putting results in the temp file
     #
-    alogging::vMsg(1, "Doing changes.");
-    alogging::MsgPush();
+    cwarn(1, $errorColor, "Doing changes.");
     my $permissions = (stat ($file))[2];
     my $nc = doOneFile($file, $ifh, $ofh);
-    alogging::MsgPop();
     close $ifh;
     close $ofh;
 
     if ($nc < 0) {
-        vMsg(0, "\n  Changes failed for file '$file'");
+        cwarn(0, $infoColor, , "\n  Changes failed for file '$file'");
         $failedChanges++;
         return(0);
     }
     if ($nc == 0) {
-        ($zero || $verbose) && alogging::vMsg(0, ">>> No change(s) in file '$file'");
+        ($zero || $verbose) && cprint($noChangeColor, ">>> No change(s) in file '$file'");
         return(1);
     }
     if ($compact) { print "\n"; }
     $totalFilesChanged++;
-    alogging::Msg($someChangeColor, sprintf(">>> %3d change(s) in file '%s'%s",
+    cprint($noChangeColor, sprintf(">>> %3d change(s) in file '%s'%s",
         $nc, $file, $test ? " (DRY RUN)" : ''));
 
     ###########################################################################
     #
     if ($test) {                                      ### DRY RUN ENDS HERE ###
-        #alogging::vMsg(1, "(DRY RUN)");
+        #cwarn(1, $errorColor, "(DRY RUN)");
         return(1);
     }
 
@@ -1817,10 +1879,10 @@ sub doOneItem {
     #
     if ($backup) {
         my $backupDest = "$backupDirectory$file.$backupExtension";
-        alogging::vMsg(1, "Backing up '$file' to '$backupDest'.");
+        cwarn(1, $errorColor, "Backing up '$file' to '$backupDest'.");
         move($file, $backupDest) || die "move failed: $!\n";
         if ($@) {
-            alogging::eMsg(0, "Failed to back up '$file' to '$backupDest' -- not changing.");
+            cwarn(0, $infoColor, , "Failed to back up '$file' to '$backupDest' -- not changing.");
             return(0);
         }
     }
@@ -1829,13 +1891,13 @@ sub doOneItem {
     # Update the disk file(s)
     # Note: this mucks up the permission (cf. cp -a)
     #
-    alogging::vMsg(1, "Updating original from $tmpFile");
+    cwarn(1, $errorColor, "Updating original from $tmpFile");
     move($tmpFile, $file);
     if ($@) {
-        alogging::eMsg(0, "Failed to update: $@");
+        cwarn(0, $infoColor, , "Failed to update: $@");
         $failedCopy++;
     }
-    chmod $permissions, $file || alogging::eMSg(0, "Failed to reset permissions.");;
+    chmod $permissions, $file || cwarn(0, $infoColor, , "Failed to reset permissions.");;
 
     return(1);
 } # doOneItem
@@ -1853,7 +1915,7 @@ sub doOneFile {
     $totalLinesChangedCF = 0;
 
     if ($maxFieldChoice > 0) {
-        $tfmt->attach($ifh) || eMsg(0, "Couldn't access '$file'.");
+        $tfmt->attach($ifh) || cwarn(0, $errorColor, "Couldn't access file '$file'.");
     }
 
     my $headRec = '';
@@ -1861,7 +1923,7 @@ sub doOneFile {
     if ($tfmt->getOption("header")) {
         $headRec = $tfmt->readHeader();
         @headNames = @{$tfmt->parseHeader($headRec)};
-        vMsg(1, "Header parsed to: " . join("|",@headNames));
+        cwarn(1, $errorColor, "Header parsed to: " . join("|",@headNames));
     }
 
     my $nChangesInFile = 0;               # Total changes applied to this file
@@ -1885,10 +1947,9 @@ sub doOneFile {
 
         chomp $originalRec;
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
-            alogging:info(0, sprintf(
+            cwarn(0, $progressColor, sprintf(
                 "At line %12s (total), total changes: %12s, now processing %s.",
-                 lpadc($totalRecs), lpadc($totalChanges)/2, $file),
-                 $progressColor);  # TODO: Why the /2?
+                 lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why the /2?
         }
         if ($quit) {  # Quoth the user, "nevermore".
             outputALine($ofh, $originalRec);
@@ -1899,13 +1960,13 @@ sub doOneFile {
         my @originalFields;
         if ($needToParse) {
             @originalFields = @{$tfmt->parseRecordToArray($originalRec)};
-            vMsg(3, "Rec $recnum: parsed '$originalRec' into " .
+            cwarn(3, $errorColor, "Rec $recnum: parsed '$originalRec' into " .
                 (scalar(@originalFields)-1) .
                 " fields: [\n    " . ("\n   ".join(@originalFields)) . "]");
         }
         else {
             @originalFields = ( '', $originalRec );
-            vMsg(3, "Rec $recnum: '" . $originalFields[1] . "'");
+            cwarn(3, $errorColor, "Rec $recnum: '" . $originalFields[1] . "'");
         }
 
         if ($verbose >= 4) {
@@ -1914,7 +1975,7 @@ sub doOneFile {
                 $msg .= "(" . (scalar(@originalFields)-1) . " fields)";
             }
             $msg .= "$originalRec";
-            alogging::vMsg(0, "Starting line $recnum: ", printable($msg));
+            cwarn(0, $infoColor, "Starting line $recnum: ", printable($msg));
         }
 
         my @newFields = @originalFields;  # REALLY COPIES
@@ -1937,7 +1998,7 @@ sub doOneFile {
         for (my $e=0; $e<scalar(@exprs) && !$quit; $e++) {
             push @{$lineStats->{'whichApplied'}}, 0;
             my $expr = $exprs[$e];
-            vMsg(3, "Applying: ", $exprs[$e]->toString());
+            cwarn(3, $errorColor, "Applying: ", $exprs[$e]->toString());
             my $nfields = scalar(@newFields) - 1;
             my $first = $expr->{'fieldChoice'} || 1;
             my $last  = $expr->{'fieldChoice'} || $nfields;
@@ -1946,7 +2007,7 @@ sub doOneFile {
                 if ($newFields[$f] !~ m/$fr/) { next; }
                 my $fspec = ($first!=$last) ? "fd $f " : '';
                 if ($verbose>=2) {
-                    alogging::vMsg(0, sprintf(
+                    cwarn(0, $infoColor, , sprintf(
                         "%4d: %s%s%2d /%s/ match(es):\n      ",
                         $recnum, $fspec, $delta, $e+1, $expr->{'from'}),
                         $expr->colorizeAllMatches($newFields[$f]));
@@ -1954,7 +2015,7 @@ sub doOneFile {
                 # --multiDest choice is handled within apply()
                 my $newField = $expr->apply($newFields[$f]);
                 if (defined $newField) {
-                    vMsg(3, "    newField [$f]: '" . $newField . "'");
+                    cwarn(3, $errorColor, "    newField [$f]: '" . $newField . "'");
                     $newFields[$f] = $newField;
                     $lineStats->{'whichApplied'}->[$e] += 1;
                      $lineStats->{'nChangesInLine'}++; # See issueLine()
@@ -1980,7 +2041,7 @@ sub doOneFile {
             if (scalar(@exprs) > 1) {
                 $msg .= " By expr: [" . join(",",  @{$lineStats->{'whichApplied'}}, "]");
             }
-            vMsg(0, $msg);
+            cwarn(0, $infoColor, , $msg);
         }
 
         if (sjdUtils::getVerbose() >= 2) {
@@ -1988,7 +2049,7 @@ sub doOneFile {
                 ? makeDiffLine($recnum, $originalFields[0], $newFields[0])
                 : makeDiffLine($recnum, $vSep . join($vSep, @originalFields) . $vSep,
                                $vSep . join($vSep, @newFields) . $vSep);
-            vMsg(2, "    " . $lineStats->{'nChangesInLine'} .
+            cwarn(2, $errorColor, "    " . $lineStats->{'nChangesInLine'} .
                 " changes in line $recnum:\n", $diffLine);
         }
 
@@ -2014,14 +2075,14 @@ sub doOneFile {
         }
 
         if ($doTheChange) {
-            vMsg(3, "    *** Change is applying ***");
+            cwarn(3, $errorColor, "    *** Change is applying ***");
             $quit = issueLine($ofh, $lineStats, $originalRec, \@newFields);
             $totalLinesChanged++;
             $totalLinesChangedCF++;
             $nChangesInFile += $lineStats->{'nChangesInLine'};
         }
         else {
-            vMsg(3, "    *** Change is NOT applying ***");
+            cwarn(3, $errorColor, "    *** Change is NOT applying ***");
             outputALine($ofh, $originalRec, 0);
         }
     } # records, to EOF
@@ -2029,7 +2090,7 @@ sub doOneFile {
     $totalChanges += $nChangesInFile;
 
     if ($perFile || $verbose>1) {                           # File summary
-        vMsg(0, sprintf("%6d changed lines in $file", $nChangesInFile));
+        cwarn(0, $infoColor, , sprintf("%6d changed lines in $file", $nChangesInFile));
     }
     return($nChangesInFile);
 } # doOneFile
@@ -2049,7 +2110,7 @@ sub userApproves {
         $tfmt->assembleRecord($newFields) : $newFields->[1];
 
     main::ask(sprintf("  Record %d of '%s'?\n", $recnum, $file));
-    print(makeDiffLine($recnum, $originalRec, $newRec) . "\n");
+    print(makeDiffLine($recnum, $originalRec, $newRec));
 
     my $reallyDoit = 0;
     main::ask("Change? [ynq!+.h=]\n");
@@ -2147,7 +2208,7 @@ sub issueLine {
     my $outrec = ($needToParse) ?
         $tfmt->assembleRecord($newFields) : $newFields->[1];
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        alogging::vMsg(0, "====--maxLinesChanged reached ($maxLinesChanged)".
+        cwarn(0, $infoColor, , "====--maxLinesChanged reached ($maxLinesChanged)".
             ", stopping changes after record $recnum.");
         $quit = 1;
     }
@@ -2157,8 +2218,8 @@ sub issueLine {
     if (($test || $showChanges || (!$interactive and $verbose>1))
         && !$showResults) {
         my $x = '[' . join(", ",  @{$lineStats->{'whichApplied'}}) . " ]";
-        #alogging::vMsg(0, "  Line $recnum: changed by expressions $x:");
-        alogging::vMsg(0, makeDiffLine($recnum, $originalRec, $outrec));
+        #cwarn(0, $infoColor, , "  Line $recnum: changed by expressions $x:");
+        cwarn(0, $infoColor, , makeDiffLine($recnum, $originalRec, $outrec));
     }
     if ($dropEmptiedLines && $outrec =~ m/^\s*$/) { next; }
     outputALine($ofh, $outrec, 1);
@@ -2173,19 +2234,18 @@ sub issueLine {
         $totalChanges += $appCount;
     }
     if ($maxChanges && ($totalChanges > $maxChanges)) {
-        alogging::vMsg(0, "====--maxChanges reached ($maxChanges), stopping.");
+        cwarn(0, $infoColor, , "====--maxChanges reached ($maxChanges), stopping.");
         $quit = 1;
     }
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        alogging::vMsg(
-            0, "====--maxLinesChanged reached ($maxLinesChanged), stopping.");
+        cwarn(0, $infoColor, , "====--maxLinesChanged reached ($maxLinesChanged), stopping.");
         $quit = 1;
     }
 
     if ($verbose>2) {
         my $nExprsEffective = 0;
         for (my $e=0; $e<scalar(@exprs); $e++) {
-            vMsg(0, sprintf("    Expr %2d:  %3d matches in line",
+            cwarn(0, $infoColor, , sprintf("    Expr %2d:  %3d matches in line",
                 $e, $lineStats->{'whichApplied'}->[$e]));
         }
     }
@@ -2232,16 +2292,17 @@ sub makeDiffLine {
             $lastDiff++;
         }
         $r1c =
-            substr($r1,0,$firstDiff) .
+            colorize($sourceColor, substr($r1,0,$firstDiff)) .
             colorize($matchColor, substr($r1, $firstDiff, $r1len-$firstDiff-$lastDiff)) .
-            substr($r1,$r1len-$lastDiff);
+            colorize($sourceColor, substr($r1,$r1len-$lastDiff));
         $r2c =
-            substr($r2,0,$firstDiff) .
+            colorize($resultColor, substr($r2,0,$firstDiff)) .
             colorize($matchColor, substr($r2, $firstDiff, $r2len-$firstDiff-$lastDiff)) .
-            substr($r2,$r2len-$lastDiff);
+            colorize($resultColor, substr($r2,$r2len-$lastDiff));
     }
 
     my $dl = "";
+    my $indentString = ' ' x $indent;
     if ($sideBySide) {
         my $pad = " " x $sideBySide;
         $r1c = substr($r1c . $pad, 0, $sideBySide);
@@ -2249,11 +2310,11 @@ sub makeDiffLine {
         $dl = $r1c . " | " . $r2c . "\n";
     }
     elsif ($lineNumbers) {
-        $dl = sprintf("%5d: %s<%s\n       %s>%s",
-            $recnum, ' ' x 0, $r1c, ' ' x $indent, $r2c);
+        $dl = sprintf("%5d: %s<%s\n%7s%s>%s\n",
+            $recnum, $indentString, $r1c, $indentString, $r2c);
     }
     else {
-        $dl = sprintf("%s<%s\n%s>%s", ' ' x 0, $r1c, ' ' x $indent, $r2c);
+        $dl = sprintf("%s<%s\n%s>%s\n", $indentString, $r1c, $indentString, $r2c);
     }
 
     return($dl);
@@ -2311,31 +2372,31 @@ sub report {
     my $failed = $failedOpen + $failedTempOpen + $failedChanges + $failedCopy;
 
     if (!$quiet) {
-        vMsg(0,'');
-        Msg($someChangeColor, "Done" . ($test ? " (DRY RUN)":'') . '.\n');
-        vMsg(0, sprintf(
+        print("\n");
+        cwarn(0, $progressColor, "Done" . ($test ? " (DRY RUN)":'') . '.');
+        cwarn(0, $infoColor, , sprintf(
             "%d items: %d files, %d directories%s, %s, %s, %s.",
             $totalItems, $filesRegular, $dirs,
             ($recursive) ? "":" (skipped)",
             "$filesSkipped files skipped (-B, --include)",
             colorIf($filesBackup,  "$filesBackup backups"),
             colorIf($filesMissing, "$filesMissing not found")));
-        vMsg(0, sjdUtils::lpadc($totalRecs) . " total lines processed.");
-        vMsg(0, "$totalFilesChanged files changed, " .
+        cwarn(0, $infoColor, , sjdUtils::lpadc($totalRecs) . " total lines processed.");
+        cwarn(0, $infoColor, , "$totalFilesChanged files changed, " .
           sjdUtils::lpadc($totalLinesChanged) . " lines changed, " .
           (sjdUtils::lpadc($totalChanges)/2) . " total changes.");
         # Fix this -- somewhere $totalChanges is getting double-counted.
     }
 
     if ($failed>0) {
-        vMsg(0, "Failed: open: $failedOpen, temp open: $failedTempOpen, " .
+        cwarn(0, $infoColor, , "Failed: open: $failedOpen, temp open: $failedTempOpen, " .
               "changes: $failedChanges, finalize: $failedCopy.");
     }
 
     if ($showMatchCounts) {
-        vMsg(0, "====Number of matches to each expression:");
+        cwarn(0, $infoColor, , "====Number of matches to each expression:");
         for (my $i=0; $i<scalar(@exprs); $i++) {
-            vMsg(0, sprintf("    %3d: %6d s/%s/%s/",
+            cwarn(0, $infoColor, , sprintf("    %3d: %6d s/%s/%s/",
                 $i, $exprs[$i]->{matchCount}, $exprs[$i]->{from},
                 $exprs[$i]->{to}));
         }
@@ -2343,9 +2404,9 @@ sub report {
 
     my $nc = scalar(@exprs);
     ($nc <= 1) && return;
-    vMsg(0,"Number of applications of each change:");
+    cwarn(0, $infoColor, "Number of applications of each change:");
     for (my $i=0; $i<$nc; $i++) {
-        vMsg(0, sprintf("   #%2d of %2d: %6d times /%s/",
+        cwarn(0, $infoColor, , sprintf("   #%2d of %2d: %6d times /%s/",
             $i, $nc, $totalChangesByExpr[$i] || 0, $exprs[$i]->{from}));
     }
 } # report
@@ -2438,7 +2499,7 @@ sub new {
     bless $self, $class;
     $self->setupRegex();
     my $msg = $self->{'isMultiDest'} ? 'Add multi':'Add';
-    alogging::vMsg(2, sprintf(
+    main::cwarn(2, $errorColor, sprintf(
         "%3d: %s /%s/%s/", $exprNum, $msg, $self->{'from'}, $self->{'to'}));
     return($self);
 } # ChangeInfo::new
@@ -2474,8 +2535,7 @@ sub setupRegex {
         my $sep = $self->{'multiSep'};
         my @dests = split(/$sep/, $self->{'to'});
         $self->{'cdests'} = \@dests;
-        alogging::vMsg(3, "Multiple destinations: \n    " .
-                       join("\n    ", @dests));
+        main::cwarn(3, $errorColor, "Multiple destinations: \n    " . join("\n    ", @dests));
     }
     else {
         $self->{'cto'} = $self->{'to'};
@@ -2501,15 +2561,15 @@ sub apply {
 
     #for (my $i=$first; $i<=$last; $i++) {
     #    if ($showAllMatches && $fields->[$i] =~ m/$self->{cfrom}/ip) {
-    #        alogging::vMsg(0, "    Match? '${^MATCH}'");
+    #        main::cwarn(0, $infoColor, , "    Match? '${^MATCH}'");
     #    }
     if (!$self->preIsSatisfied() && $verbose>=3) {
-        alogging::vMsg(2, "--pre condition not satisfied.");
+        main::cwarn(2, $errorColor, "--pre condition not satisfied.");
         return(undef);
     }
     my $newField = '';
 
-    #alogging::vMsg(2, "====Evaling: " . $self->toString());
+    #main::cwarn(2, $errorColor, "====Evaling: " . $self->toString());
     if ($self->{'isMultiDest'}) {
         if ($oldField !~ m/$cfr/) { next; }  # No match
         $newField = $self->multiDestChoice($oldField, $-[0], $+[0]);
@@ -2519,10 +2579,9 @@ sub apply {
         my $to = $self->{'to'};
         if (index($to, '"')>=0) { $to =~ s/"/\\"/g; }
         $to = '"' . $to . '"';
-        alogging::vMsg(3, "    esc RHS: '$to'");
+        main::cwarn(3, $errorColor, "    esc RHS: '$to'");
         if (!defined $cfr || !defined $to) {
-            alogging::eMsg(0,
-                "ChangeInfo::apply: " . $self->toString());
+            main::cwarn(0, $infoColor, , "ChangeInfo::apply: " . $self->toString());
         }
         if ($self->{'isGlobal'}) {
             ($newField = $oldField) =~ s/$cfr/{ eval($to) }/ge;
@@ -2638,11 +2697,11 @@ sub applyMultiDestChoice {
     (my $to = $self->{'cdests'}->[$respNum]) =~ s/"/\\"/g;
     $to = '"' . $to . '"';
     if ($self->{'isGlobal'}) {
-        #alogging::vMsg(2, sprintf("Applying: s/%s/{ eval(%s) }/ge", $cfr, $to));
+        #main::cwarn(2, $errorColor, sprintf("Applying: s/%s/{ eval(%s) }/ge", $cfr, $to));
         $data =~ s/$cfr/{ eval($to) }/ge;
     }
     else {
-        #alogging::vMsg(2, sprintf("Applying: s/%s/{ eval(%s) }/e", $cfr, $to));
+        #main::cwarn(2, $errorColor, sprintf("Applying: s/%s/{ eval(%s) }/e", $cfr, $to));
         $data =~ s/$cfr/{ eval($to) }/e;
     }
     return($data);
@@ -2664,7 +2723,7 @@ The possible changes are numbered (starting at 1). You may choose:
     'h' to see this help
 To quit from here, use 'n' (or 's'), and then quit from outside.
 @;
-    alogging::vMsg(0, $msg);
+    main::cwarn(0, $infoColor, , $msg);
 }
 
 # A pre-condition is a regex that must have been matched somewhere in the
@@ -2676,7 +2735,7 @@ sub preIsSatisfied {
     if (!defined $self->{'pre'} || $self->{'pre'} eq '') { # No --pre condition
         return(1);
     }
-    #alogging::vMsg(1, "Checking pre-condition: '" . $self->{'pre'} . "'");
+    #main::cwarn(1, $errorColor, "Checking pre-condition: '" . $self->{'pre'} . "'");
     for (my $i=1; $i<=$self->{'preLines'}; $i++) {
         if (main::getPreLine($i) =~ m/$self->{'preC'}/) {
             return(1);
