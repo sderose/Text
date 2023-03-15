@@ -12,12 +12,13 @@ use alogging;
 
 our %metadata = (
     'title'        => "wrap",
+    'description'  => "wrap STDIN to a given column, with padding (opposite of 'fold')",
     'rightsHolder' => "Steven J. DeRose",
     'creator'      => "http://viaf.org/viaf/50334488",
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-08-29",
-    'modified'     => "2020-12-08",
+    'modified'     => "2023-03-10",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -97,7 +98,7 @@ candidates are "|" (U+0007c), "\\t" (U+0000A), "," (U+0002c), etc.
 
 Assume this character set for input.
 
-=item * B<--lpadWidth> I<n>
+=item * B<--lpadWidth> I<n> OR B<--leftPad> I<n>
 
 Pad on the left to width I<n> (default: no pad),
 I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
@@ -133,7 +134,7 @@ Set the pad character (default: space; strings ok).
 =item * B<--quiet> OR B<-q>
 Suppress most messages.
 
-=item * B<--rpadWidth> I<n>
+=item * B<--rpadWidth> I<n> OR B<--rightPad> I<n>
 
 Pad on the right to width I<n> (default: no pad).
 Use to make multi-column layouts line up.
@@ -219,7 +220,8 @@ Don't limit nCols due to gutter following last col.
   2015-03-19: Hyphens.
   2016-01-21: Avoid div0 for nCols.
   2020-09-03: New layout. Notify waiting STDIN. Support I<--width 0>.
-
+  2023-03-10: Add some option synonyms.
+  
 
 =head1 To do
 
@@ -263,14 +265,14 @@ my $verbose       = 0;
 my $vertical      = 0;
 
 my %getoptHash = (
-    "blank!"           => \$blank,
-    "fieldSep=s"        => \$fieldSep,
-    "free!"             => \$free,
-    "gutterwidth=o"     => \$gutterWidth,
-    "gutterchar=s"      => \$gutterChar,
-    "h|help|?"          => sub { system "perldoc $0"; exit; },
-    "iencoding=s"       => \$iencoding,
-    "listEncodings"     => sub {
+    "blank!"                => \$blank,
+    "fieldSep=s"            => \$fieldSep,
+    "free!"                 => \$free,
+    "gutterwidth=o"         => \$gutterWidth,
+    "gutterchar=s"          => \$gutterChar,
+    "h|help|?"              => sub { system "perldoc $0"; exit; },
+    "iencoding=s"           => \$iencoding,
+    "listEncodings"         => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
         for my $k (Encode->encodings(":all")) {
@@ -284,21 +286,21 @@ my %getoptHash = (
         warn "$buf\n";
         exit;
     },
-    "lpad=o"            => \$lpadWidth,
-    "oencoding=s"       => \$oencoding,
-    "olinends=s"        => \$olineends,
-    "padchar=s"         => \$padChar,
-    "q|quiet!"          => \$quiet,
-    "rpad=o"            => \$rpadWidth,
-    "stripItems!"       => \$stripItems,
-    "tabstops=o"        => \$tabstops,
-    "truncate!"         => \$truncate,
-    "v|verbose+"        => \$verbose,
-    "version"            => sub {
+    "lpadWidth|leftPad=o"   => \$lpadWidth,
+    "oencoding=s"           => \$oencoding,
+    "olinends=s"            => \$olineends,
+    "padchar=s"             => \$padChar,
+    "q|quiet!"              => \$quiet,
+    "rpadWidth|rightPad=o"  => \$rpadWidth,
+    "stripItems!"           => \$stripItems,
+    "tabstops=o"            => \$tabstops,
+    "truncate!"             => \$truncate,
+    "v|verbose+"            => \$verbose,
+    "version"               => sub {
       die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
-    "ls|vertical!"       => \$vertical,
-    "w|width=o"          => \$width,
+    "ls|vertical!"          => \$vertical,
+    "w|width=o"             => \$width,
     );
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die "Bad options.\n";
