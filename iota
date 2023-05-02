@@ -17,7 +17,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2005-12-27",
-    'modified'     => "2021-12-23",
+    'modified'     => "2023-03-20",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -57,8 +57,8 @@ the step-size (which may be negative).
 The numbers for I<--start>, I<--increment>, and I<limit> can be given in
 decimal, octal (0777), hex (0xfff), or binary (0b1111).
 
-Output can be in many forms, chosen with the I<--base> option (even though not
-all forms are actually numeric bases):
+Output can be in many forms, chosen with the I<--base> and I<--format>
+options (not all forms are actually numeric "bases"):
     Numeric bases from 2 to 36, and 64
     Roman numerals
     Characters chosen by Unicode code point
@@ -67,14 +67,15 @@ all forms are actually numeric bases):
 
 For example, you can output code to initialize a hash that maps
 literal lower-case Greek letters to their Unicode code points as shown below
-(the code shown is for Perl, but you can generate whatever you want):
+(the code shown is for Perl, but you can generate whatever you can type
+in for the I<--format> string):
 
     iota --unicode --base chr
         --format '    "{}" => 0x{16,4},' --start 0x3b1 0x3c9
 
 The current value is filled in wherever you put "{}".
 Instances of '{}' in the format template may also set their own format details.
-In this example, '{16,4}' means to forat the value in base 16, left padded with '0's
+In this example, '{16,4}' means to format the value in base 16, left padded with '0's
 to a minimum of 4 columns (further arguments control padding side and character;
 see L<#--format> for details).
 Such values override the I<--base>, I<--digits>, I<--right>, and I<--padChar> options.
@@ -99,7 +100,7 @@ place the value is inserted (see I<--format>, below, for details).
 
 =item * I<2> through I<36> (the digits are from C<0-9A-Z>),
 
-=item * I<64> (the digits are C<A-Za-z0-9+/>),
+=item * I<64> (the digits are C<A-Za-z0-9+/>, per [RFC 4648]),
 
 =item * I<chr> the values are treated as character code points
 (ASCII, Latin-1, or Unicode if I<--unicode> is specified),
@@ -167,13 +168,15 @@ Allow C-style backslash escapes in I<--format> text
 =item * B<--format> I<s>
 
 Print string I<s>, with the current value inserted in place of any occurrences
-of '{}' (like C<find> and some other *nix commands; you can change I<{}>
-to some other string using I<repstring>).
+of '{}'.
 
-You can also use the following arguments between the braces,
-to override formatting options
-for a particular instance (you can't omit arguments in the middle, or
-have spaces after the commas):
+Similar to C<find> and some other *nix commands, you can change I<{}>
+to some other string. But you change the two parts separately
+(see I<--repopen> and I<--repclose>).
+This is because arguments are allowed between the delimiters.
+The arguments override general formatting options,
+just for the particular instance. You can't omit arguments in the middle, or
+have spaces after the commas:
 
 =over
 
@@ -187,7 +190,7 @@ and which side to pad (I<1> to right-pad; 0 or omitted to left-pad
 
 '{base,digits,side,c}' to specify the base, padding width,
 side, and a single pad character (see I<--padchar>). Unusual pad characters
-(particularly "}") might not work.
+(particularly "}" or "$") might not work.
 
 =back
 
@@ -215,11 +218,12 @@ inside templates.
 Pad on the right instead of the left
 (see also I<--padchar>, I<--digits>, and I<--format>).
 
-=item * B<--repstring> I<s>
+=item * B<--repopen> I<s> and B<--repclose>> I<s>
 
-When used with I<--format>, lets you use I<s> to specify where to insert values,
-rather than the default ("{}").
-However, this does not (yet) affect "{args}" forms.
+When used with I<--format>, change the delimiters that indicate where
+to insert values. The defaults are "{" and "}", respectively, such that
+"{}" is replaced (optionally with arguments between, as described
+under I<--format>).
 
 =item * B<--start> I<n>
 
@@ -252,11 +256,11 @@ Synonym for I<--digits>.
 
 =head1 --dateFormat codes
 
-These are intended to be the same as for C<strftime>. 
+These are intended to be the same as for C<strftime>.
 For example, ISO 8601 datetime format can be constructed via:
 
     "%Y-%m-%dT%H:%M:%S%z"
-    
+
 =over
 
 =item '%a' The abbreviated weekday name according to the current locale.
@@ -352,15 +356,15 @@ For example, ISO 8601 datetime format can be constructed via:
 
 =head1 Known bugs and limitations
 
-Although you can change the "{}" string (see I<--format>), that doesn't
-work for the "{args...}" form.
+You can change the "{" and "}" delimiters (see I<--repopen> and I<--repclose>),
+but you can't yet backslash them in the I<--format> string.
 
 I<--base alpha> only supports unaccented Latin, and you have to specify the range
 by position (1...26), not by letter ('a'...'z').
 
 I<--base date> does not account for leap seconds.
 
-Numeric I<--base>s other than 10 don't support negatives. Though of course you 
+Numeric I<--base>s other than 10 don't support negatives. Though of course you
 could use I<--format> to put a minus sign in front, if that helps.
 
 I<--start> with I<--base date> only allows yyyy-mm-dd dates (although you can
@@ -369,8 +373,8 @@ use I<--dateFormat> to get the full I<strftime> range of I<output> formats).
 
 =head1 To do
 
-  Allow \\ for $repString.
-  Port to Python.
+  Allow \\ for $repOpen.
+  Port to Python?
   Add I<--increment month>.
   Add support for times, not just dates?
   Allow 1, 2, or 3 args for end, (start,end), (start,end,incr)?
@@ -386,7 +390,7 @@ use I<--dateFormat> to get the full I<strftime> range of I<output> formats).
 =item * C<Roman> -- CPAN package to do Roman-numeral conversion.
 
 =item * C<jot> -- Broadly similar, with etymologically related name. But doesn't have bases, dates,
-{} fill-ins, padding, Unicode support, etc. Does, however, have hand random-number 
+{} fill-ins, padding, Unicode support, etc. Does, however, have hand random-number
 generation, which I should probably add.
 
 =item * C<Time::Piece> -- CPAN package to manage dates and times.
@@ -415,6 +419,7 @@ Add --base roman and --base Roman.
   2017-01-09: Fix --base date.
   2017-02-21: Fix --base date some more. Much better --format. Add isOkBase().
   2021-12-23: Add --end. Better option checking. Improve doc.
+  2023-03-20: Slightly improve handling of --repstring ({}) matching.
 
 
 =head1 Ownership
@@ -446,7 +451,8 @@ my $oencoding        = "";
 my $olineends        = "U";
 my $padchar          = "0";      # What character to pad with
 my $quiet            = 0;
-my $repstring        = "{}";     # String to replace in --format
+my $repopen          = "{";      # Left half of string to replace in --format
+my $repclose         = "}";      # Right half...
 my $right            = 0;        # Pad on right side instead of left.
 my $start            = "1";      # String 'cuz might be a date
 my $verbose          = 0;
@@ -468,7 +474,8 @@ my $result = GetOptions(
     "padchar=s"         => \$padchar,
     "q|quiet!"          => \$quiet,
     "r|right!"          => \$right,
-    "repstring=s"       => \$repstring,
+    "repopen=s"         => \$repopen,
+    "repclose=s"        => \$repclose,
     "start=s"           => \$start,
     "unicode!"          => sub { $oencoding = "utf8"; },
     "v|verbose+"        => \$verbose,
@@ -478,6 +485,16 @@ my $result = GetOptions(
 );
 
 ($result) || die "Bad options.\n";
+
+# Escape any regex metachars in the replacement delimiters
+my $repopenE = $repopen; $repopenE=~ s/(\W)/\\$1/g;
+my $repcloseE = $repclose; $repcloseE =~ s/(\W)/\\$1/g;
+# Tried to do a lookbehind to let user backslash repopen, but didn't work....
+my $repExpr = "$repopenE(\\w+)?(,\\d+)?(,\\d+)?(,.)?$repcloseE";
+
+alogging::vMsg(1, "  repopen '$repopen' ends up as '$repopenE',\n"
+    . "  repclose '$repclose' ends up as '$repcloseE',\n"
+    . "  Match expr /$repExpr/\n");
 
 if ($oencoding ne "") {
     print "";
@@ -530,8 +547,8 @@ if ($digits < 0) {
 }
 
 if ($format ne "") {
-    (index($format,"$repstring")<0 && $format !~ m/\{.*?\}/) &&
-        die "No $repstring in the --format string.\n";
+    ($format !~ m/$repopen.*?$repclose/) &&
+        die "No $repopen...$repclose in the --format string.\n";
     if ($escape) {
         $format = sjdUtils::unbackslash($format);
     }
@@ -622,7 +639,7 @@ sub time2ISO8601 {
 sub fillInFormat {
     my ($n, $formattedN) = @_;
     my $result = $format;
-    $result =~ s/\{(\w+)?(,\d+)?(,\d+)?(,.)?\}/{
+    $result =~ s/$repExpr/{
         my $bs = defined $1 ? $1 : $base;
         (isOkBase($bs)) || die "Unknown base '$bs' in template '$format'.\n";
         my $dg = defined $2 ? substr($2,1) : $digits;
@@ -636,13 +653,13 @@ sub fillInFormat {
             sjdUtils::lpad(baseConvert($n, $bs), $dg, $pd);
          }
          }/ge;
-    $result =~ s/$repstring/$n/g;
+    $result =~ s/$repopen.*?$repclose/$n/g;
     $n = $result;
 } #  fillInFormat
 
 
 ###############################################################################
-# Convert to different bases (including various named ones. 
+# Convert to different bases (including various named ones.
 # Doesn't work for negative numbers.
 #
 sub baseConvert {
