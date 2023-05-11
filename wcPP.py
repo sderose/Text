@@ -39,7 +39,7 @@ Count the number of items in the input:
     * Sentences
     * Lines
     * Blocks
-    
+
 =Related Commands=
 
 *nix `wc`. But this has full encoding support, can count several things `wc` can't
@@ -121,7 +121,7 @@ dashes = {
 #
 Stats = namedtuple('Stats',
     [ 'byts', 'chars', 'words', 'finalHypens',  'sents', 'lines', 'blocks', 'maxRec' ] )
-    
+
 dftSet = [ 'lines', 'words', 'byts' ]
 printOrder = [ 'lines', 'words', 'byts', 'chars', 'finalHypens', 'sents', 'blocks', 'maxRec' ]
 
@@ -142,12 +142,12 @@ def pStats(st, path:str=""):
     else:
         buf += path
     print(buf)
-        
+
 def addStats(st1, st2):
     items = [ st1[i]+st2[i] for i in range(len(st1)) ]
     return Stats(*items)
-    
-    
+
+
 ###############################################################################
 #
 def doOneFile(path:str) -> int:
@@ -161,7 +161,7 @@ def doOneFile(path:str) -> int:
     lines  = 0
     blocks = 0
     maxRec = 0
-    
+
     if (not path):
         if (sys.stdin.isatty()): print("Waiting on STDIN...")
         fh = sys.stdin
@@ -210,8 +210,8 @@ def tokenize(s:str):
         return re.split(r"[-'.\w]+", s, flags=re.UNICODE)
     else:
         raise KeyError
-    
-    
+
+
 ###############################################################################
 # Main
 #
@@ -238,13 +238,13 @@ if __name__ == "__main__":
         parser.add_argument(
             "-w", action="store_true",
             help="Count words (not the exact Posix definition yet).")
-        
+
         parser.add_argument(
             "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
-            "--oformat", type=str, default="posix",
-            choices=[ "xml", "csv", "posix" ],
+            ""--oformat", "--outputFormat", "--output-format",
+            type=str, default="posix", choices=[ "xml", "csv", "posix" ],
             help="Format to use for output.")
         parser.add_argument(
             "--quiet", "-q", action="store_true",
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     #
     args = processOptions()
     totStats = Stats(0, 0, 0, 0, 0, 0, 0, 0)
-    
+
     if (len(args.files) == 0):
         warning0("wcPP.py: No files specified....")
         doOneFile(None)

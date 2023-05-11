@@ -28,8 +28,8 @@ __version__ = __metadata__["modified"]
 descr = """
 =Name=
     """ +__metadata__["title"] + ": " + __metadata__["description"] + """
-    
-    
+
+
 =Description=
 
 Generate and display a word-finding game, one of several ways
@@ -137,16 +137,16 @@ LLCORNER = "\\"  # \u2517
 LRCORNER = "/"   # \u251B
 
 oldDice = [
-    "AACIOT", "AHMORS", "EGKLUY", "ABILTY", 
-    "ACDEMP", "EGINTV", "GILRUW", "ELPSTU", 
-    "DENOSW", "ACELRS", "ABJMOQ", "EEFHIY", 
+    "AACIOT", "AHMORS", "EGKLUY", "ABILTY",
+    "ACDEMP", "EGINTV", "GILRUW", "ELPSTU",
+    "DENOSW", "ACELRS", "ABJMOQ", "EEFHIY",
     "EHINPS", "DKNOTU", "ADENVZ", "BIFORX"
 ]
 
 newDice = [
-    "AAEEGN", "ELRTTY", "AOOTTW", "ABBJOO", 
-    "EHRTVW", "CIMOTU", "DISTTY", "EIOSST", 
-    "DELRVY", "ACHOPS", "HIMNQU", "EEINSU", 
+    "AAEEGN", "ELRTTY", "AOOTTW", "ABBJOO",
+    "EHRTVW", "CIMOTU", "DISTTY", "EIOSST",
+    "DELRVY", "ACHOPS", "HIMNQU", "EEINSU",
     "EEGHNW", "AFFKPS", "HLNNRZ", "DEILRX"
 ]
 
@@ -154,7 +154,7 @@ denseOldBoard = "ALESSTIDTERANAME"  # 842 words
 denseNewBoard = "TLGNAEIASTRSDEHB"  # 906 words
 highOldBoard = "DSLRETAIPRNTUDES"   # 2447 points
 highNewBoard = "TSLNEIAENTRTBESO"   # 2447 points
-        
+
 def getBoard(size:int=4, method:str="RANDOM"):
     board = ""
     if (method == "OLD"):          # The old commercial Boggle(r) dice
@@ -179,7 +179,7 @@ def getBoard(size:int=4, method:str="RANDOM"):
     elif (method == "HIGHNEW"):
         board = highNewBoard
     else:
-        if (len(method) != size*size or 
+        if (len(method) != size*size or
             not method.isascii() or not method.isletter()):
             print("--method is not a named set or --size ** 2 Latin letters.")
             sys.exit()
@@ -188,7 +188,7 @@ def getBoard(size:int=4, method:str="RANDOM"):
 
 def showBoard(board:str, size:int=4, cellWidth:int=3, cellHeight:int=1, indent:int=4):
     assert len(board) == size*size
-    
+
     # Make the printable parts
     # See also my 'align', which knows about Unicode box-drawing chars, too.
     iString = " " * indent
@@ -206,10 +206,10 @@ def showBoard(board:str, size:int=4, cellWidth:int=3, cellHeight:int=1, indent:i
     topBar = topBar[0:-1] + URCORNER
     midBar = midBar[0:-1] + RIGHT
     botBar = botBar[0:-1] + LRCORNER
-        
+
     cellPad = " " * (cellWidth>>1)
     cellFormat = cellPad + "%1s" + cellPad + VBAR
-    
+
     for rowStart in range(0, size*size, size):
         print(topBar if rowStart == 0 else midBar)
         for _s in range(cellHeight>>1): print(vSpace)
@@ -221,8 +221,8 @@ def showBoard(board:str, size:int=4, cellWidth:int=3, cellHeight:int=1, indent:i
         for _s in range(cellHeight>>1): print(vSpace)
     print(botBar)
     return
-    
-                
+
+
 ###############################################################################
 # Main
 #
@@ -241,8 +241,8 @@ if __name__ == "__main__":
             "--color",  # Don't default. See below.
             help="Colorize the output.")
         parser.add_argument(
-            "--oformat", type=str, default="ASCII",
-            choices=[ "ASCII", ],
+            "--oformat", "--outputFormat", "--output-format",
+            type=str, default="ASCII", choices=[ "ASCII", ],
             help="How to display the board.")
         parser.add_argument(
             "--method", type=str, default="OLD",
@@ -261,9 +261,9 @@ if __name__ == "__main__":
             help="Display version information, then exit.")
 
         args0 = parser.parse_args()
-        
+
         args0.method = args0.method.upper()
-        
+
         if (args0.color == None):
             args0.color = ("CLI_COLOR" in os.environ and sys.stderr.isatty())
         #lg.setColors(args0.color)
@@ -277,5 +277,5 @@ if __name__ == "__main__":
 
     board0 = getBoard(args.size, args.method)
     showBoard(board0, args.size)
-    
+
     sys.exit()
