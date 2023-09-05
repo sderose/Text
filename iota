@@ -381,6 +381,7 @@ use I<--dateFormat> to get the full I<strftime> range of I<output> formats).
   Support I<--base !cmd> to run a shell command and insert the result?
   Support all CSS ordered-list numbering schemes
   Support Unicode digit sets, via C<mathAlphanumerics.py>.
+  Perhaps a multicolumn option? First column 1-5, second 6-10 or similar.
 
 
 =head1 Related commands
