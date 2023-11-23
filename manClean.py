@@ -14,7 +14,7 @@ try:
     gotMath = True
 except ImportError:
     pass
-    
+
 import logging
 lg = logging.getLogger("manClean.py")
 
@@ -53,7 +53,7 @@ Specifically:
     _ + backspace + char means underscored / italics
    char + backspace + _ means underscored / italics
 
-Use --outputFormat to choose what you want as a result:
+Use --oformat to choose what you want as a result:
 
 * "plain": leaves just the "base" character.
 * "html": also puts in tags like <u>, <b>, etc. These are placed once around any
@@ -89,7 +89,7 @@ Greek characters should work.
 
 "math" changes underscoring to italics, because there is no MATHEMATICAL UNDERSCORED
 range in Unicode (afaik). We could instead insert some Unicode combining character
-such as shown below, but that wouldn't fix the search feature. Then again, whether 
+such as shown below, but that wouldn't fix the search feature. Then again, whether
 your "find" program think mathematical variants of "A" count as equal to "A" varies;
 grep probably doesn't, but sort probably does (depending on locale setting).
 
@@ -160,30 +160,30 @@ def doOneFile(path:str) -> int:
 
 def fixUnderscore(mat):
     clean = re.sub(r"_\x08(.)", "\\1", mat.group(0))
-    if (args.outputFormat == "plain"):
+    if (args.oformat == "plain"):
         return clean
-    if (args.outputFormat == "html"):
+    if (args.oformat == "html"):
         return "%s%s%s>" % (args.uTag, html.escape(clean), args.uTag)
-    if (args.outputFormat == "math"):
+    if (args.oformat == "math"):
         return mathAlphanumerics.convert(clean,
             script="Latin", font="Mathematical Italic ", decompose=True)
-    if (args.outputFormat == "markdown"):
+    if (args.oformat == "markdown"):
         return "_%s_" % (clean)
-    lg.critical("Unsupported output format '%s'.", args.outputFormat)
-    
+    lg.critical("Unsupported output format '%s'.", args.oformat)
+
 def fixBold(mat):
     clean = re.sub(r"(.)\x08\\1", "\\1", mat.group(0))
-    if (args.outputFormat == "plain"):
+    if (args.oformat == "plain"):
         return clean
-    if (args.outputFormat == "html"):
+    if (args.oformat == "html"):
         return "<b>%s</b>" % (html.escape(clean))
-    if (args.outputFormat == "math"):
+    if (args.oformat == "math"):
         return mathAlphanumerics.convert(clean,
             script="Latin", font="Mathematical Bold ", decompose=True)
-    if (args.outputFormat == "markdown"):
+    if (args.oformat == "markdown"):
         return "*%s*" % (clean)
-    lg.critical("Unsupported output format '%s'.", args.outputFormat)
-    
+    lg.critical("Unsupported output format '%s'.", args.oformat)
+
 
 ###############################################################################
 # Main
@@ -206,8 +206,9 @@ if __name__ == "__main__":
             "--oencoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
-            "--outputFormat", type=str, metavar="F", default="plain",
+            "--oformat", "--outputFormat", "--output-format", type=str,
             choices=[ "plain", "html", "math", "markdown" ],
+            metavar="F", default="plain",
             help="What to map format sequences to.")
         parser.add_argument(
             "--quiet", "-q", action="store_true",
@@ -230,7 +231,8 @@ if __name__ == "__main__":
             help="Path(s) to input file(s)")
 
         args0 = parser.parse_args()
-        if (lg and args0.verbose): lg.setLevel(logging.INFO - args0.verbose)
+        if (lg and args0.verbose):            logging.basicConfig(level=logging.INFO - args0.verbose)
+
 
         if (args0.outputFormat == "math" and not gotMath):
             lg.critical("Unable to load mathAlphanumerics for --outputFormat math.")

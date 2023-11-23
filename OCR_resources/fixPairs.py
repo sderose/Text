@@ -208,7 +208,7 @@ def doOneFile(path:str):
         freq = int(freq)
         stats['totalFreq'] += freq
         if (len(found) != len(fixed)):
-            lg.vMsg(1, "%s\tLength mismatch" % (rec));
+            lg.info1("%s\tLength mismatch" % (rec));
             stats["typesLengthDifference"] += 1
             stats['tokensLengthDifference'] += freq
             continue

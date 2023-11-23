@@ -243,7 +243,7 @@ if __name__ == "__main__":
             "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
-            ""--oformat", "--outputFormat", "--output-format",
+            "--oformat", "--outputFormat", "--output-format",
             type=str, default="posix", choices=[ "xml", "csv", "posix" ],
             help="Format to use for output.")
         parser.add_argument(
