@@ -46,9 +46,16 @@ Prefix the (file and) line number when displaying long lines.
 Report only line numbers, not contents
 
 =item * B<--quiet> OR B<-q>
+
 Suppress most messages.
 
+
+=item * B<--text>
+
+Disregard binary (non-text) files.
+
 =item * B<--verbose> OR B<-v>
+
 Add more messages.
 
 =back
@@ -74,7 +81,7 @@ C<wc -L> will report the length of a file's longest line.
     2012-01-16 sjd: Clean up, support STDIN, don't use system() pipe.
     2017-05-05 Add --lineNum. Report lin# and file of longest line. Default to
 prefixing filename when > 1 file being done.
-    2023-11-30: New layout.
+    2023-11-30: New layout. Add --text.
 
 
 =head1 Ownership
@@ -95,17 +102,19 @@ my $len     = 80;
 my $lineNum = 0;
 my $loc     = 0;
 my $quiet   = 0;
+my $text    = 0;
 my $verbose = 0;
 
 Getopt::Long::Configure ("ignore_case");
 my $result = GetOptions(
-    "h|help"                  => sub { system "perldoc $0"; exit; },
-    "len|maxLen|n=i"          => \$len,
-    "lineNum!"                => \$lineNum,
-    "loc"                     => \$loc,
-    "q!"                      => \$quiet,
-    "v+"                      => \$verbose,
-    "version"                 => sub {
+    "h|help"         => sub { system "perldoc $0"; exit; },
+    "len|maxLen|n=i" => \$len,
+    "lineNum!"       => \$lineNum,
+    "loc"            => \$loc,
+    "q!"             => \$quiet,
+    "text!"          => \$text,
+    "v+"             => \$verbose,
+    "version"        => sub {
         die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
 );
@@ -134,6 +143,7 @@ my $maxLenRecnum = 0;
 my $maxLenFile = '';
 
 while (my $file = shift) {
+    if ($text && ! -T $file) { next; }
     ($verbose) && warn "Starting file '$file'\n";
     open(IFH, "<$file") || warn "Can't find input file '$file'.\n";
     $recnum = 0;
@@ -159,6 +169,6 @@ while (my $file = shift) {
 }
 
 if (!$quiet) {
-    warn "Done: $recnum records, $longOnes over --len $len chars.\n";
+    warn "\nDone: $recnum records, $longOnes over --len $len chars.\n";
     warn "  Longest = $maxLen chars, at line $maxLenRecnum of $maxLenFile.\n";
 }
