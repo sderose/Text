@@ -842,20 +842,26 @@ In C<dired> you can "mark" (choose) certain files with:
     dired-mark-files-containing-regexp M-x ... RET
     dired-mark-files-regexp M-x ... RET
 
-Perhaps surprisingly, "M" is not available for "mark all".
+Perhaps surprisingly, "M" does not seems to be provided for "mark all".
 
 Once you've marked all the files you want to do the change in, do:
 
     dired-do-query-replace-regexp
 
 There is apparently no C<dired-do-replace-regexp>, but you can just
-say "Y" to the first queried change, to do all the rest across all the matched
+say "Y" to the first queried change to do all the rest across all the matched
 files with no more queries.
 
 Unlike C<globalChange>, C<emacs> can also go backwards (sorry 'bout dat).
 
 C<sed> -- similar to this script in some ways, but lacks character set, PCRE,
-and query-replace; and has a variety of other options instead.
+and query-replace; and has a variety of other options instead. sed's --in-place
+option is needed to get per-file copies.
+
+C<rpl> (available via C<apt>) -- does a basic change on multiple files.
+
+C<perl> can be leveraged like:
+    perl -i.bak -pe 's/from/to/g' myDir/*
 
 C<grepData> -- similar Perl-based searching with C<TabularFormats> support,
 but no changes.
@@ -863,12 +869,14 @@ but no changes.
 C<rename>, C<renameFiles> -- Similar changes,
 but to filenames rather than content.
 
-C<TabularFormats.pm> -- parsing support for the I<--fieldChoice> option.
+C<TabularFormats.pm> (obsolescent) -- parsing support for
+the I<--fieldChoice> option.
 
 
 =head1 Regex syntax summary (Perl, or essentially PCRE)
 
-This summary is not complete. See also L<http://perldoc.perl.org/perlre.html>.
+This summary is not complete. See also L<http://perldoc.perl.org/perlre.html>
+and C<shelp regex>.
 
 =over
 
@@ -1061,7 +1069,7 @@ use repetition operators).
 (there are additional regex operators)
 
 
-=head2 "egex Modifiers
+=head2 Regex Modifiers
 
 (see also L<http://perldoc.perl.org/perlre.html#Modifiers>)
 
@@ -1138,7 +1146,7 @@ to apply (ASCII, Default, Locale-based, or Unicode).
   Possible regex extensions:
     (\w+)**(\s+)   -->  (\w+)(\s+\w+)*  (maybe also '++')
     ['"]^^  -->  (['"])[^\1]*\1
-    \h for hyphens/dashes
+    \h for all Unicode hyphens/dashes
     \q for quote character (and \l and \r)
     \Q for balanced quoted string?
     \p{Po} etc.
@@ -1214,8 +1222,8 @@ Avoid copying to dest at start, by switching to "cp --attributes -p".
   2020-12-03: Add --binary.
   2021-02-24: Add --include.
   2021-04-16: Warn on \\x01 etc. on RHS of regexes. Better display of invis chars.
-Take out --attributes that was added 2015-02-25, since it's only available on Linix,
-not BSD.
+Take out --attributes that was added 2015-02-25, since it's only available
+on Linux, not BSD.
   2021-08-17: Fix recently-introduced bugs in backup handling, where changes never got
 copied back to update the original. Set permissions on updated file explicitly.
   2021-11-18: Clean up parsing of user's change expressions, fixing bug handling
@@ -1663,7 +1671,7 @@ exit;
 
 
 ###############################################################################
-# Parse a regex change into from, to, and modifiers, and save it.
+# Parse a regex change into from, to, and modifiers, then save it.
 #
 sub saveChangeSpecFromExpr {
     my ($expr) = @_;

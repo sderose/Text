@@ -1,45 +1,114 @@
 #!/usr/bin/env perl -w
 #
-# longlines: Find lines longer than a certain length.
+# findLongLines: Find lines longer than a certain length.
+# <=2007: Written by Steven J. DeRose.
 #
-# Written by Steven J. DeRose.
-# 2007-11-29 sjd: strict.
-# 2010-09-12 sjd: cleanup?
-# 2012-01-16 sjd: Clean up, support STDIN, don't use system() pipe.
-# 2017-05-05 Add --lineNum. Report lin# and file of longest line. Default to
-#   prefixing filename when > 1 file being done.
-#
-# Todo:
-#    Option to prepend actual line lengths to the lines (and ranklist).
-#
-
 use strict;
 use Getopt::Long;
 
-our $VERSION_DATE = "2017-05-05";
+our %metadata = (
+    'title'        => "findLongLines",
+    'rightsHolder' => "Steven J. DeRose",
+    'creator'      => "http://viaf.org/viaf/50334488",
+    'type'         => "http://purl.org/dc/dcmitype/Software",
+    'language'     => "Perl 5",
+    'created'      => "~2007",
+    'modified'     => "2023-11-30",
+    'publisher'    => "http://github.com/sderose",
+    'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
+);
+our $VERSION_DATE = $metadata{'modified'};
 
+=pod
+
+=head1 Usage
+
+longLines [options] [files]
+
+Extracts all lines longer than a certain limit (default 80).
+Also reports the length and location of the very longest line.
+
+
+=head1 Options
+
+=over
+
+=item * B<--len> I<n> OR B<--maxlen> I<n> OR B<-> I<n>
+
+Set a different line-length limit.
+
+=item * B<--linenum>
+
+Prefix the (file and) line number when displaying long lines.
+
+=item * B<--loc>
+
+Report only line numbers, not contents
+
+=item * B<--quiet> OR B<-q>
+Suppress most messages.
+
+=item * B<--verbose> OR B<-v>
+Add more messages.
+
+=back
+
+
+=head1 Related Commands
+
+C<findLinelengths>: count lines in file(s) by length.
+
+C<wc -L> will report the length of a file's longest line.
+
+
+=head1 To Do
+
+   Option to prepend actual line lengths to the lines (and ranklist).
+
+
+=head1 History
+
+    <=2007: Written by Steven J. DeRose.
+    2007-11-29 sjd: strict.
+    2010-09-12 sjd: cleanup?
+    2012-01-16 sjd: Clean up, support STDIN, don't use system() pipe.
+    2017-05-05 Add --lineNum. Report lin# and file of longest line. Default to
+prefixing filename when > 1 file being done.
+    2023-11-30: New layout.
+
+
+=head1 Ownership
+
+This work by Steven J. DeRose is licensed under a Creative Commons
+Attribution-Share Alike 3.0 Unported License. For further information on
+this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
+
+For the most recent version, see L<http://www.derose.net/steve/utilities/>.
+
+=cut
+
+
+###############################################################################
+# Process arguments
+#
 my $len     = 80;
 my $lineNum = 0;
 my $loc     = 0;
 my $quiet   = 0;
 my $verbose = 0;
 
-
-###############################################################################
-# Process arguments
-#
 Getopt::Long::Configure ("ignore_case");
 my $result = GetOptions(
     "h|help"                  => sub { system "perldoc $0"; exit; },
-	"len|n=i"                 => \$len,
+    "len|maxLen|n=i"          => \$len,
     "lineNum!"                => \$lineNum,
-	"loc"                     => \$loc,
+    "loc"                     => \$loc,
     "q!"                      => \$quiet,
     "v+"                      => \$verbose,
     "version"                 => sub {
         die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
     },
-    );
+);
 
 ($result) || die "Bad options.\n";
 
@@ -90,65 +159,6 @@ while (my $file = shift) {
 }
 
 if (!$quiet) {
-    warn "Done: $recnum records, $longOnes over $len chars.\n";
+    warn "Done: $recnum records, $longOnes over --len $len chars.\n";
     warn "  Longest = $maxLen chars, at line $maxLenRecnum of $maxLenFile.\n";
 }
-
-exit;
-
-
-###############################################################################
-###############################################################################
-#
-
-=pod
-
-=head1 Usage
-
-longLines [options] [files]
-
-Extracts all lines longer than a certain limit (default 80).
-Also reports the length and location of the very longest line.
-
-
-=head1 Options
-
-=over
-
-=item * B<--len> I<n>
-
-Set a different line-length limit.
-
-=item * B<--linenum>
-
-Prefix the (file and) line number when displaying long lines.
-
-=item * B<--loc>
-
-Report only line numbers, not contents
-
-=item * B<--quiet> OR B<-q>
-Suppress most messages.
-
-=item * B<--verbose> OR B<-v>
-Add more messages.
-
-=back
-
-
-=head1 Related Commands
-
-C<findLinelengths>: count lines in file(s) by length.
-
-C<wc -L> will report the length of a file's longest line.
-
-
-=head1 Ownership
-
-This work by Steven J. DeRose is licensed under a Creative Commons 
-Attribution-Share Alike 3.0 Unported License. For further information on
-this license, see L<http://creativecommons.org/licenses/by-sa/3.0/>.
-
-For the most recent version, see L<http://www.derose.net/steve/utilities/>.
-
-=cut

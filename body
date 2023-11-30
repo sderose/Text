@@ -40,19 +40,19 @@ for its first line and for the line after it (say, the next first-level heading)
     body --fPat '^=History=' --lPat '^=[^=]' myFile.md
 
 This will include the '=History=' line that starts the section,
-but not the '=' line intended to end it (to include the latter, 
-set I<--lpatBreak INCLUDELINE>). To get the last non-blank line of 
+but not the '=' line intended to end it (to include the latter,
+set I<--lpatBreak INCLUDELINE>). To get the last non-blank line of
 such a history section, you could use:
 
     body --fPat '^=History=' --lPat '^=' myFile.md | dropBlankLines | tail -n 1
 
-The starting and ending locations can be specified 
+The starting and ending locations can be specified
 by line and/or character numbers (both counting from 1 in various bases),
 and/or by regular expression patterns. Note that actual characters (generally Unicode
 code points) are counted, not bytes.
 
 If both line and character numbers are specified,
-the character offset is counted relative to (that is, within) the line; 
+the character offset is counted relative to (that is, within) the line;
 but if only a character offset is specified (and no line offset), it is absolute.
 
 By default only the first such range is returned, but I<--iterate> (aka I<-g>)
@@ -63,7 +63,7 @@ them separately, not applied once to their concatenated data.
 
 You can probably do any of this with C<awk> if you remember how.
 I like this approach better, because it fills the gap between
-C<head> and C<tail> (and can do their jobs, too, I think slightly better), 
+C<head> and C<tail> (and can do their jobs, too, I think slightly better),
 and uses operations I think are mostly intuitive, and supports Unicode
 (recent versions of C<gawk> do Unicode, too).
 
@@ -258,7 +258,7 @@ Assume input line-breaks are as for Unix (default), Mac, or DOS.
 
 With I<--iterate>, the value of this option (default: "") is inserted between
 separate matches, as a separate line.
-Default: a line of "=" and a newline. 
+Default: a line of "=" and a newline.
 I<s> may include backslashed special characters.
 
 =item * B<--iterate> OR I<-g>
@@ -319,7 +319,7 @@ Synonym for I<--iencoding utf8>.
 
 =item * B<--verbose> OR B<-v>
 
-More detailed messages. Repeatable. 
+More detailed messages. Repeatable.
 C<-v -v> will report what's happening line-by-line.
 
 =item * B<--version>
@@ -357,8 +357,8 @@ Way to get all I<but> the last N lines?
 Allow counting by tokens?
 
 Add I<--replace> [file]: Instead of fetching the range, fetch everything else,
-and *replace* the specified range with the contents of [file].
-Likewise, option to invert what's retrieved.
+and *replace* the specified range with the contents of [file]. Should also be
+able to save the range to a separate file.
 
 Options to match fpat/lpat only in certain fields?
 
@@ -858,10 +858,10 @@ sub findStartPoint {
             }
             ($copy) && outLine($firstLine);
         }
-        bWarn(1, sprintf("--fpat #%d: /%s/ %sfound.", $options{"fpatNum"}, 
+        bWarn(1, sprintf("--fpat #%d: /%s/ %sfound.", $options{"fpatNum"},
             $options{"fpat"}, $gotFpat ? "":"not "));
         ($gotFpat) || return 0;  # FAIL
-        
+
         # Manage splitting the line itself, if needed.
         #
         if ($options{"fpatBreak"} eq 'INCLUDELINE') {
