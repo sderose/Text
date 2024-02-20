@@ -33,7 +33,7 @@ descr = """
     unescpeString.py [options] [files]
 
 Expand "escaped" character in the input to literal.
-By default (equal to ''--form plain''), this does what Python does when 
+By default (equal to ''--form plain''), this does what Python does when
 interpreting a string via
 
     codecs.decode(s, "unicode_escape")
@@ -45,7 +45,7 @@ This includes cases like:
 With ''--form html'', this instead uses Python's ''html.unescape()'' to
 expand named and numeric character references.
 
-With ''--form uri'', this instead uses ''urllib.parse.unquote()'' to 
+With ''--form uri'', this instead uses ''urllib.parse.unquote()'' to
 interpret %xx escape such as used in URIs.
 
 With ''--form cpic'', this instead turns Unicode "control pictures" (U+2400...)
@@ -58,7 +58,6 @@ into actual control characters.
 * manClean.py: undoes backspace-and-overstrike as used in ''man'' pages.
 * PdfStupidityFix.py: fixes several common word-level extraction issues, such
 as letters alternating with spaces; hardened or lost soft-hyphens, etc.
-* methods in sjdUtils.pl and sjdUtils.py for (un)escaping XML, JSON, etc.
 
 
 =Known bugs and Limitations=

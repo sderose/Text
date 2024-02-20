@@ -514,7 +514,8 @@ my $theDateDuration = DateTime::Duration->new($dateIncrement=>1);
 sjdUtils::setVerbose($verbose);
 
 (isOkBase($base)) ||
-    die "Base " . $base . " not supported.\n";
+    die "Base " . $base . " not supported. Known: " .
+        "2...32, 64, chr, roman, alpha, date, CHR, ROMAN, ALPHA, DATE.\n";
 
 if ($base ne 'date') {
     $start = int(getAnyNumber($start));
