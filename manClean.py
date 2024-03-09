@@ -19,7 +19,7 @@ import logging
 lg = logging.getLogger("manClean.py")
 
 __metadata__ = {
-    "title"        : "manClean.py",
+    "title"        : "manClean",
     "description"  : "Undo 'man' formatting conventions like X^HX for bold.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

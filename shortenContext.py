@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 #
 # shortenContext.py: Trim lines to just the surrounding of a regex match.
-# 2018-09-10: Written. Copyright by Steven J. DeRose.
+# 2018-09-10: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import argparse
 import re

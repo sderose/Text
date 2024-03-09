@@ -23,7 +23,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2010-08-25",
-    'modified'     => "2022-08-19",
+    'modified'     => "2024-02-21",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -119,7 +119,7 @@ C<sed> on MacOS lacks a I<-P> option like some C<grep>s have).
 =item * Has I<--test> mode (aka I<--dry-run>), and
 can colorize the parts of lines that changed to see exactly what changed.
 
-=item * Lets you drop lines which are reduce to nothing by the change(s),
+=item * Lets you drop lines which are reduced to nothing but whitespace,
 using I<--dropEmptiedLines>.
 
 =item * Provides I<interactive> query-replace
@@ -773,16 +773,17 @@ example when the field value must contain the I<--fieldSep> character.
 
 =head1 Known bugs and limitations
 
-The backup directory must be on the same disk volume.
+You cannot delete the newline character directly.
+However, you can set I<--dropEmptiedLines> so that any line reduce to nothing
+but whitespace by the change(s), is deleted.
+You can insert new line breaks via \\n, \\x0A, etc.
 
-You cannot use the I<--delim> character (control character #255) in the
+You cannot use the I<DEL> character (U+00FF) in the
 I<-e> option values themselves (e.g., you can't backslash it). But on the
 command line, you can use most anything you like to separate the to, from, and
 modifiers of the regex change.
 
-Captures need to be referred to on the RHS as $1 etc., not \1 etc.
-
-Modified files lose 'execute' permissions.
+Captures need to be referred to on the RHS as $1 etc., not \\1 etc.
 
 Be careful to escape '$' and '@' on I<both> sides of expressions, lest you
 interpolate some Perl variable (unless you I<want> to do that,
@@ -805,6 +806,10 @@ field by a single expression (as enabled by "/g").
 
 The grand total number of changes is reported as double what it should be
 (thank you Mr. Verity).
+
+Modified files lose 'execute' permissions.
+
+The backup directory must be on the same disk volume.
 
 With I<--multiDest> you're only asked once, for all matches to
 the same expression on the same line
@@ -1234,6 +1239,9 @@ print extra data.
   2022-08-19: Fix missed merge lines.
   2023-01-28: Improve colors, make options for rest of them. Add --showColors.
 Centralize color display via cprint() and cwarn().
+  2024-02-21: Fix --dropEmptiedLines options.
+  2024-03-09: Remove spurious args to cwarn(). Make --dropEmptiedLines only
+drop lines that *become* empty, not that were empty already.
 
 
 =head1 Rights
@@ -1271,8 +1279,8 @@ my $progressColor    = 'green/white/bold';
 my $noChangeColor    = "red/black/bold";
 my $someChangeColor  = "blue/black/bold";
 my $rawColor         = "red/black/bold";
-#
-# Rest of options:
+
+# Rest of options
 my $backup           = 1;
 my $backupDirectory  = '';
 my $backupExtension  = "bak";
@@ -1568,10 +1576,10 @@ if ($nWithMultiDest>0) {
 }
 
 if ($verbose || $list) {
-    cwarn(0, $infoColor, , "====List of changes in effect:");
+    cwarn(0, $infoColor, "====List of changes in effect:");
     my $colorSlash = sjdUtils::colorize("yellow/bold", "/");
     for (my $i=0; $i<scalar(@exprs); $i++) {
-        cwarn(0, $infoColor, , "    " . $exprs[$i]->toString($colorSlash));
+        cwarn(0, $infoColor, "    " . $exprs[$i]->toString($colorSlash));
     }
 }
 
@@ -1591,10 +1599,10 @@ if ($backupDirectory && !-d $backupDirectory) {
     my %opts = { "error"=>\$errsRef };
     make_path($backupDirectory, \%opts);
     if (scalar(@{$errsRef})) {
-        cwarn(0, $infoColor, , "Can't create backup directory at '$backupDirectory'.");
+        cwarn(0, $infoColor, "Can't create backup directory at '$backupDirectory'.");
         cwarn(-1, $errorColor, "Errs: " . "\n".join(@{$errsRef}));
     }
-    cwarn(0, $infoColor, , "Backups going to '$backupDirectory'.");
+    cwarn(0, $infoColor, "Backups going to '$backupDirectory'.");
 }
 
 $ilineends = uc(substr($ilineends."U",0,1));
@@ -1678,7 +1686,7 @@ sub saveChangeSpecFromExpr {
     ($expr =~ m/^s(\W)/) || main::dieCleanly(
         "Expression must start with 's' and a non-word-char delimiter:\n    $expr\n");
     if ($delim ne "/") {
-        cwarn(0, $infoColor, , "(internal-use) delim '$delim' for eval() is experimental.");
+        cwarn(0, $infoColor, "(internal-use) delim '$delim' for eval() is experimental.");
     }
 
     # Parse and slightly validate.
@@ -1718,7 +1726,7 @@ sub saveChangeSpecFromExpr {
         $problem += 1;
     }
     if ($problem || $verbose>=2) {
-        cwarn(0, $infoColor, , "====Expression #" . scalar(@exprs) . " parse:\n" .
+        cwarn(0, $infoColor, "====Expression #" . scalar(@exprs) . " parse:\n" .
             "    expr:  '$expr'\n" .
             "    parts: #" . join("#", @parts) . "#\n" .
             "    delim: '" . ($delim || '') . "'\n" .
@@ -1825,7 +1833,7 @@ sub doOneItem {
     }
     my $ifh;
     if (!open($ifh, "<$file")) {                  # Can't open
-       cwarn(0, $infoColor, , "Can't open input file '$file'.");
+       cwarn(0, $infoColor, "Can't open input file '$file'.");
         $failedOpen++;
         return(0);
     }
@@ -1862,7 +1870,7 @@ sub doOneItem {
     close $ofh;
 
     if ($nc < 0) {
-        cwarn(0, $infoColor, , "\n  Changes failed for file '$file'");
+        cwarn(0, $infoColor, "\n  Changes failed for file '$file'");
         $failedChanges++;
         return(0);
     }
@@ -1890,7 +1898,7 @@ sub doOneItem {
         cwarn(1, $errorColor, "Backing up '$file' to '$backupDest'.");
         move($file, $backupDest) || die "move failed: $!\n";
         if ($@) {
-            cwarn(0, $infoColor, , "Failed to back up '$file' to '$backupDest' -- not changing.");
+            cwarn(0, $infoColor, "Failed to back up '$file' to '$backupDest' -- not changing.");
             return(0);
         }
     }
@@ -1902,10 +1910,10 @@ sub doOneItem {
     cwarn(1, $errorColor, "Updating original from $tmpFile");
     move($tmpFile, $file);
     if ($@) {
-        cwarn(0, $infoColor, , "Failed to update: $@");
+        cwarn(0, $infoColor, "Failed to update: $@");
         $failedCopy++;
     }
-    chmod $permissions, $file || cwarn(0, $infoColor, , "Failed to reset permissions.");;
+    chmod $permissions, $file || cwarn(0, $infoColor, "Failed to reset permissions.");;
 
     return(1);
 } # doOneItem
@@ -2015,7 +2023,7 @@ sub doOneFile {
                 if ($newFields[$f] !~ m/$fr/) { next; }
                 my $fspec = ($first!=$last) ? "fd $f " : '';
                 if ($verbose>=2) {
-                    cwarn(0, $infoColor, , sprintf(
+                    cwarn(0, $infoColor, sprintf(
                         "%4d: %s%s%2d /%s/ match(es):\n      ",
                         $recnum, $fspec, $delta, $e+1, $expr->{'from'}),
                         $expr->colorizeAllMatches($newFields[$f]));
@@ -2049,7 +2057,7 @@ sub doOneFile {
             if (scalar(@exprs) > 1) {
                 $msg .= " By expr: [" . join(",",  @{$lineStats->{'whichApplied'}}, "]");
             }
-            cwarn(0, $infoColor, , $msg);
+            cwarn(0, $infoColor, $msg);
         }
 
         if (sjdUtils::getVerbose() >= 2) {
@@ -2098,7 +2106,7 @@ sub doOneFile {
     $totalChanges += $nChangesInFile;
 
     if ($perFile || $verbose>1) {                           # File summary
-        cwarn(0, $infoColor, , sprintf("%6d changed lines in $file", $nChangesInFile));
+        cwarn(0, $infoColor, sprintf("%6d changed lines in $file", $nChangesInFile));
     }
     return($nChangesInFile);
 } # doOneFile
@@ -2216,7 +2224,7 @@ sub issueLine {
     my $outrec = ($needToParse) ?
         $tfmt->assembleRecord($newFields) : $newFields->[1];
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        cwarn(0, $infoColor, , "====--maxLinesChanged reached ($maxLinesChanged)".
+        cwarn(0, $infoColor, "====--maxLinesChanged reached ($maxLinesChanged)".
             ", stopping changes after record $recnum.");
         $quit = 1;
     }
@@ -2226,11 +2234,13 @@ sub issueLine {
     if (($test || $showChanges || (!$interactive and $verbose>1))
         && !$showResults) {
         my $x = '[' . join(", ",  @{$lineStats->{'whichApplied'}}) . " ]";
-        #cwarn(0, $infoColor, , "  Line $recnum: changed by expressions $x:");
-        cwarn(0, $infoColor, , makeDiffLine($recnum, $originalRec, $outrec));
+        #cwarn(0, $infoColor, "  Line $recnum: changed by expressions $x:");
+        cwarn(0, $infoColor, makeDiffLine($recnum, $originalRec, $outrec));
     }
-    if ($dropEmptiedLines && $outrec =~ m/^\s*$/) { next; }
-    outputALine($ofh, $outrec, 1);
+
+    unless ($dropEmptiedLines && $outrec =~ m/^\s*$/ && $originalRec !~ m/^\s*$/) {
+        outputALine($ofh, $outrec, 1);
+    }
 
     # Update counts of changes actually done.
     for (my $e=0; $e<scalar(@exprs) && !$quit; $e++) {
@@ -2242,18 +2252,18 @@ sub issueLine {
         $totalChanges += $appCount;
     }
     if ($maxChanges && ($totalChanges > $maxChanges)) {
-        cwarn(0, $infoColor, , "====--maxChanges reached ($maxChanges), stopping.");
+        cwarn(0, $infoColor, "====--maxChanges reached ($maxChanges), stopping.");
         $quit = 1;
     }
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        cwarn(0, $infoColor, , "====--maxLinesChanged reached ($maxLinesChanged), stopping.");
+        cwarn(0, $infoColor, "====--maxLinesChanged reached ($maxLinesChanged), stopping.");
         $quit = 1;
     }
 
     if ($verbose>2) {
         my $nExprsEffective = 0;
         for (my $e=0; $e<scalar(@exprs); $e++) {
-            cwarn(0, $infoColor, , sprintf("    Expr %2d:  %3d matches in line",
+            cwarn(0, $infoColor, sprintf("    Expr %2d:  %3d matches in line",
                 $e, $lineStats->{'whichApplied'}->[$e]));
         }
     }
@@ -2382,29 +2392,29 @@ sub report {
     if (!$quiet) {
         print("\n");
         cwarn(0, $progressColor, "Done" . ($test ? " (DRY RUN)":'') . '.');
-        cwarn(0, $infoColor, , sprintf(
+        cwarn(0, $infoColor, sprintf(
             "%d items: %d files, %d directories%s, %s, %s, %s.",
             $totalItems, $filesRegular, $dirs,
             ($recursive) ? "":" (skipped)",
             "$filesSkipped files skipped (-B, --include)",
             colorIf($filesBackup,  "$filesBackup backups"),
             colorIf($filesMissing, "$filesMissing not found")));
-        cwarn(0, $infoColor, , sjdUtils::lpadc($totalRecs) . " total lines processed.");
-        cwarn(0, $infoColor, , "$totalFilesChanged files changed, " .
+        cwarn(0, $infoColor, sjdUtils::lpadc($totalRecs) . " total lines processed.");
+        cwarn(0, $infoColor, "$totalFilesChanged files changed, " .
           sjdUtils::lpadc($totalLinesChanged) . " lines changed, " .
           (sjdUtils::lpadc($totalChanges)/2) . " total changes.");
         # Fix this -- somewhere $totalChanges is getting double-counted.
     }
 
     if ($failed>0) {
-        cwarn(0, $infoColor, , "Failed: open: $failedOpen, temp open: $failedTempOpen, " .
+        cwarn(0, $infoColor, "Failed: open: $failedOpen, temp open: $failedTempOpen, " .
               "changes: $failedChanges, finalize: $failedCopy.");
     }
 
     if ($showMatchCounts) {
-        cwarn(0, $infoColor, , "====Number of matches to each expression:");
+        cwarn(0, $infoColor, "====Number of matches to each expression:");
         for (my $i=0; $i<scalar(@exprs); $i++) {
-            cwarn(0, $infoColor, , sprintf("    %3d: %6d s/%s/%s/",
+            cwarn(0, $infoColor, sprintf("    %3d: %6d s/%s/%s/",
                 $i, $exprs[$i]->{matchCount}, $exprs[$i]->{from},
                 $exprs[$i]->{to}));
         }
@@ -2414,7 +2424,7 @@ sub report {
     ($nc <= 1) && return;
     cwarn(0, $infoColor, "Number of applications of each change:");
     for (my $i=0; $i<$nc; $i++) {
-        cwarn(0, $infoColor, , sprintf("   #%2d of %2d: %6d times /%s/",
+        cwarn(0, $infoColor, sprintf("   #%2d of %2d: %6d times /%s/",
             $i, $nc, $totalChangesByExpr[$i] || 0, $exprs[$i]->{from}));
     }
 } # report
@@ -2569,7 +2579,7 @@ sub apply {
 
     #for (my $i=$first; $i<=$last; $i++) {
     #    if ($showAllMatches && $fields->[$i] =~ m/$self->{cfrom}/ip) {
-    #        main::cwarn(0, $infoColor, , "    Match? '${^MATCH}'");
+    #        main::cwarn(0, $infoColor, "    Match? '${^MATCH}'");
     #    }
     if (!$self->preIsSatisfied() && $verbose>=3) {
         main::cwarn(2, $errorColor, "--pre condition not satisfied.");
@@ -2589,7 +2599,7 @@ sub apply {
         $to = '"' . $to . '"';
         main::cwarn(3, $errorColor, "    esc RHS: '$to'");
         if (!defined $cfr || !defined $to) {
-            main::cwarn(0, $infoColor, , "ChangeInfo::apply: " . $self->toString());
+            main::cwarn(0, $infoColor, "ChangeInfo::apply: " . $self->toString());
         }
         if ($self->{'isGlobal'}) {
             ($newField = $oldField) =~ s/$cfr/{ eval($to) }/ge;
@@ -2731,7 +2741,7 @@ The possible changes are numbered (starting at 1). You may choose:
     'h' to see this help
 To quit from here, use 'n' (or 's'), and then quit from outside.
 @;
-    main::cwarn(0, $infoColor, , $msg);
+    main::cwarn(0, $infoColor, $msg);
 }
 
 # A pre-condition is a regex that must have been matched somewhere in the

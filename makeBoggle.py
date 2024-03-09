@@ -12,7 +12,7 @@ import random
 #from typing import IO, Dict, List, Union
 
 __metadata__ = {
-    "title"        : "makeBoggle.py",
+    "title"        : "makeBoggle",
     "description"  : "Generate and display a Boggle-like game board.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",

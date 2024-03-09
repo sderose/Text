@@ -3,7 +3,6 @@
 # pastePP.py: Upgraded form of *nix 'paste'.
 # 2021-06-09: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import codecs
 

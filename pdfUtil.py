@@ -3,14 +3,13 @@
 # pdfUtil.py: Do various stuff with PDFs.
 # 2021-03-26: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 #from math import ceil, floor
 import PyPDF2
 
 
 __metadata__ = {
-    "title"        : "pdfUtil.py",
+    "title"        : "pdfUtil",
     "description"  : "Do various stuff with PDFs.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
@@ -228,9 +227,6 @@ def writeFile(pdfWriter, serial=1):
 #
 if __name__ == "__main__":
     import argparse
-    def anyInt(x):
-        return int(x, 0)
-
     def processOptions():
         try:
             from BlockFormatter import BlockFormatter

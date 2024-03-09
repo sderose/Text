@@ -9,12 +9,11 @@ import re
 import codecs
 from collections import defaultdict
 
-from sjdUtils import sjdUtils
 from alogging import ALogger
 lg = ALogger()
 
 __metadata__ = {
-    "title"        : "fixPairs.py",
+    "title"        : "fixPairs",
     "description"  : "Try to fix common OCR errors.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
@@ -88,48 +87,48 @@ or [https://github.com/sderose].
 """
 pairMap = [
     #Found  Fixed     Types
-    (u'f',   u's',    17104),
-    (u'c',   u'e',    14945),
-    (u'1',   u'i',     3116),
-    (u'v',   u'y',     2791),
-    (u'l',   u't',     1823),
-    (u'b',   u'h',     1166),
-    (u'1',   u'l',      943),
-    (u'6',   u'e',      838),
-    (u'l',   u's',      823),
-    (u'f',   u'c',      646),
-    (u'l',   u'i',      546),
-    (u'0',   u'o',      442),
-    (u'd',   u'c',      328),
-    (u'6',   u'o',      290),
-    (u'e',   u'c',      158),
-    (u'c',   u'o',      147),
-    (u'j',   u's',      141),
-    (u'i',   u'l',      115),
-    (u'j',   u'y',       67),
-    (u'i',   u's',       46),
-    (u'y',   u'v',       46),
-    (u'3',   u's',       41),
-    (u'8',   u's',       27),
-    (u'5',   u's',       24),
-    (u'f',   u'e',       22),
-    (u'd',   u'e',       15),
-    (u'o',   u'c',       10),
-    (u'4',   u'e',        9),
-    (u'7',   u'y',        7),
-    (u'3',   u'e',        7),
-    (u'c',   u'f',        7),
-    (u'3',   u'd',        6),
-    (u'9',   u'g',        6),
-    (u'9',   u'a',        4),
-    (u'2',   u'z',        3),
-    (u'4',   u't',        3),
-    (u'3',   u'o',        2),
-    (u't',   u'l',        2),
-    (u'i',   u't',        2),
-    (u'y',   u'j',        1),
-    (u'8',   u'g',        1),
-    (u'6',   u'c',        1),
+    ("f",   "s",    17104),
+    ("c",   "e",    14945),
+    ("1",   "i",     3116),
+    ("v",   "y",     2791),
+    ("l",   "t",     1823),
+    ("b",   "h",     1166),
+    ("1",   "l",      943),
+    ("6",   "e",      838),
+    ("l",   "s",      823),
+    ("f",   "c",      646),
+    ("l",   "i",      546),
+    ("0",   "o",      442),
+    ("d",   "c",      328),
+    ("6",   "o",      290),
+    ("e",   "c",      158),
+    ("c",   "o",      147),
+    ("j",   "s",      141),
+    ("i",   "l",      115),
+    ("j",   "y",       67),
+    ("i",   "s",       46),
+    ("y",   "v",       46),
+    ("3",   "s",       41),
+    ("8",   "s",       27),
+    ("5",   "s",       24),
+    ("f",   "e",       22),
+    ("d",   "e",       15),
+    ("o",   "c",       10),
+    ("4",   "e",        9),
+    ("7",   "y",        7),
+    ("3",   "e",        7),
+    ("c",   "f",        7),
+    ("3",   "d",        6),
+    ("9",   "g",        6),
+    ("9",   "a",        4),
+    ("2",   "z",        3),
+    ("4",   "t",        3),
+    ("3",   "o",        2),
+    ("t",   "l",        2),
+    ("i",   "t",        2),
+    ("y",   "j",        1),
+    ("8",   "g",        1),
+    ("6",   "c",        1),
 ]
 
 
@@ -164,12 +163,11 @@ def processOptions():
         help='Display version information, then exit.')
 
     parser.add_argument(
-        'files', type=str,  nargs=argparse.REMAINDER,
+        'files', type=str, nargs=argparse.REMAINDER,
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    su = sjdUtils()
-    su.setVerbose(args0.verbose)
+    lg.setVerbose(args0.verbose)
 
     if (len(args0.files)==0):
         args0.files.append("BestLcOCRRules.txt")
@@ -248,7 +246,7 @@ def tryList(found, fixed) -> bool:
     return(False)
 
 def report(recnum:int):
-    sigma = u'\u03A3'
+    sigma = "\u03A3"
     print("Forms in list, that need one-character replacement:")
     print("      Err   Fix    Tokens     Tokens%       " + sigma +
         "tok%    Types      Types%       " + sigma + "typ%")

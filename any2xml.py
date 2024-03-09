@@ -3,7 +3,6 @@
 # any2xml.py: Convert anything to XML. Sort of.
 # 2018-07-25: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import argparse
 import codecs

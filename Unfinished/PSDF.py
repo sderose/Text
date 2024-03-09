@@ -1,26 +1,16 @@
 #!/usr/bin/env python3
 #
-# PSDF.py: An accessible PDF-like format, in PS.
+# PSDF.py: An accessible PDF-like format, in PS. Just experimenting.
 # 2021-06-10: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import os
 import codecs
-#import string
-#import math
-#import subprocess
-#from collections import defaultdict, namedtuple
 
 from PowerWalk import PowerWalk, PWType
-#from sjdUtils import sjdUtils
-#from alogging import ALogger
-#su = sjdUtils()
-#lg = ALogger(1)
-
 
 __metadata__ = {
-    "title"        : "PSDF.py",
+    "title"        : "PSDF",
     "description"  : "An accessible PDF-like format, in PS.",
     "rightsHolder" : "Steven J. DeRose",
     "creator"      : "http://viaf.org/viaf/50334488",
@@ -32,7 +22,6 @@ __metadata__ = {
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__["modified"]
-
 
 descr = """
 =Description=

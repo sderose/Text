@@ -3,7 +3,6 @@
 # quoteLines.py: Escape input lines and/or put in quotes.
 # 2021-03-24: Written by Steven J. DeRose.
 #
-from __future__ import print_function
 import sys
 import re
 import codecs
