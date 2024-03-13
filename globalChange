@@ -52,10 +52,12 @@ or its synonym I<--dry-run>.
 
 To be queried for each change, use I<--interactive> and I<--multiDest>:
 
+To get a lot less cluttery messages for each file, see I<--compact>.
+
 =over
 
-=item I<--interactive> lets you respond "contiguous", to do further changes without
-asking I<until> hitting a line with no match but then go back to asking;
+=item I<--interactive> lets you respond "contiguous", to perform further changes
+without asking I<until> hitting a line with no match but then go back to asking;
 
 =item I<--multiDest> lets you choose among several pre-specified
 replacements for each match.
@@ -105,7 +107,7 @@ To suppress these reports, use I<--quiet>.
 
 =head2 Why globalChange instead of sed?
 
-This script is meant just to do regex changes, but do them really well.
+This script is meant only for regex changes, but do them really well (I hope).
 For example, it:
 
 =over
@@ -130,7 +132,7 @@ just tell it to skip certain potential changes
 
 =item * Provides an interactive response that causes the same change to be
 applied unconditionally, but B<only until> a line is reached where there is no
-such change to do. That is, contiguous lines that match are changed,
+such change to perform. That is, contiguous lines that match are changed,
 but then it goes back to asking again.
 
 =item * Allows you to specify B<multiple replacements>,
@@ -261,14 +263,16 @@ Synonyms for I<--test> (q.v.).
 
 =item * B<-e> I<s/from/to/modifiers>
 
-A Perl-style regex change expression to do.
+A Perl-style regex change expression to apply.
 Repeatable (changes are done in the order specified).
 See also I<--multiDest>, I<--interactive>, I<--fileOfExprs>, et al.
 
 You can use a delimiter other than "/" if desired.
 The delimiter can also be backslashed to use it literally.
 See also section L<#Backslashing your regexes>.
-For back-references C<$1> is used, not (yet) C<\1>.
+
+NOTE: For back-references C<$1> is used, not (yet) C<\1>. Remember
+to escape the "$" if needed, such as if you double-quote the -e argument(s).
 
 To see how your expression(s) were interpreted, use I<-v> (repeatable)
 or I<--dry-run>.
@@ -289,7 +293,7 @@ to make just those be case-insensitive (this is not sticky).
 
 =item * B<-f> I<path> or B<--fileOfExprs> I<path>
 
-Read regex changes to do from this file, one per line,
+Read regex changes from this file, one per line,
 and treat each one as if specified via I<-e>.
 Lines beginning with (optional whitespace and then) "#" are ignored.
 
@@ -518,7 +522,7 @@ as a preposition or infinitive marker, like this:
 The "|" character separates the choices. It cannot be escaped,
 but can be changed to a different character by I<--multiSep> (q.v.).
 You cannot parenthesize in order to avoid re-stating parts of the right-hand
-side (such as one might wish to do for the "to" in the example above).
+side (such as one might intend via the "to" in the example above).
 
 B<Note>: At present, you're only asked once, for all matches to the
 same expression on the same line
@@ -786,7 +790,7 @@ modifiers of the regex change.
 Captures need to be referred to on the RHS as $1 etc., not \\1 etc.
 
 Be careful to escape '$' and '@' on I<both> sides of expressions, lest you
-interpolate some Perl variable (unless you I<want> to do that,
+interpolate some Perl variable (unless you I<want> that,
 for example with C<$recnum> or C<$curFileName>).
 
 How to escape metacharacters in expressions is not necessarily obvious.
@@ -831,7 +835,7 @@ I<--multiDest>, I<--pre>, I<--preLines>, I<--post>, I<--postLines>, I<--span>.
 
 =head1 Related commands
 
-C<emacs> and many other editors can do similar things. For example, to do
+C<emacs> and many other editors can do similar things. For example, for
 a multi-file change of C<foo> to C<bar> in all files in directory ~/stuff
 in C<emacs> (remember ESC-x [command] runs a command by name):
 
@@ -849,13 +853,12 @@ In C<dired> you can "mark" (choose) certain files with:
 
 Perhaps surprisingly, "M" does not seems to be provided for "mark all".
 
-Once you've marked all the files you want to do the change in, do:
+Once you've marked all the files you want the change in, do:
 
     dired-do-query-replace-regexp
 
 There is apparently no C<dired-do-replace-regexp>, but you can just
-say "Y" to the first queried change to do all the rest across all the matched
-files with no more queries.
+say "Y" to the first queried change.
 
 Unlike C<globalChange>, C<emacs> can also go backwards (sorry 'bout dat).
 
@@ -1106,6 +1109,9 @@ to apply (ASCII, Default, Locale-based, or Unicode).
 =head1 To do
 
   Move to Python, on top of PowerWalk and fsplit.
+
+  Perhapts add a --onlyWhen modifier, to only do a matched change if some
+  other regex ''also'' matches on that line?
 
   More testing:
     Test and sync back-references with eval() code in renameFiles cmd.
@@ -1825,7 +1831,7 @@ sub doOneItem {
     #
     if (($verbose || $test || $showChanges) && $fileStart && !$quiet) {
         if ($compact) {
-            print(sjdutils::colorize($startFileColor, "Starting file '$file'$clearEOL\n"));
+            print(sjdUtils::colorize($startFileColor, "Starting file '$file'$clearEOL\n"));
         }
         else {
             cprint($startFileColor, "====Starting file '$file'");
@@ -1965,7 +1971,7 @@ sub doOneFile {
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
             cwarn(0, $progressColor, sprintf(
                 "At line %12s (total), total changes: %12s, now processing %s.",
-                 lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why the /2?
+                 lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why?
         }
         if ($quit) {  # Quoth the user, "nevermore".
             outputALine($ofh, $originalRec);
@@ -2053,9 +2059,11 @@ sub doOneFile {
 
         # Report
         if ($verbose >= 2 || $showChanges || ($test && $verbose)) {
-            my $msg = "  Line $recnum: " . $lineStats->{'nChangesInLine'} . " total match(es).";
+            my $msg = "  Line $recnum: " . $lineStats->{'nChangesInLine'} .
+                " total match(es).";
             if (scalar(@exprs) > 1) {
-                $msg .= " By expr: [" . join(",",  @{$lineStats->{'whichApplied'}}, "]");
+                $msg .= " By expr: [" .
+                    join(",",  @{$lineStats->{'whichApplied'}}, "]");
             }
             cwarn(0, $infoColor, $msg);
         }
@@ -2252,11 +2260,11 @@ sub issueLine {
         $totalChanges += $appCount;
     }
     if ($maxChanges && ($totalChanges > $maxChanges)) {
-        cwarn(0, $infoColor, "====--maxChanges reached ($maxChanges), stopping.");
+        cwarn(0, $infoColor, "====--maxChanges reached ($maxChanges).");
         $quit = 1;
     }
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        cwarn(0, $infoColor, "====--maxLinesChanged reached ($maxLinesChanged), stopping.");
+        cwarn(0, $infoColor, "====--maxLinesChanged reached ($maxLinesChanged).");
         $quit = 1;
     }
 
