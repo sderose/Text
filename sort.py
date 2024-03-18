@@ -8,8 +8,8 @@ import argparse
 import re
 import codecs
 
-from alogging import ALogger
-lg = ALogger(1)
+import logging
+lg = logging.getLogger()
 
 __metadata__ = {
     "title"        : "sort",
@@ -24,7 +24,6 @@ __metadata__ = {
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__["modified"]
-
 
 descr = """
 =Description=
@@ -112,7 +111,9 @@ def processOptions():
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    if (args0.verbose): lg.setVerbose(args0.verbose)
+    if (lg and args0.verbose):
+        logging.basicConfig(level=logging.INFO - args0.verbose,
+            format="%(message)s")
     return(args0)
 
 
@@ -122,7 +123,7 @@ def doOneFile(path, fhp):
     """Read and deal with one individual file.
     """
     recs = fhp.readlines()
-    lg.info(1, "File read: %s" % (path))
+    lg.info("File read: %s", path)
     if (args.numeric):
         recs.sort(key=getKeyNumeric, reverse=args.reverse)
     elif (args.ignoreCase):

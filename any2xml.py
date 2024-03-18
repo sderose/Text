@@ -11,16 +11,16 @@ from sjdUtils import sjdUtils
 su = sjdUtils()
 
 __metadata__ = {
-    'title'        : "any2xml",
-    'description'  : "Convert anything to XML. Sort of.",
-    'rightsHolder' : "Steven J. DeRose",
-    'creator'      : "http://viaf.org/viaf/50334488",
-    'type'         : "http://purl.org/dc/dcmitype/Software",
-    'language'     : "Python 3.7",
-    'created'      : "2018-07-25",
-    'modified'     : "2020-12-08",
-    'publisher'    : "http://github.com/sderose",
-    'license'      : "https://creativecommons.org/licenses/by-sa/3.0/"
+    "title"        : "any2xml",
+    "description"  : "Convert anything to XML. Sort of.",
+    "rightsHolder" : "Steven J. DeRose",
+    "creator"      : "http://viaf.org/viaf/50334488",
+    "type"         : "http://purl.org/dc/dcmitype/Software",
+    "language"     : "Python 3.7",
+    "created"      : "2018-07-25",
+    "modified"     : "2020-12-08",
+    "publisher"    : "http://github.com/sderose",
+    "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
 __version__ = __metadata__['modified']
 

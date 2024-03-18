@@ -9,8 +9,8 @@ import re
 import codecs
 from collections import defaultdict
 
-from alogging import ALogger
-lg = ALogger()
+import logging
+lg = logging.getLogger()
 
 __metadata__ = {
     "title"        : "fixPairs",
@@ -159,7 +159,7 @@ def processOptions():
         "--verbose", "-v", action='count', default=0,
         help='Add more messages (repeatable).')
     parser.add_argument(
-        "--version", action='version', version=__metadata__['__version__'],
+        "--version", action='version', version=__version__,
         help='Display version information, then exit.')
 
     parser.add_argument(
@@ -167,7 +167,9 @@ def processOptions():
         help='Path(s) to input file(s)')
 
     args0 = parser.parse_args()
-    lg.setVerbose(args0.verbose)
+    if (lg and args0.verbose):
+        logging.basicConfig(level=logging.INFO - args0.verbose,
+            format="%(message)s")
 
     if (len(args0.files)==0):
         args0.files.append("BestLcOCRRules.txt")
@@ -184,29 +186,29 @@ def doOneFile(path:str):
     rec = ""
     try:
         fh = codecs.open(path, mode='r', encoding=args.iencoding)
-    except IOError as e:
-        lg.error("Can't open '%s'." % (path)); stats["CantOpen"] += 1
+    except IOError:
+        lg.error("Can't open '%s'.", path); stats["CantOpen"] += 1
         return(0)
     while (True):
         try:
             rec = fh.readline()
         except IOError as e:
-            lg.error("Error (%s) reading record %d of '%s'." %
-                (type(e), recnum, path)); stats["readError"] += 1
+            lg.error("Error (%s) reading record %d of '%s'.",
+                type(e), recnum, path); stats["readError"] += 1
             break
         if (len(rec) == 0): break # EOF
         recnum += 1
         rec = rec.rstrip()
         tokens = re.split(splitExpr, rec)
         if (len(tokens)!=3):
-            print("%d: Wrong number of fields (%d) in '%s'" %
-                (recnum, len(tokens), rec))
+            print("%d: Wrong number of fields (%d) in '%s'",
+                recnum, len(tokens), rec)
             continue
         found, fixed, freq = tokens
         freq = int(freq)
         stats['totalFreq'] += freq
         if (len(found) != len(fixed)):
-            lg.info1("%s\tLength mismatch" % (rec));
+            lg.info("%s\tLength mismatch", rec)
             stats["typesLengthDifference"] += 1
             stats['tokensLengthDifference'] += freq
             continue

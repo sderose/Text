@@ -282,19 +282,19 @@ def makeHeading(txt:str, level:int=1) -> str:
 #
 codeMap = {
     #POD    MD+      MD-    MWiki+  MWiki-  HTML
-    "B": [ "''",    "''",   "**",   "**",   "b",   ],   # bold
-    "I": [ "'''",   "'''",  "*",    "*",    "i",   ],   # italic
-    # "U": [ "",      "",     "__",   "__",   "u",   ],   # underscore
+    "B": [ "''",    "''",   "**",   "**",   "b",  ],   # bold
+    "I": [ "'''",   "'''",  "*",    "*",    "i",  ],   # italic
+    # "U": [ "",      "",     "__",   "__",   "u", ],   # underscore
 
-    "C": [ "`",     "`",    "",     "",   "tt",  ],  # command
-    "F": [ "`",     "`",    "",     "",   "tt",  ],  # filename
+    "C": [ "`",     "`",    "",     "",   "tt",   ],  # command
+    "F": [ "`",     "`",    "",     "",   "tt",   ],  # filename
 
-    #"E": [ "''",    "''",   "",     "",   "",    ],   # special ch
+    #"E": [ "''",    "''",   "",     "",   "",     ],   # special ch
 
-    "L": [ "[",     "]",    "",     "",   "a",   ],   # link           ??
-    "S": [ "''",    "''",   "",     "",   "", ],   # no-break       special?
-    "X": [ "''",    "''",   "",     "",   "idx", ],   # index entry    ???
-    "Z": [ "",      "",     "",     "",   "",    ],   # No POD
+    "L": [ "[",     "]",    "",     "",   "a",    ],   # link           ??
+    "S": [ "''",    "''",   "",     "",   "",     ],   # no-break       special?
+    "X": [ "''",    "''",   "",     "",   "idx",  ],   # index entry    ???
+    "Z": [ "",      "",     "",     "",   "",     ],   # No POD
 }
 
 def fixInline(mat:re.Match) -> str:
@@ -430,7 +430,6 @@ S<no-break> and X<index entry> and Z<No I<POD> in here>.
         xfh = codecs.open(args.extractTo, "wb", encoding=args.oencoding)
 
     if (len(args.files) == 0):
-        lg.error("No files specified....")
         doOneFile("[STDIN]", sys.stdin)
     else:
         for path0 in args.files:

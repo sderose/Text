@@ -119,7 +119,8 @@ For example, it:
 C<sed> on MacOS lacks a I<-P> option like some C<grep>s have).
 
 =item * Has I<--test> mode (aka I<--dry-run>), and
-can colorize the parts of lines that changed to see exactly what changed.
+can colorize the parts of lines that changed to see exactly what changed
+(with I<--test> that's the default; use I<--no-diffDisplay> to turn off).
 
 =item * Lets you drop lines which are reduced to nothing but whitespace,
 using I<--dropEmptiedLines>.
@@ -560,7 +561,7 @@ with I<--multiDest> (q.v.).
 
 =item * B<--oencoding> I<t>
 
-Character set to use for output.
+Character set to use for output. Default: utf-8.
 See also I<--iencoding> and I<--listEncodings>.
 
 =item * B<--olineends> I<t>
@@ -1247,7 +1248,8 @@ print extra data.
 Centralize color display via cprint() and cwarn().
   2024-02-21: Fix --dropEmptiedLines options.
   2024-03-09: Remove spurious args to cwarn(). Make --dropEmptiedLines only
-drop lines that *become* empty, not that were empty already.
+drop lines that *become* empty, not that were empty already. Refactor
+printing of before/after/diff lines.
 
 
 =head1 Rights
@@ -1286,6 +1288,14 @@ my $noChangeColor    = "red/black/bold";
 my $someChangeColor  = "blue/black/bold";
 my $rawColor         = "red/black/bold";
 
+sub ask {
+    print(sjdUtils::colorize($askColor, $_[0]) . "\n");
+}
+sub err {
+    print(sjdUtils::colorize($errorColor, $_[0]) . "\n");
+}
+
+
 # Rest of options
 my $backup           = 1;
 my $backupDirectory  = '';
@@ -1294,6 +1304,7 @@ my $binary           = 0;
 my $compact          = 0;
 my $compileRegex     = 1;
 my $delim            = "/";
+my $diffDisplay      = 1;
 my $dropEmptiedLines = 0;
 my $fileOfExprs      = '';
 my $fileStart        = 1;
@@ -1313,7 +1324,7 @@ my $linux            = 0;
 my $list             = 0;
 my $maxChanges       = 0;
 my $maxLinesChanged  = 0;
-my $oencoding        = '';
+my $oencoding        = 'utf-8';
 my $olineends        = '';
 my $perFile          = 0;
 my $prepend          = "";
@@ -1331,13 +1342,6 @@ my $vSep             = '|';
 my $verbose          = 0;
 my $zero             = 0;
 my @exprs            = ();
-
-sub ask {
-    print(sjdUtils::colorize($askColor, $_[0]) . "\n");
-}
-sub err {
-    print(sjdUtils::colorize($errorColor, $_[0]) . "\n");
-}
 
 my %exprOptions = ( # Options copied into each changeExpr
     "fieldChoice"    => 0,          # Which field to look in?
@@ -1359,9 +1363,6 @@ my $tmpFile = "/tmp/globalChange_" . int(rand(100000)) . ".out";
 (my $tfmt = new TabularFormats()) ||
     warn ("Could not construct TabularFormats instance.");
 
-
-###############################################################################
-#
 my %getoptHash = (
     # Color-related options
     "color!"                => \$color,
@@ -1387,6 +1388,7 @@ my %getoptHash = (
     "binary!"               => \$binary,
     "compact!"              => \$compact,
     "compileRegex!"         => \$compileRegex,
+    "diffDisplay!"          => \$diffDisplay,
     "dropEmptiedLines!"     => \$dropEmptiedLines,
     "fileStart!"            => \$fileStart,
     "firstPerFile=i"        => \$firstPerFile,
@@ -1496,13 +1498,18 @@ my %getoptHash = (
         close F;
         cwarn(1, $infoColor, "Added $fcount changes from file $fileOfExprs.");
     }, # fileOfExprs
-);
+);  # %getoptHash
 
 $tfmt->addOptionsToGetoptLongArg(\%getoptHash);
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || dieCleanly("Bad options.\n");
 
 binmode(STDERR, ":utf8");
+print("\n");
+if ($oencoding) {
+    binmode(*STDOUT, ":encoding($oencoding)");
+}
+
 my $delta              = "\x{0394}";
 my $finitePart         = "\x{2add}";
 my $strictlyEquiv      = "\x{2263}";
@@ -1551,7 +1558,7 @@ sub cwarn {
 
 
 ###############################################################################
-# Set implied options, validate option values...
+# Options
 #
 sjdUtils::setVerbose($verbose);
 sjdUtils::setColors($color || $hiliteResults);
@@ -1652,6 +1659,7 @@ my $curFileName        = '';
 # If the user locked *any* of their changes to particular fields, then
 # we operate on everything field-wise. So make a global flag that tells
 # us whether they ever specified --fieldChoice.
+#
 my $needToParse = 0;
 for (my $i=0; $i<scalar(@exprs); $i++) {
     if ($exprs[$i]->{fieldChoice}) { $needToParse = 1; last; }
@@ -1670,9 +1678,6 @@ else {
     if (-t STDIN) { warn "Waiting on STDIN...\n"; }
     if ($iencoding) {
         binmode(*STDIN, ":encoding($iencoding)");
-    }
-    if ($oencoding) {
-        binmode(*STDOUT, ":encoding($oencoding)");
     }
     my $nc = doOneFile("-", *STDIN, *STDOUT);
 }
@@ -1971,7 +1976,7 @@ sub doOneFile {
         if ($tickInterval>0 && $totalRecs % $tickInterval == 0) {
             cwarn(0, $progressColor, sprintf(
                 "At line %12s (total), total changes: %12s, now processing %s.",
-                 lpadc($totalRecs), lpadc($totalChanges)/2, $file));  # TODO: Why?
+                 lpadc($totalRecs), lpadc($totalChanges/2), $file));  # TODO: Why?
         }
         if ($quit) {  # Quoth the user, "nevermore".
             outputALine($ofh, $originalRec);
@@ -2050,7 +2055,8 @@ sub doOneFile {
         #
         ######################################################################
         # Factor out
-        # Were the really any changes? If not we're done.
+
+        # Were there really any changes? If not we're done.
         if ($lineStats->{'nChangesInLine'} == 0) {
             $doContig = 0; # Stop any "contiguous" changing
             outputALine($ofh, $originalRec, 0);
@@ -2069,12 +2075,15 @@ sub doOneFile {
         }
 
         if (sjdUtils::getVerbose() >= 2) {
-            my $diffLine = (scalar(@originalFields) == 1)
-                ? makeDiffLine($recnum, $originalFields[0], $newFields[0])
-                : makeDiffLine($recnum, $vSep . join($vSep, @originalFields) . $vSep,
-                               $vSep . join($vSep, @newFields) . $vSep);
             cwarn(2, $errorColor, "    " . $lineStats->{'nChangesInLine'} .
-                " changes in line $recnum:\n", $diffLine);
+                " changes in line $recnum:\n");
+            if (scalar(@originalFields) == 1) {
+                showDiffLine($originalFields[0], $newFields[0]);
+            }
+            else {
+                showDiffLine($vSep . join($vSep, @originalFields) . $vSep,
+                             $vSep . join($vSep, @newFields) . $vSep);
+            }
         }
 
         # Decide whether to really execute the change
@@ -2134,7 +2143,7 @@ sub userApproves {
         $tfmt->assembleRecord($newFields) : $newFields->[1];
 
     main::ask(sprintf("  Record %d of '%s'?\n", $recnum, $file));
-    print(makeDiffLine($recnum, $originalRec, $newRec));
+    showDiffLine($originalRec, $newRec);
 
     my $reallyDoit = 0;
     main::ask("Change? [ynq!+.h=]\n");
@@ -2164,15 +2173,15 @@ sub userApproves {
             showHelp();
         }
         elsif ($cmd eq 'L' || $cmd eq "\x0C") {       # Show orig
-            print "    <$originalRec\n";
+            showBefore($recnum, $originalRec);
         }
         elsif ($cmd eq ',' || $cmd eq '=') {          # Show result
-            print "    >$newRec\n";
+            showAfter($recnum, $newRec);
         }
         elsif ($cmd eq ',') {                         # Show info
             print "Record $recnum of file $file:\n";
-            print "    <$originalRec\n";
-            print "    >$newRec\n";
+            showBefore($recnum, $originalRec);
+            showAfter($recnum, $newRec);
         }
         elsif ($cmd eq 'F') {                         # Show flds
             printf("    Record %8d of '%s', as %d fields:\n",
@@ -2189,13 +2198,22 @@ sub userApproves {
     return($reallyDoit);
 }
 
-sub showBeforeAfter {
-    my ($recnum, $originalRec, $newRec) = @_;
+sub showBefore {
+    my ($recnum, $rec) = @_;
     if ($lineNumbers) {
-        printf("  %5d: <%s\n        >%s\n", $recnum, $originalRec, $newRec);
+        printf("  %5d: <%s\n", $recnum, $rec);
     }
     else {
-        printf("  <%s\n  >%s\n", $originalRec, $newRec);
+        printf("  <%s\n", $rec);
+    }
+}
+sub showAfter {
+    my ($recnum, $rec) = @_;
+    if ($lineNumbers) {
+        printf("         >%s\n", $rec);
+    }
+    else {
+        printf("  >%s\n", $rec);
     }
 }
 
@@ -2243,7 +2261,7 @@ sub issueLine {
         && !$showResults) {
         my $x = '[' . join(", ",  @{$lineStats->{'whichApplied'}}) . " ]";
         #cwarn(0, $infoColor, "  Line $recnum: changed by expressions $x:");
-        cwarn(0, $infoColor, makeDiffLine($recnum, $originalRec, $outrec));
+        showDiffLine($originalRec, $outrec);
     }
 
     unless ($dropEmptiedLines && $outrec =~ m/^\s*$/ && $originalRec !~ m/^\s*$/) {
@@ -2260,11 +2278,11 @@ sub issueLine {
         $totalChanges += $appCount;
     }
     if ($maxChanges && ($totalChanges > $maxChanges)) {
-        cwarn(0, $infoColor, "====--maxChanges reached ($maxChanges).");
+        cwarn(0, $infoColor, "=== --maxChanges reached ($maxChanges).");
         $quit = 1;
     }
     if ($maxLinesChanged && ($totalLinesChanged > $maxLinesChanged)) {
-        cwarn(0, $infoColor, "====--maxLinesChanged reached ($maxLinesChanged).");
+        cwarn(0, $infoColor, "=== --maxLinesChanged reached ($maxLinesChanged).");
         $quit = 1;
     }
 
@@ -2281,16 +2299,12 @@ sub issueLine {
 
 # Colorize the non-matching center portion of two strings.
 # That is, everything from the first differing column to the last.
+# Return 2 colorized lines.
 #
-sub makeDiffLine {
-    my ($recnum,
-        $r1,       # "before" form of line (or just field)
+sub makeDiffLines {
+    my ($r1,       # "before" form of line (or just field)
         $r2,       # "after" form of line (or just field)
-        $indent,   # >= 0: columns to indent. < 0: width for side-by-side
         ) = @_;
-
-    # Choose layout
-    if (!defined $indent) { $indent = 2; }
 
     my $r1c = my $r2c = '';
     if (!$color || ($r1 eq $r2)) {
@@ -2326,25 +2340,35 @@ sub makeDiffLine {
             colorize($matchColor, substr($r2, $firstDiff, $r2len-$firstDiff-$lastDiff)) .
             colorize($resultColor, substr($r2,$r2len-$lastDiff));
     }
+    return $r1c, $r2c;
+}
 
-    my $dl = "";
+sub showDiffLine {
+    my ($r1,       # "before" form of line (or just field)
+        $r2,       # "after" form of line (or just field)
+        $indent,   # >= 0: columns to indent. < 0: width for side-by-side
+        ) = @_;
+
+    ($diffDisplay) || return;
+
+    my ($r1c, $r2c) = makeDiffLines($r1, $r2);
+
+    # Choose layout
+    if (!defined $indent) { $indent = 2; }
     my $indentString = ' ' x $indent;
     if ($sideBySide) {
         my $pad = " " x $sideBySide;
         $r1c = substr($r1c . $pad, 0, $sideBySide);
         $r2c = substr($r2c . $pad, 0, $sideBySide);
-        $dl = $r1c . " | " . $r2c . "\n";
-    }
-    elsif ($lineNumbers) {
-        $dl = sprintf("%5d: %s<%s\n%7s%s>%s\n",
-            $recnum, $indentString, $r1c, $indentString, $r2c);
+        print($indentString . $r1c . " | " . $r2c . "\n");
     }
     else {
-        $dl = sprintf("%s<%s\n%s>%s\n", $indentString, $r1c, $indentString, $r2c);
+        print("@ record $recnum:\n");
+        showBefore($recnum, $r1c);
+        showAfter($recnum, $r2c);
     }
-
-    return($dl);
-} # makeDiffLine
+    return;
+} # showDiffLine
 
 # Factor out so we always do the exact same conversion.
 sub printable {
@@ -2410,7 +2434,7 @@ sub report {
         cwarn(0, $infoColor, sjdUtils::lpadc($totalRecs) . " total lines processed.");
         cwarn(0, $infoColor, "$totalFilesChanged files changed, " .
           sjdUtils::lpadc($totalLinesChanged) . " lines changed, " .
-          (sjdUtils::lpadc($totalChanges)/2) . " total changes.");
+          sjdUtils::lpadc($totalChanges/2) . " total changes.");
         # Fix this -- somewhere $totalChanges is getting double-counted.
     }
 
@@ -2652,7 +2676,7 @@ sub multiDestChoice {
     my ($self, $data, $startX, $endX) = @_;
     my $done = 0;
     my $cdata = $self->colorizeAllMatches($data);
-    printf("%4d <%s\n", $recnum, $cdata);
+    showBefore($recnum, $cdata);
     while (!$done) {
         my $n = scalar(@{$self->{'cdests'}});
         main::ask("  Which replacement [1:$n]? ");
@@ -2671,19 +2695,19 @@ sub multiDestChoice {
         elsif ($resp eq '=') {                     # show all --multi results
             print("\n");
             my $cdata = $self->colorizeAllMatches($data);
-            printf("%4d <%s\n", $recnum, $cdata);
+            showBefore($recnum, $cdata);
             for (my $mdnum=0; $mdnum<$n; $mdnum++) {
                 my $copy = $data;
                 $copy = $self->applyMultiDestChoice($copy, $mdnum);
-                printf("   %d >%s\n", $mdnum+1, $copy);
+                showAfter($mdnum+1, $copy);
             }
         }
         elsif ($resp eq '?') {                     # show dest choices
             print("\n");
             my $cdata = $self->colorizeAllMatches($data);
-            printf("%4d <%s\n", $recnum, $cdata);
+            showBefore($recnum, $cdata);
             for (my $mdnum=0; $mdnum<$n; $mdnum++) {
-                printf("    %d: %s\n", $mdnum+1, $self->{'cdests'}->[$mdnum]);
+                showAfter($mdnum+1, $self->{'cdests'}->[$mdnum]);
             }
         }
         elsif ($resp eq 'h' ) {                    # help
