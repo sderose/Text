@@ -1842,6 +1842,11 @@ sub doOneItem {
             cprint($startFileColor, "====Starting file '$file'");
         }
     }
+
+    if ($iencoding ne $oencoding) {
+        warn "\n******* iencoding '$iencoding' != oencoding '$oencoding'.\n";
+    }
+
     my $ifh;
     if (!open($ifh, "<$file")) {                  # Can't open
        cwarn(0, $infoColor, "Can't open input file '$file'.");

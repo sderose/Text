@@ -30,7 +30,6 @@ our %metadata = (
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
 our $VERSION_DATE = $metadata{'modified'};
-ur $VERSION_DATE = "2017-02-08";
 
 
 =pod
@@ -77,9 +76,9 @@ and then a user command will be accepted.
 
 =head2 Why?
 
-    od's interface. It's hard to get it to display based on characters,
-    and it gets byte order wrong in some settings. It can't align X and A,
-    and it can't produce a legible ASCII text. You can't easily go to whatever
+    od's interface. It's awkward to get it to display based on characters,
+    and I find its treatment of byte orderand alignment  confusing in some settings.
+    -a lines for text aren't as legible as I'd like. You can't easily go to whatever
     offset you want (except at the start). This layout is much more like an
     old CMS hex dump program (probably was a local mod at Brown University
     by Peter DiCamillo; at any rate it was really good).
@@ -838,7 +837,6 @@ my @notes            = ();      # Footnotes, for long character names.
 
 
 ###############################################################################
-###############################################################################
 # For -listChars, make fake input data, call usual display code.
 #
 if ($args{listChars}) {
@@ -898,7 +896,7 @@ binmode(STDERR, ":encoding(utf8)");
 
 if ($args{oencoding}) {
     print "";
-    binmode(STDOUT, ":encoding(".$args{oencoding}.")");
+    binmode(STDOUT, ":encoding($args{oencoding})");
 }
 elsif ($args{useControlSymbols}) {
     ($args{verbose}) && warn
@@ -910,7 +908,7 @@ elsif ($args{iencoding} eq "utf8") {
     ($args{verbose}) && warn "Defaulting -oencoding to '" .
         $args{iencoding} . "', same as -iencoding.\n";
     print "";
-    binmode(STDOUT, ":".$args{iencoding});
+    binmode(STDOUT, ":encoding($args{iencoding})");
 }
 
 if ($args{skipLines} > 0) {
@@ -930,7 +928,6 @@ elsif ($args{skipBytes}) {
 
 
 ###############################################################################
-###############################################################################
 # Main
 #
 if ($args{user}) {
@@ -942,12 +939,9 @@ else {
         dumpPage() || last;
     }
 }
-
 exit;
 
 
-
-##############################################################################
 ##############################################################################
 # Display several chunks of n chars in various forms.
 # Return 0 (FALSE) on EOF.
@@ -1558,14 +1552,9 @@ sub getCategory {
 } # getCategory
 
 
-
 ###############################################################################
-###############################################################################
-#
 # Interactive/User mode
 # (should integrate code from lessData, which does this better)
-#
-###############################################################################
 #
 BEGIN {
     my $startLoc       = 0;
@@ -1906,7 +1895,6 @@ BEGIN {
 
 
 ###############################################################################
-###############################################################################
 # Handle alternate character encodings
 #
 # This will translate a string to ASCII, which should then be printed in
@@ -1989,8 +1977,6 @@ sub getUnicodeClassExpr {
 } # getUnicodeClassExpr
 
 
-
-###############################################################################
 ###############################################################################
 # Getopt::Long also has a way to put options into a hash, but it's cumbersome,
 # especially for the linesToShow options.
@@ -2077,8 +2063,6 @@ sub checkOptionValues {
 } # checkOptionValues
 
 
-
-###############################################################################
 ###############################################################################
 # Handle colorizing
 #
@@ -2427,9 +2411,6 @@ sub setRule {
 } # setRule
 
 
-
-###############################################################################
-###############################################################################
 ###############################################################################
 # Handle input from either a file or STDIN.
 #
@@ -2479,7 +2460,7 @@ sub binmode {
     my ($self, $enc) = @_;
     ($self->{fileRef}) || die
         "Can't use binmode($enc) on STDIN.\n";
-    (binmode($self->{fileRef},":$enc")) || die
+    (binmode($self->{fileRef},":encoding($enc)")) || die
         "binmode() failed.\n";
 }
 
@@ -2580,5 +2561,3 @@ sub close {
         $self->{fileRef} = undef;
     }
 }
-
-# End of reader package.
