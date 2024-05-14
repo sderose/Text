@@ -6,9 +6,6 @@
 import sys
 import re
 import codecs
-#import string
-
-from PowerWalk import PowerWalk, PWType
 
 __metadata__ = {
     "title"        : "quoteLines",
@@ -82,8 +79,6 @@ Options are based on my `fsplit.py`, in turn based on Python `csv`.
 
 
 =Known bugs and Limitations=
-
-Seeing all the PowerWalk options in `-h` is annoying.
 
 
 =History=
@@ -188,18 +183,15 @@ if __name__ == "__main__":
 
         # Options based on fsplit.py
         parser.add_argument(
-            "--quote", type=str, metavar="E", default="dplain",
+            "--quote", type=str, default="dplain",
             choices=qPairs.keys(),
             help="Name for type of quotes to use.")
         parser.add_argument(
             "--separator", type=str, metavar="E", default="utf-8",
             help="Append this character after the closing quote.")
 
-        PowerWalk.addOptionsToArgparse(parser)
-
         parser.add_argument(
-            "files", type=str,
-            nargs=argparse.REMAINDER,
+            "files", type=str, nargs=argparse.REMAINDER,
             help="Path(s) to input file(s)")
 
         args0 = parser.parse_args()
@@ -226,11 +218,7 @@ if __name__ == "__main__":
         warning0("quoteLines.py: No files specified....")
         doOneFile(None)
     else:
-        pw = PowerWalk(args.files, open=False, close=False,
-            encoding=args.iencoding)
-        pw.setOptionsFromArgparse(args)
-        for path0, fh0, what0 in pw.traverse():
-            if (what0 != PWType.LEAF): continue
+        for path0 in args.files:
             doOneFile(path0)
         if (not args.quiet):
-            warning0("quoteLines.py: Done, %d files.\n" % (pw.getStat("regular")))
+            warning0("quoteLines.py: Done, %d files.\n" % (len(args.files)))

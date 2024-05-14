@@ -6,7 +6,6 @@
 import sys
 import argparse
 import codecs
-import PowerWalk
 from collections import defaultdict
 
 __metadata__ = {
@@ -87,7 +86,8 @@ def doOneFile(path, fh):
         elif (rec.strip() == ''):
             rec = ''
         else:
-            rec = rec.replace("\\", "\\\\").replace('"', "\\\"").replace("\n", "\\n").replace("\r", "\\r")
+            rec = rec.replace("\\", "\\\\").replace(
+                '"', "\\\"").replace("\n", "\\n").replace("\r", "\\r")
             if (args.ustrings): rec = 'u"' + rec + '",'
             else: rec = '"' + rec + '",'
         print(args.indent + rec)
@@ -154,19 +154,7 @@ if __name__ == "__main__":
         sys.stderr.write("No files specified....\n")
         doOneFile("[STDIN]", sys.stdin)
     else:
-        depth = 0
-        pw = PowerWalk.PowerWalk(args.files)
-        pw.setOption('recursive', args.recursive)
-        for path0, fh0 in pw.traverse():
-            if (fh0 == "DIR_END"):
-                depth -= 1
-                continue
-            print("    " * depth + path0)
-            if (fh0 == "DIR_START"):
-                depth += 1
-                continue
-
-            fileNum = pw.travState.stats['itemsReturned']
+        for path0 in args.files:
             fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
             doOneFile(path0, fh0)
             fh0.close()

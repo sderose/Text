@@ -9,8 +9,6 @@ import re
 from collections import namedtuple
 #from typing import IO, Dict, List, Union
 
-from PowerWalk import PowerWalk, PWType
-
 __metadata__ = {
     "title"        : "wcPP",
     "description"  : "An enhanced 'wc'.",
@@ -83,11 +81,7 @@ or [https://github.com/sderose].
 
 def log(lvl:int, msg:str) -> None:
     if (args.verbose >= lvl): sys.stderr.write(msg + "\n")
-def warning0(msg:str) -> None: log(0, msg)
-def warning1(msg:str) -> None: log(1, msg)
-def warning2(msg:str) -> None: log(2, msg)
-def error(msg:str) -> None: log(0, msg)
-def fatal(msg:str) -> None: log(0, msg); sys.exit()
+def warning(msg:str) -> None: log(0, msg)
 
 dashes = {
     0x0002D:  "HYPHEN-MINUS",
@@ -169,7 +163,7 @@ def doOneFile(path:str) -> int:
         try:
             fh = open(path, "rb")
         except IOError as e:
-            warning0("Cannot open '%s':\n    %s" % (path, e))
+            warning("Cannot open '%s':\n    %s" % (path, e))
             return 0
 
     lines = 0
@@ -260,8 +254,6 @@ if __name__ == "__main__":
             choices=[ "historical", "asciiWS", "unicodeWS", "wordish", "none", ],
             help="How to count 'words'.")
 
-        PowerWalk.addOptionsToArgparse(parser)
-
         parser.add_argument(
             "files", type=str, nargs=argparse.REMAINDER,
             help="Path(s) to input file(s)")
@@ -275,17 +267,12 @@ if __name__ == "__main__":
     totStats = Stats(0, 0, 0, 0, 0, 0, 0, 0)
 
     if (len(args.files) == 0):
-        warning0("wcPP.py: No files specified....")
+        warning("wcPP.py: No files specified....")
         doOneFile(None)
     else:
-        pw = PowerWalk(args.files, open=False, close=False,
-            encoding=args.iencoding)
-        pw.setOptionsFromArgparse(args)
-        for path0, fh0, what0 in pw.traverse():
-            if (what0 != PWType.LEAF): continue
+        for path0 in args.files:
             theStats = doOneFile(path0)
             totStats = addStats(totStats, theStats)
             pStats(theStats, path0)
         if (not args.quiet):
-            warning0("wcPP.py: Done, %d files.\n" % (pw.getStat("regular")))
-        pStats(totStats)
+            warning("wcPP.py: Done, %d files.\n" % (len(args.files)))

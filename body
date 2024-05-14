@@ -333,6 +333,9 @@ Report version date and exit.
 
 I<--nlines> copies one too few records if no other options are specified.
 
+Searching for --fPart foo --lPat bar --iterate, will get multi-line
+matches correctly, but (at least sometimes), not single-line matches.
+
 Some combinations of options have not been tested much.
 
 Starting conditions are applied sequentially, but copying stops whenever
@@ -348,7 +351,8 @@ n-level <div>s from HTML, all the classes from Python, etc.
 
 A way to invert patterns, so you start/end at the first I<non>-matching line.
 
-At least for lpat, a way to keep going until the n-th matching line?
+At least for lpat, a way to keep going until the n-th matching line (incl. 1,
+which reduces to grep)
 
 Add I<--fbyte>, I<--lbyte>, I<--nchars>, I<--nbytes>.
 

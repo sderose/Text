@@ -669,7 +669,7 @@ unless you use I<--zero>. See also I<--showResults>.
 =item * B<--tickInterval> I<n>
 
 Print a message after every I<n> input lines
-Default: 10,000 (set C<0> to turn off).
+Default: 0 (off).
 
 =item * B<--unicode>
 
@@ -679,9 +679,8 @@ Synonym for I<--iencoding utf8> I<--oencoding utf8>.
 
 Add more messages (repeatable).
 
-With no I<-v>, you'll still get a notice as each file begins to be processed,
-and any total-lines-done notices specified via I<--tickInterval>. You can
-silence the file-start messages with I<-q>.
+With no I<-v>, you'll still get a notice as each file begins to be processed.
+You can silence the file-start messages with I<-q>.
 
 The first I<-v> reports the regex changes requested
 and a few other things.
@@ -1312,7 +1311,7 @@ my $firstPerFile     = 0;
 my $force            = 0;
 my $hiliteResults    = 0;
 my $iString          = "  ";
-my $iencoding        = '';
+my $iencoding        = 'utf-8';
 my $ilineends        = '';
 my $include          = '';
 my $instanceBegin    = 0;
@@ -1337,7 +1336,7 @@ my $showResults      = 0;
 my $sideBySide       = 0;
 my $super            = 1; # Try to make changeInfo::apply faster.
 my $test             = 0;
-my $tickInterval     = 10000;
+my $tickInterval     = 0;
 my $vSep             = '|';
 my $verbose          = 0;
 my $zero             = 0;

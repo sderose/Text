@@ -7,15 +7,15 @@ import sys
 import codecs
 import re
 import html
+import logging
 
 gotMath = False
 try:
-    import mathAlphanumerics
+    from mathAlphanumerics import mathAlphanumerics
     gotMath = True
 except ImportError:
     pass
 
-import logging
 lg = logging.getLogger("manClean.py")
 
 __metadata__ = {
@@ -231,8 +231,8 @@ if __name__ == "__main__":
             help="Path(s) to input file(s)")
 
         args0 = parser.parse_args()
-        if (lg and args0.verbose):            logging.basicConfig(level=logging.INFO - args0.verbose)
-
+        if (lg and args0.verbose):
+            logging.basicConfig(level=logging.INFO - args0.verbose)
 
         if (args0.outputFormat == "math" and not gotMath):
             lg.critical("Unable to load mathAlphanumerics for --outputFormat math.")

@@ -3,6 +3,8 @@
 # PdfStupidityFix.py: Make spacing, hyphenation, etc. better.
 # 2020-09-25: Written by Steven J. DeRose.
 #
+#pylint:disable=C0301  # long lines
+#
 import sys
 import os
 import codecs
@@ -393,12 +395,8 @@ or [https://github.com/sderose].
 
 ###############################################################################
 #
-def warning(lvl, msg):
-    if (args.verbose >= lvl): sys.stderr.write(msg + "\n")
-    if (lvl < 0): sys.exit()
-def warning0(msg): warning(0, msg)
-def warning1(msg): warning(1, msg)
-def warning2(msg): warning(2, msg)
+def warning( msg):
+    sys.stderr.write(msg + "\n")
 
 bullets = {
     # Common chars used as bullets
@@ -507,7 +505,7 @@ class Lexicon(dict):
                 w = w.strip()
                 if (len(w) == 1): continue
                 self[w] = 1
-        warning1("Loaded %d words from '%s' in %6.4f seconds." %
+        warning("Loaded %d words from '%s' in %6.4f seconds." %
             (len(self), path, time()-startTime))
 
     def isWord(self, w:str) -> bool:
@@ -566,7 +564,7 @@ def doOneFile(path:str) -> None:
         buf = ""
         rec = re.sub(r"\b((\w ){4,})", closeUp, rec)  # Spaced-out titles
         tokens = re.split(r"([-\w]+)", rec)
-        warning2("Tokens: %s" % ("|".join(tokens)))
+        warning("Tokens: %s" % ("|".join(tokens)))
         for token in tokens:
             if (not re.match(r"\w", token)):          # punct, space, etc.
                 buf += token
@@ -582,7 +580,7 @@ def doOneFile(path:str) -> None:
                 token = "\n" + token
 
             elif ("-" in token):                      # Hyphenated
-                warning2("hyphen: '%s'" % (token))
+                warning("hyphen: '%s'" % (token))
                 mat = re.match(r"(.*)-(.*)", token)
                 if (lex.isWord(mat.group(1)+mat.group(2))):
                     token = mat.group(1)+mat.group(2)
@@ -591,7 +589,7 @@ def doOneFile(path:str) -> None:
                     token = mat.group(1) + " " + mat.group(2)
 
             elif (not lex.isWord(lToken2)):           # Mystery word
-                warning2("non-word: '%s' (->'%s')" % (lToken, lToken2))
+                warning("non-word: '%s' (->'%s')" % (lToken, lToken2))
                 for j in range(1, len(lToken)):
                     p1 = lToken[0:j]
                     p2 = lToken[j:]
@@ -614,8 +612,8 @@ def multiBreak(s:str):
     # Find all the words that are in there anywhere.
     # Save as a list by start-points, each mapped to a
     # list of end-points that make up whole words.
-    warning(0, s)
-    warning(0, "0----+----1----+----2----+----3----+----4----+----5----+----6----")
+    warning(s)
+    warning("0----+----1----+----2----+----3----+----4----+----5----+----6----")
     byStarts = []
     sLen = len(s)
     for i in range(sLen):
@@ -631,7 +629,7 @@ def multiBreak(s:str):
         buf = "From %2d:  " % (i)
         for j in bs:
             buf += "%d:'%s' " % (j, s[i:j])
-        warning(0, buf)
+        warning(buf)
 
     findCompleteChainsStartingAt(s, byStarts, st=0)
 
@@ -640,16 +638,16 @@ solutions = []
 def findCompleteChainsStartingAt(s:str, byStarts:list, st:int, soFar:str=""):
     startHere = byStarts[st]
     if (len(startHere) == 0):
-        warning(0, "FAIL")
+        warning("FAIL")
         return None
     for en in reversed(startHere):
         thisToken = s[st:en]
         farther = soFar + " " + thisToken
-        warning(0, farther)
-        #warning(0, "%s[%2d:%2d]: '%s'" % ("    " * depth, st, en, s[st:en]))
+        warning(farther)
+        #warning("%s[%2d:%2d]: '%s'" % ("    " * depth, st, en, s[st:en]))
         if (en >= len(s)):
             solutions.append(farther)
-            warning(0, "Ding: %s" % (farther))
+            warning("Ding: %s" % (farther))
         else:
             findCompleteChainsStartingAt(
                 s, byStarts, st=en, soFar=farther)
@@ -746,11 +744,11 @@ if __name__ == "__main__":
         tfile = "/tmp/PdfStudpidityFix.tmp"
         with codecs.open(tfile, "wb", encoding="utf-8") as tf:
             tf.write(sample)
-        warning0("Testing on:\n%s\n" % (sample))
+        warning("Testing on:\n%s\n" % (sample))
         args.files.insert(0, tfile)
 
     if (len(args.files) == 0):
-        warning0("No files specified....")
+        warning("No files specified....")
         doOneFile(None)
     else:
         doAllFiles(args.files)

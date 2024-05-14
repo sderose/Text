@@ -210,8 +210,8 @@ def doOneFile(path, fh:IO) -> int:
         try:
             rec = fh.readline()
         except IOError as e:
-            lg.error("Error (%s) reading record %d of '%s'." %
-                (type(e), recnum, path))
+            lg.error("Error (%s) reading record %d of '%s'.",
+                type(e), recnum, path)
             break
         if (len(rec) == 0): break # EOF
         recnum += 1
@@ -234,7 +234,7 @@ def doOneFile(path, fh:IO) -> int:
         elif (rec.startswith("=encoding")):
             encoding = rec[9:].strip()
             if (encoding != args.iencoding):
-                lg.error("=encoding '%s' not supported." % (encoding))
+                lg.error("=encoding '%s' not supported.", encoding)
             continue
         elif (rec.startswith("=head")):
             hLevel = int(rec[5]) + 0
@@ -312,7 +312,7 @@ def fixInline(mat:re.Match) -> str:
             return "<%s>%s</%s>" % (
                 codeMap[code][4], escapeXmlContent(txt), codeMap[code][4])
     else:
-        lg.error("Bad inline POD code '%s' with text '%s'." % (code, txt))
+        lg.error("Bad inline POD code '%s' with text '%s'.", code, txt)
         txt = mat.group()
     return txt
 
@@ -328,7 +328,7 @@ def decodeSpecialChar(text:str) -> str:
     try:
         c = chr(name2codepoint[text])
     except KeyError:
-        lg.error("Unrecognized value '%s' for E<> code." % (text))
+        lg.error("Unrecognized value '%s' for E<> code.", text)
         c = "<E%s>" % (text)
     return c
 
@@ -423,7 +423,7 @@ S<no-break> and X<index entry> and Z<No I<POD> in here>.
         tfile = "/tmp/pod2mdSample.pod"
         with codecs.open(tfile, "wb", encoding="utf-8") as tf:
             tf.write(sample)
-        lg.info("Test data written to %s." % (tfile))
+        lg.info("Test data written to %s.", tfile)
         args.files.insert(0, tfile)
 
     if (args.extractTo):

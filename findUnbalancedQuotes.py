@@ -171,17 +171,12 @@ def doOneFile(path):
     """Read and deal with one individual file.
     """
     try:
-        fh = open(path, mode="r")  # binary
+        fh = codecs.open(path, mode="rb", encoding=args.iencoding)
     except IOError:
         lg.error("Couldn't open '%s'." % (path))
         return(0)
     lg.bumpStat("totalFiles")
 
-    try:
-        fh = codecs.open(path, mode="r", encoding=args.iencoding)
-    except IOError:
-        lg.error("Can't open '%s'." % (path))
-        return(0)
     recnum = 0
     lastRealRec = rec = ""
     indentStack = [ 0 ]
@@ -244,7 +239,7 @@ def doOneFile(path):
         if (n % 2):
             report(recnum, "Odd number of plain back quotes (%s)" % (n), origRec)
 
-        if (args.iencoding == "utf8"):
+        if (args.iencoding == "utf-8"):
             for pair in (pairedQuotes):
                 nopen = countChar(rec, pair[0])
                 nclos = countChar(rec, pair[1])
@@ -345,7 +340,7 @@ def processOptions():
         help="Do not report cases of 3 double-quotes in a row, like Python multi-line quotes.")
     parser.add_argument(
         "--unicode", action="store_const", dest="iencoding",
-        const="utf8", help="Assume utf-8 for input files.")
+        const="utf-8", help="Assume utf-8 for input files.")
     parser.add_argument(
         "--verbose", "-v", action="count", default=0,
         help="Add more messages (repeatable).")

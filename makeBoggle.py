@@ -4,12 +4,8 @@
 # 2022-07-20: Written by Steven J. DeRose.
 #
 import sys
-import os
-#import codecs
 import string
 import random
-#import subprocess
-#from typing import IO, Dict, List, Union
 
 __metadata__ = {
     "title"        : "makeBoggle",
@@ -109,7 +105,7 @@ boxDraws = {
 
 """See also Charsets/UnicodeLists/boxDrawing.py.
 
-    /---------------\
+    /---------------\\
     | T | O | L | B |
     |---+---+---+---|
     | E | N | U | T |
@@ -117,7 +113,7 @@ boxDraws = {
     | W | S | J | H |
     |---+---+---+---|
     | I | T | N | O |
-    \---------------/
+    \\---------------/
 """
 
 # name    ASCII    UHEAVY
@@ -167,7 +163,7 @@ def getBoard(size:int=4, method:str="RANDOM"):
         for _i in range(size*size):
             board += random.choice(string.ascii_uppercase)
     elif (method == "WEIGHTED"):   # Random, weighted by letter frequency
-        assert False, "Weighted choice not finished."  # TODO
+        assert False, "Weighted choice not finished."
         for _i in range(size*size):
             board += random.choice(string.ascii_uppercase)
     elif (method == "DENSEOLD"):
@@ -238,9 +234,6 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--color",  # Don't default. See below.
-            help="Colorize the output.")
-        parser.add_argument(
             "--oformat", "--outputFormat", "--output-format",
             type=str, default="ASCII", choices=[ "ASCII", ],
             help="How to display the board.")
@@ -248,26 +241,14 @@ if __name__ == "__main__":
             "--method", type=str, default="OLD",
             help="How to generate the board (named method or specific letters).")
         parser.add_argument(
-            "--quiet", "-q", action="store_true",
-            help="Suppress most messages.")
-        parser.add_argument(
             "--size", type=int, default=4,
             help="What size board to generate (only 4 for now).")
-        parser.add_argument(
-            "--verbose", "-v", action="count", default=0,
-            help="Add more messages (repeatable).")
         parser.add_argument(
             "--version", action="version", version=__version__,
             help="Display version information, then exit.")
 
         args0 = parser.parse_args()
-
         args0.method = args0.method.upper()
-
-        if (args0.color == None):
-            args0.color = ("CLI_COLOR" in os.environ and sys.stderr.isatty())
-        #lg.setColors(args0.color)
-        #if (args0.verbose): lg.setVerbose(args0.verbose)
         return(args0)
 
 
@@ -277,5 +258,3 @@ if __name__ == "__main__":
 
     board0 = getBoard(args.size, args.method)
     showBoard(board0, args.size)
-
-    sys.exit()

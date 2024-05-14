@@ -236,7 +236,7 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--action", type=str, metavar="A", default="split",
+            "--action", type=str, default="split",
             choices=[ "getMeta", "getText", "split", "splitEvenOdd", "cat",
                 "reverse", "collate", "signature" ],
             help="What to do. Default: split.")

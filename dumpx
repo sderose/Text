@@ -71,8 +71,8 @@ Offsets are shown in the same base as the line they precede. Each such
 I<group> of lines, can be followed by a blank line (see I<--blank>).
 With I<--break>, a newline character will also start a new "chunk".
 
-In I<--user> (interactive) mode, a screen's-worth of such groups will be printed
-and then a user command will be accepted.
+In I<--user> (interactive) mode, a screen's-worth of such groups is printed
+and then a user command is accepted.
 
 =head2 Why?
 
@@ -90,9 +90,9 @@ The 'literal' forms I<-a> (below) and I<--as> (as a right sidebar),
 display printable characters as themselves.
 By default, control characters are replaced by
 the Unicode 'control pictures' (U+2400 and following).
-Other unprintable characters will be "?" on the right, but will
+Other unprintable characters are "?" on the right, but will
 be replaced by "#" and a footnote number in the I<-a> (below) display.
-After each display chunk, each character so replaced will be
+After each display chunk, each character so replaced is
 listed on a separate line, with its footnote number and full Unicode name.
 This can be turned off via I<--nonotes>, in which case the characters
 will merely be displayed as "??".
@@ -136,7 +136,7 @@ I<n> can be given in decimal (999), octal (0777), hex (0xFF), or binary (0b11).
 
 =item * B<--charForSpace> I<spec>
 
-Set what code point will be displayed as the printable form of space (regular space, not
+Set what code point is displayed as the printable form of space (regular space, not
 hard space, en/em/thin space, etc.). The number may be specified in decimal, octal,
 or hex. Some useful values include:
      0x20    -- a literal space
@@ -231,7 +231,7 @@ Default: on (use I<--nonotes> to turn off).
 
 Assume the output can handle enocding I<e> (see also I<--listEncodings>).
 
-B<Note>: Terminal programs will be confused if you request a character set they
+B<Note>: Terminal programs may be confused if you request a character set they
 don't support.
 
 =item * I<--showAlphaSide> or B<--sas>
@@ -312,9 +312,9 @@ See also I<--addressWidth> (set that to 0 to suppress offset display entirely).
 Show literal characters below numeric(s).
 Unlike C<od>, the high-order bit is I<not> automatically cleared, and
 multi-byte encodings are supported (see also I<--iencoding>).
-Latin-1 characters will be shown as themselves; others will display
+Latin-1 characters are shown as themselves; others will display
 a footnote number, and after the display line is printed, the
-footnotes will be shown. Each footnotes includes its number, the
+footnotes are shown. Each footnotes includes its number, the
 hex value for the code point (this will not be the same as the
 individual utf8 bytes shown by I<-h>!), and the full Unicode name for
 the character.
