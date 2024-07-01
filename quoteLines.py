@@ -15,7 +15,7 @@ __metadata__ = {
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.7",
     "created"      : "2021-03-24",
-    "modified"     : "2021-04-13",
+    "modified"     : "2024-05-23",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -72,6 +72,13 @@ The quote types supported can be listed via `--help-quotes`.
 
     quoteLines.py [options] [files]
 
+For example, to quote each line except those starting with optional spaces and
+"#", using double angle quotation marks (U+AA and U+BB):
+
+    quoteLines.py --skipLinesMatching "^\\s*#" --quote dangle
+
+To see a list of the recognized names for kinds of quoting, use --help-quotes.
+
 
 =Related Commands=
 
@@ -84,12 +91,13 @@ Options are based on my `fsplit.py`, in turn based on Python `csv`.
 =History=
 
 * 2021-03-24: Written by Steven J. DeRose.
+* 2024-05-23: Move out loop invariants. Add skipLinesMatching.
 
 
 =To do=
 
-* Option to skip lines matching some regex (say, r"^#|^\\s*$").
-* Option to just replace a kind(s) of quote with another.
+    Option to put leading/trailing whitespace *outside* the quoting.
+
 
 =Rights=
 
@@ -104,13 +112,8 @@ or [https://github.com/sderose].
 =Options=
 """
 
-def log(lvl, msg):
-    if (args.verbose >= lvl): sys.stderr.write(msg + "\n")
-def warning0(msg): log(0, msg)
-def warning1(msg): log(1, msg)
-def warning2(msg): log(2, msg)
-def fatal(msg): log(0, msg); sys.exit()
-warn = log
+def warning(msg):
+    sys.stderr.write(msg + "\n")
 
 
 ###############################################################################
@@ -125,14 +128,19 @@ def doOneFile(path):
         try:
             fh = codecs.open(path, "rb", encoding=args.iencoding)
         except IOError as e:
-            warning0("Cannot open '%s':\n    %s" % (e))
+            warning("Cannot open '%s':\n    %s" % (e))
             return 0
+
+    nop, ncl, _desc = qPairs[args.quote]
+    op = chr(nop)
+    cl = chr(ncl)
 
     recnum = 0
     for rec in fh.readlines():
         recnum += 1
-        op, cl, _desc = qPairs[args.quote]
-        rec = quoteIt(rec, chr(op), chr(cl))
+        if (not args.skipLinesMatching or
+            not re.match(args.skipLinesMatching, rec)):
+            rec = quoteIt(rec, op, cl)
         rec += args.separator
         print(rec)
     if (fh != sys.stdin): fh.close()
@@ -172,6 +180,9 @@ if __name__ == "__main__":
             "--quiet", "-q", action="store_true",
             help="Suppress most messages.")
         parser.add_argument(
+            "--skipLinesMatching", type=str, metavar="RE",
+            help="Don't alter lines that match this regex.")
+        parser.add_argument(
             "--unicode", action="store_const", dest="iencoding",
             const="utf8", help="Assume utf-8 for input files.")
         parser.add_argument(
@@ -203,6 +214,7 @@ if __name__ == "__main__":
                 op, cl, desc = qPairs[qtype]
                 print("    %-12s %s...%s U+%04x...U+%04x %s" %
                     (qtype, chr(op), chr(cl), op, cl, desc))
+            sys.exit()
 
         return(args0)
 
@@ -211,14 +223,14 @@ if __name__ == "__main__":
     args = processOptions()
     if (args.iencoding and not args.oencoding):
         args.oencoding = args.iencoding
-    #if (args.oencoding):
-    #    sys.stdout.reconfigure(encoding="utf-8")
+    if (args.oencoding):
+        sys.stdout.reconfigure(encoding="utf-8")
 
     if (len(args.files) == 0):
-        warning0("quoteLines.py: No files specified....")
+        warning("quoteLines.py: No files specified....")
         doOneFile(None)
     else:
         for path0 in args.files:
             doOneFile(path0)
         if (not args.quiet):
-            warning0("quoteLines.py: Done, %d files.\n" % (len(args.files)))
+            warning("quoteLines.py: Done, %d files.\n" % (len(args.files)))

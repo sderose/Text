@@ -102,6 +102,8 @@ so they are not used.
 At the end, a summary of changes is displayed.
 If more than one regex change was being applied, then the
 number of successful applications of each one is also displayed.
+Changes that have no net effect (that change the string to exactly what
+it was anyway) do not count.
 To suppress these reports, use I<--quiet>.
 
 

@@ -245,7 +245,7 @@ if __name__ == "__main__":
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--oencoding", type=str, metavar="E", default="utf-8",
-            help="Use this character coding for output. Default: iencoding.")
+            help="Use this character coding for output. Default: Same as --iencoding.")
         parser.add_argument(
             "--outfile", type=str, metavar="P", default="result",
             help="Where to write the result. Default: iencoding.")
@@ -281,8 +281,7 @@ if __name__ == "__main__":
     if (args.oencoding):
         # https://stackoverflow.com/questions/4374455/
         # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
-        #sys.stdout.reconfigure(encoding=args.oencoding)
-        pass
+        sys.stdout.reconfigure(encoding=args.oencoding)
 
     pfh1 = open(args.files[0], "rb")
     reader1 = PyPDF2.PdfFileReader(pfh1)

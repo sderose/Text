@@ -18,7 +18,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2006-08-29",
-    'modified'     => "2023-03-10",
+    'modified'     => "2024-06-10",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -35,6 +35,9 @@ Accumulate text (or fields) from input lines,
 and re-wrap to make full lines, optionally padding for nice columns if you
 request parsing into fields.
 
+This can be used either to wrap small items into columns (like `ls`), or to
+change the line-filling of text files.
+
 By default:
 
 =over
@@ -50,7 +53,7 @@ By default:
 =back
 
 If you want to remove the blank lines that
-cause non-wrapping, but not have the blank lines at the end, run the output
+cause non-wrapping, but not have the blank lines afterward, run the output
 of C<wrap> through my C<dropBlankLines>.
 
 If you want to wrap regardless of length, breaking only at blank lines,
@@ -151,6 +154,10 @@ before any padding. Default: on.
 If an item is too wide, discard characters from the end to make it fit
 the I<--lpadWidth> and I<--rpadWidth> constraints. See also I<--free>.
 
+=item * B<--unindent>
+
+Remove leading space, even after a blank line(s).
+
 =item * B<--version>
 
 Display version info and exit.
@@ -173,8 +180,7 @@ Set to 0 to wrap up all sequences of non-blank lines.
 
 Does not expand tabs before counting (can pipe through C<expand> first).
 
-Does not support the full range of tabular file formats available
-from C<TabularFormats.pm>; just I<--fieldSep>.
+Does not support a full range of tabular file formats; just I<--fieldSep>.
 
 I<--vertical> can set column width automatically, but horizontal can't.
 
@@ -182,6 +188,9 @@ I<--vertical> can set column width automatically, but horizontal can't.
 =head1 Related commands
 
 =over
+
+My C<splitAtMatches> -- break at matches to a given regex (that might be a nice
+added option here?).
 
 =item C<fold> -- insert line-breaks to keep lines down to a certain
 maximum width.
@@ -221,7 +230,8 @@ Don't limit nCols due to gutter following last col.
   2016-01-21: Avoid div0 for nCols.
   2020-09-03: New layout. Notify waiting STDIN. Support I<--width 0>.
   2023-03-10: Add some option synonyms.
-  
+  2024-06-10: Add --unindent.
+
 
 =head1 To do
 
@@ -260,9 +270,10 @@ my $rpadWidth     = 0;
 my $stripItems    = 1;
 my $tabstops      = 8;
 my $truncate      = 0;
-my $width         = -1;  # Indicates 'unset'.
+my $unindent      = 0;
 my $verbose       = 0;
 my $vertical      = 0;
+my $width         = -1;  # Indicates 'unset'.
 
 my %getoptHash = (
     "blank!"                => \$blank,
@@ -295,6 +306,7 @@ my %getoptHash = (
     "stripItems!"           => \$stripItems,
     "tabstops=o"            => \$tabstops,
     "truncate!"             => \$truncate,
+    "unindent!"             => \$unindent,
     "v|verbose+"            => \$verbose,
     "version"               => sub {
       die "Version of $VERSION_DATE, by Steven J. DeRose.\n";
@@ -305,8 +317,6 @@ my %getoptHash = (
 Getopt::Long::Configure ("ignore_case");
 GetOptions(%getoptHash) || die "Bad options.\n";
 
-
-###############################################################################
 # Validate and default options
 #
 sjdUtils::setVerbose($verbose);
@@ -386,6 +396,8 @@ sub doVerticalLayout {
         $recnum++;
         chomp $_;
         #warn "$recnum: $_\n";
+
+        # If we're splitting fields, do so. Else just make the line curitems[0].
         my @curItems = ();
         if ($fieldSep ne "") { @curItems = split(/$fieldSep/,$_); }
         else { $curItems[0] = $_; }
@@ -413,7 +425,7 @@ sub doVerticalLayout {
     elsif ($padWidth < $longest) {           # User padding not enough
         if (!$truncate) {
             alogging::vMsg(0, "Widest item is [$longest], but pad width is " .
-                           $padWidth . ", and --truncate is off.");
+                $padWidth . ", and --truncate is off.");
             $padWidth = $longest;
         }
     }
@@ -456,6 +468,8 @@ sub doVerticalLayout {
 sub doHorizontalLayout {
     while (<>) {
         $recnum++;
+        if ($unindent) { $_ =~ s/^\s+//; }
+
         if ($_ =~ m/^\s*$/) { # blank line
             $nBlanks++;
             if ($blank == 0) {

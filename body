@@ -522,9 +522,9 @@ my %getoptHash = (
     "h|help"           => sub { system "perldoc $0"; exit; },
     "iencoding=s"      => \$options{"iencoding"},
     "ignoreCase|i!"    => \$options{"ignoreCase"},
-	"ilineends=s"      => \$options{"ilineends"},
-	"insert=s"         => \$options{"insert"},
-	"iterate|g!"       => \$options{"iterate"},
+    "ilineends=s"      => \$options{"ilineends"},
+    "insert=s"         => \$options{"insert"},
+    "iterate|g!"       => \$options{"iterate"},
     "listEncodings"    => sub {
         warn "\nEncodings available:\n";
         my $last = ""; my $buf = "";
