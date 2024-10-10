@@ -104,6 +104,9 @@ and I<--lpatNum>). This is similar to the following C<awk> script:
            $0 ~ /my end(ing?) pattern/ { exit }
            p { print $0 }'
 
+Note: Due to a bug, an --lpat match later on the *same* line where --fpat
+was found, does not count.
+
 =item * body --fline 1 --nlines 5 foo.txt
 
 Do the same as C<head -n 5 foo.text>. You shouldn't have to specify
@@ -135,9 +138,9 @@ A starting point is reached by seeking:
 
 =item # If I<--fpatBreak> is specified (which requires that I<--fpat> is also
 specified), then to the chosen place relative to the found match.
-The default is to include the entire line containing the match.
-If it is instead set to EXCLUDELINE, that line is entirely discarded,
-and the following line becomes the current line.
+The default is to include the entire line containing the match. Or use
+one of INCLUDELINE, INCLUDEMATCH, EXCLUDEMATCH, EXCLUDELINE (see
+I<--fPatBreak> for details).
 
 =item # Then to offset I<--fchar> in the current line portion (depending on
 I<--fpatBreak>, this might include only part of the matched input line).
@@ -295,7 +298,20 @@ in the result.
 =item * B<--lpatBreak> I<where>
 
 Choose where to stop copying relative to the match for I<--lpat>.
-I<where> takes the same values as for B<--fpatBreak> (q.v.).
+I<where> takes the same values as for B<--fpatBreak> (q.v.):
+
+=over
+
+=item * INCLUDELINE or IL -- include the entire matching line (default).
+
+=item * INCLUDEMATCH or IM -- break line to include the match
+
+=item * EXCLUDEMATCH or EM -- break line to exclude the match
+
+=item * EXCLUDELINE or EL -- exclude the entire matched line.
+
+=back
+
 
 =item * B<--lpatNum> I<n>
 
@@ -333,8 +349,8 @@ Report version date and exit.
 
 I<--nlines> copies one too few records if no other options are specified.
 
-Searching for --fPart foo --lPat bar --iterate, will get multi-line
-matches correctly, but (at least sometimes), not single-line matches.
+Searching for I<--fPart foo --lPat bar --iterate>, will get multi-line
+matches correctly, but not single-line matches (at least sometimes).
 
 Some combinations of options have not been tested much.
 
@@ -367,12 +383,42 @@ able to save the range to a separate file.
 Options to match fpat/lpat only in certain fields?
 
 Add iterative options like for 'tail'?
-(--retry, --follow, --max-unchanged, --pid, --sleep-internal)
+(I<--retry, --follow, --max-unchanged, --pid, --sleep-internal>)
 
 Lose requirement for alogging, internal 'Reader'?
 
 
 =head1 Related commands
+
+C<sed> can do most of this; I just can never remember how.
+Oh, I don't think it can yet handle Unicode.
+
+A few simple examples:
+    sed -n '/fPat/,/lPat/{p;/END/q;}' [file]
+
+To get the same effect as --iterate, simplify the action:
+    sed -n '/fPat/,/lPat/p' [file]
+
+To go by line numbers:
+    sed -n 'fLine,lLinep' [file]
+    sed -n 'fLine,+nLines[' [file]
+
+To break around the fPat and lPat matches (including partial lines), it gets
+messier, perhaps even specifying each patterns 3 times:
+    sed -n '/fPat/,/lPat/{
+        /fPat/{s/.*\(fPat.*\)/\1/}
+        /lPat/{s/\(.*lPat\).*/\1/;p;q}
+        p
+    }' filename
+
+To break by column numbers in the matched lines:
+    sed -n '/fPat/,/lPat/{
+        /fPat/{s/^.\{N\}//;h;d}
+        /lPat/{s/^.\{M\}.*//;H;x;p;q}
+        H
+    }
+    x
+    /./p' filename
 
 C<head>, C<tail>, C<awk>.
 
@@ -489,6 +535,8 @@ sub escapeRegex {
 ###############################################################################
 # Options
 #
+my $fpbValues = "INCLUDELINE, INCLUDEMATCH, EXCLUDEMATCH, EXCLUDELINE";
+
 my %options = (
     "e"            => "",        # error-message prefix
     "fchar"        => 0,         # First char to copy
@@ -914,7 +962,7 @@ sub findStartPoint {
 # Copy until we hit the appropriate end condition. Return 0 on FAIL, 1 on success.
 #
 # Assume initial line is in $firstLine, not yet output.
-# If fline=lline, both char offsets apply to same line.
+# If fline==lline, both char offsets apply to same line.
 #
 # With --iterate, may  also stop for another startPoint.
 #
@@ -981,12 +1029,13 @@ sub copyToEndPoint {
                 $rec = "";
             }
             else {
-                die "Bad --lpatBreak value: '$lpatBreak'.\n";
+                die "Bad --lpatBreak value: '$lpatBreak' (use $fpbValues)\n";
             }
             #outPeek();
             $stoppedBy = "lpat";
             last;
         }
+
         #warn "Writing '$rec'\n";
         outLine($rec);
         $ncopied++;

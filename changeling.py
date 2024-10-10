@@ -19,10 +19,10 @@ import ast
 import shlex
 
 from xml.dom import minidom
-from xml.dom.minidom import Node  #, Document, Element
+from xml.dom.minidom import Node
 
 #from strBuf import StrBuf
-from DomExtensions import XMLStrings  #, escapeCDATA, escapeComment, escapePI, escapeAttribute
+from xmlstrings import XmlStrings as XStr
 
 __metadata__ = {
     "title"        : "theScroll",
@@ -526,7 +526,7 @@ class ChangeEvent:
             self.changeId,
             self.epochTime,
             self.target,
-            XMLStrings.escapeText(self.source)
+            XStr.escapeText(self.source)
         )
         return buf
 

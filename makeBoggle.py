@@ -23,7 +23,7 @@ __version__ = __metadata__["modified"]
 
 descr = """
 =Name=
-    """ +__metadata__["title"] + ": " + __metadata__["description"] + """
+makeBoggle: Generate and display a Boggle-like game board.
 
 
 =Description=

@@ -34,7 +34,7 @@ __version__ = __metadata__["modified"]
 
 descr = """
 =Name=
-    """ +__metadata__["title"] + ": " + __metadata__["description"] + """
+manClean: Undo 'man' formatting conventions like X^HX for bold.
 
 
 =Description=

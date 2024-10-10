@@ -9,8 +9,6 @@ import re
 import codecs
 from collections import defaultdict
 
-from PowerWalk import PowerWalk
-
 __metadata__ = {
     "title"        : "shortenContext",
     "description"  : "Trim lines to just the surrounding of a regex match.",
@@ -29,8 +27,7 @@ __version__ = __metadata__["modified"]
 descr = """
 =Description=
 
-Trim long lines to just a limited around surrounding a
-given regex match.
+Trim long lines to just a limited around surrounding a given regex match.
 
 This is useful, for example, if you are getting `grep` hits in files with
 very long lines, and you want more than just the matched string, but less
@@ -134,8 +131,7 @@ if __name__ == "__main__":
             help='Display version information, then exit.')
 
         parser.add_argument(
-            "files", type=str,
-            nargs=argparse.REMAINDER,
+            "files", type=str, nargs=argparse.REMAINDER,
             help='Path(s) to input file(s)')
 
         args0 = parser.parse_args()
@@ -151,18 +147,7 @@ if __name__ == "__main__":
         doOneFile("[STDIN]", sys.stdin)
     else:
         depth = 0
-        pw = PowerWalk(args.files)
-        pw.setOption('recursive', args.recursive)
-        for path0, fhOrFlag in pw.traverse():
-            if (fhOrFlag == "DIR_END"):
-                depth -= 1
-                continue
-            print("    " * depth + path0)
-            if (fhOrFlag == "DIR_START"):
-                depth += 1
-                continue
-
-            fileNum = pw.travState.stats['itemsReturned']
+        for path0 in args.files:
             fh0 = codecs.open(path0, "rb", encoding=args.iencoding)
             doOneFile(path0, fh0)
             fh0.close()

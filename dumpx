@@ -2132,7 +2132,7 @@ sub new {
 
     my $u = ""; # Might want a prefix to names later...
     $self->{ucc} = {
-        #    Unicode catagory name     Unify   Abbrev   NumberOfChars
+        #    Unicode category name     Unify   Abbrev   NumberOfChars
         # LETTERS
         $u . "Letter"                => "A",   # "L",
         $u . "Cased_Letter"          => "A",   # "LC",

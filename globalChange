@@ -1112,6 +1112,8 @@ to apply (ASCII, Default, Locale-based, or Unicode).
 
   Move to Python, on top of PowerWalk and fsplit.
 
+  Nicer 'diff' lines, maybe Levenstein distance based?
+
   Perhapts add a --onlyWhen modifier, to only do a matched change if some
   other regex ''also'' matches on that line?
 
