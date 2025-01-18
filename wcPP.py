@@ -157,7 +157,7 @@ def doOneFile(path:str) -> int:
     maxRec = 0
 
     if (not path):
-        if (sys.stdin.isatty()): print("Waiting on STDIN...")
+        if (sys.stdin.isatty() and not args.quiet): print("Waiting on STDIN...")
         fh = sys.stdin
     else:
         try:

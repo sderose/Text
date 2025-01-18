@@ -143,7 +143,8 @@ if __name__ == "__main__":
     args = processOptions()
 
     if (len(args.files) == 0):
-        if (sys.stdin.isatty): sys.stderr.write("Waiting on stdin...\n")
+        if (sys.stdin.isatty and not args.quiet):
+            sys.stderr.write("Waiting on stdin...\n")
         doOneFile("[STDIN]", sys.stdin)
     else:
         depth = 0

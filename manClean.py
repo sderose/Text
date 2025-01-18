@@ -26,7 +26,7 @@ __metadata__ = {
     "type"         : "http://purl.org/dc/dcmitype/Software",
     "language"     : "Python 3.9",
     "created"      : "2022-10-14",
-    "modified"     : "2022-10-14",
+    "modified"     : "2024-11-23",
     "publisher"    : "http://github.com/sderose",
     "license"      : "https://creativecommons.org/licenses/by-sa/3.0/"
 }
@@ -51,7 +51,7 @@ Specifically:
 
     char + backspace + char means bold
     _ + backspace + char means underscored / italics
-   char + backspace + _ means underscored / italics
+    char + backspace + _ means underscored / italics
 
 Use --oformat to choose what you want as a result:
 
@@ -59,20 +59,24 @@ Use --oformat to choose what you want as a result:
 * "html": also puts in tags like <u>, <b>, etc. These are placed once around any
 contiguous group of such characters, but not crossing line boundaries. You can
 change the tag for underscoring with --uTag (say, to "i").
-The text is also HTML-escape (though the rest of the file isn't -- maybe will add).
+The text is also HTML-escaped (though the rest of the file isn't -- maybe will add).
 * "markdown": Puts "*" around bold, and "_" around underscoring.
 * "math": replaces the sequence with the Unicode "MATHEMATICAL" equivalent of the
-base character (see my 'mathAlphanumerics.py' for details).
-
-==Usage==
-
-    manClean.py [options] [files]
+base character (see my 'mathAlphanumerics.py' for details). By default it
+turns "_" overlays to italic, and self-overlays to bold, but you can change
+that with --mathFont (see [mathAlphanumerics.py] re. available choices.
 
 
 =See also=
 
+*nix `col -b` can strip out these backspace conventions, but not turn them
+into something else.
+
 
 =Known bugs and Limitations=
+
+If you use --oformat math, bold and italic characters are no longer "the same",
+so simple text "Find" commands, grep, etc. will not work.
 
 So far, only supports underscoring where the underscore comes before its base
 character. I don't know if some man setups generate things the other way around.
@@ -100,10 +104,14 @@ grep probably doesn't, but sort probably does (depending on locale setting).
 
 =To do=
 
+* Add an option for colorizing.
+* Add a way to leave either bold or italic untouched and just fix the other.
+
 
 =History=
 
 * 2022-10-14: Written by Steven J. DeRose.
+* 2024-11-23: Fix --oformat=math, add --mathFont[IB], drop debug prints.
 
 
 =Rights=
@@ -125,20 +133,11 @@ or [https://github.com/sderose].
 undersExpr = re.compile(r"((_\x08.)+)")
 boldsExpr = re.compile(r"(((.)\x08\3)+)")
 
-tst = "hello \x08world"
-print("|%d| '%s'" % (len(tst), tst))
-if (re.search(r"\x08", tst)): print("Found bsp")
-tst2 = re.sub(r"\x08", "", tst)
-print("|%d| '%s'" % (len(tst2), tst2))
-
-print("undersExpr: (%s) /%s" % (type(undersExpr), undersExpr))
-print("boldsExpr: (%s) /%s" % (type(boldsExpr), boldsExpr))
-
 def doOneFile(path:str) -> int:
     """Read and deal with one individual file.
     """
     if (not path):
-        if (sys.stdin.isatty()): print("Waiting on STDIN...")
+        if (sys.stdin.isatty() and not args.quiet): print("Waiting on STDIN...")
         fh = sys.stdin
     else:
         try:
@@ -160,13 +159,14 @@ def doOneFile(path:str) -> int:
 
 def fixUnderscore(mat):
     clean = re.sub(r"_\x08(.)", "\\1", mat.group(0))
+    clean = re.sub(r"(.)\x08_", "\\1", clean)
     if (args.oformat == "plain"):
         return clean
     if (args.oformat == "html"):
         return "%s%s%s>" % (args.uTag, html.escape(clean), args.uTag)
     if (args.oformat == "math"):
         return mathAlphanumerics.convert(clean,
-            script="Latin", font="Mathematical Italic ", decompose=True)
+            script="Latin", font=args.mathFontI, decompose=True)
     if (args.oformat == "markdown"):
         return "_%s_" % (clean)
     lg.critical("Unsupported output format '%s'.", args.oformat)
@@ -179,7 +179,7 @@ def fixBold(mat):
         return "<b>%s</b>" % (html.escape(clean))
     if (args.oformat == "math"):
         return mathAlphanumerics.convert(clean,
-            script="Latin", font="Mathematical Bold ", decompose=True)
+            script="Latin", font=args.mathFontB, decompose=True)
     if (args.oformat == "markdown"):
         return "*%s*" % (clean)
     lg.critical("Unsupported output format '%s'.", args.oformat)
@@ -203,13 +203,19 @@ if __name__ == "__main__":
             "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
+            "--mathFontI", type=str, default="Mathematical Bold",
+            help="Which MATHEMATICAL characters to use for bold.")
+        parser.add_argument(
+            "--mathFontB", type=str, default="Mathematical Italic",
+            help="Which MATHEMATICAL characters to use for italic.")
+        parser.add_argument(
             "--oencoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
             "--oformat", "--outputFormat", "--output-format", type=str,
             choices=[ "plain", "html", "math", "markdown" ],
             metavar="F", default="plain",
-            help="What to map format sequences to.")
+            help="What to map format sequences to (for 'math' cf --mathFont)")
         parser.add_argument(
             "--quiet", "-q", action="store_true",
             help="Suppress most messages.")
@@ -234,8 +240,8 @@ if __name__ == "__main__":
         if (lg and args0.verbose):
             logging.basicConfig(level=logging.INFO - args0.verbose)
 
-        if (args0.outputFormat == "math" and not gotMath):
-            lg.critical("Unable to load mathAlphanumerics for --outputFormat math.")
+        if (args0.oformat == "math" and not gotMath):
+            lg.critical("Unable to load mathAlphanumerics for --oformat math.")
             sys.exit()
         return(args0)
 
