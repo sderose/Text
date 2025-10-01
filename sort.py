@@ -168,32 +168,32 @@ def processOptions():
         "--field", "-f", "-k", type=int, default=None,
         help='Use this (regex) as the field delimiter.')
     parser.add_argument(
-        "--iencoding", type=str, metavar='E', default="utf-8",
+        "--iencoding", type=str, metavar="E", default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
         "--caseNorm", type=str, choices=[ "NONE", "UPPER", "CASEFOLD" ],
         help='Whether/how to normalize case distinctions.')
     parser.add_argument(
-        "--quiet", "-q", action='store_true',
+        "--quiet", "-q", action="store_true",
         help='Suppress most messages.')
     parser.add_argument(
         "--spaceNorm", type=str,
         choices=[ "NONE", "XML", "LEFT", "RIGHT", "STRIP", "RUNS", "DROP" ],
         help='Whether/how to normalize whitespace.')
     parser.add_argument(
-        "--reverse", "-r", action='store_true', default=False,
+        "--reverse", "-r", action="store_true", default=False,
         help='Sort in descending order.')
     parser.add_argument(
-        "--unicode", action='store_const', dest='iencoding',
+        "--unicode", action="store_const", dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
     parser.add_argument(
         "--uNorm", type=str, choices=[ "NONE", "NFKC", "NFKD", "NFC", "NFD" ],
         help='Whether/how to normalize Unicode.')
     parser.add_argument(
-        "--verbose", "-v", action='count', default=0,
+        "--verbose", "-v", action="count", default=0,
         help='Add more messages (repeatable).')
     parser.add_argument(
-        "--version", action='version', version=__version__,
+        "--version", action="version", version=__version__,
         help='Display version information, then exit.')
 
     parser.add_argument(

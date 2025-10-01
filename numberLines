@@ -15,7 +15,7 @@ our %metadata = (
     'type'         => "http://purl.org/dc/dcmitype/Software",
     'language'     => "Perl 5",
     'created'      => "2009-06-08",
-    'modified'     => "2020-08-24",
+    'modified'     => "2025-06-07",
     'publisher'    => "http://github.com/sderose",
     'license'      => "https://creativecommons.org/licenses/by-sa/3.0/"
 );
@@ -135,7 +135,7 @@ Zero-pad the number to at least this many digits (set C<0> for no padding).
 =head1 Related commands
 
 Very similar (on purpose) to C<cat -n>, but doesn't have I<--hex>, I<--width>, I<-q>,
-I<delim>, 
+I<delim>,
 or support for Unicode and other encodings. It does have I<-v> (which I plan to add
 with more control, similar to my
 C<showInvisibles>).
@@ -167,7 +167,7 @@ them to incoming data lines. These could be integrated.
   Option to insert file boundary markers
   Integrate w/ PowerWalk
   Support full range of --quoteChar, incl. curlies.
-  
+
 
 =head1 History
 
@@ -181,7 +181,8 @@ them to incoming data lines. These could be integrated.
   2020-08-30: New layout. Add -b (like C<cat>) to number just non-blank lines.
 Add -e, --enderChar, -s.
   2021-07-24: Add -q, --quoteChar, --escapeChar.
-  
+  2025-06-07: Fix --nonBlankOnly.
+
 
 =head1 Ownership
 
@@ -280,22 +281,22 @@ my $recnum = 0;
 my $lastRec = my $rec = "";
 
 while ($lastRec = $rec, $rec = <>) {
+    $recnum++;
     chomp($rec);
     if ($ignore && $rec =~ /$ignore/) {                  # Ignorable
         $rec = ((" " x $width) . $delim . $rec . "\n");
     }
     elsif ($rec =~ m/^\s*$/) {                           # Blank
+        if ($nonBlankOnly) { $recnum--; }
         if ($squeeze && ($lastRec =~ m/^\s*$/)) {
             next;
         }
     }
     elsif ($remove) {                                    # Remove number
-        $recnum++;
         if ($hex) { $rec =~ s/^\s*[\da-fA-F]+$delim//; }
         else { $rec =~ s/^\s*\d+$delim//; }
     }
     else {                                               # Add number
-        $recnum++;  
         my $toInsert = ($byLength) ? length($rec) : $recnum;
         my $num = sprintf($format, $toInsert);
         if ($suffix) {
@@ -305,7 +306,7 @@ while ($lastRec = $rec, $rec = <>) {
             $rec = $num . $delim . $rec;
         }
     }
-    
+
     if ($quote) {
         $rec =~ s/$escapeChar/$escapeChar$escapeChar/g;
         $rec =~ s/$quoteChar/$escapeChar$quoteChar/g;

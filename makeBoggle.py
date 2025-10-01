@@ -234,7 +234,7 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--oformat", "--outputFormat", "--output-format",
+            "--oformat", "--output-format",
             type=str, default="ASCII", choices=[ "ASCII", ],
             help="How to display the board.")
         parser.add_argument(

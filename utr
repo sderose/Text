@@ -49,6 +49,7 @@ Characters can be specified literally, or using the following shorthands:
 =head2 Backslash escapes
 
 The ones in traditional C<tr>:
+
     \\    backslash
     a     audible BEL
     b     backspace
@@ -59,10 +60,11 @@ The ones in traditional C<tr>:
     v     vertical tab
 
 Additional ones supported here:
-    e     escape (not in traditional tr)
-    -     hyphen (not in traditional tr)
+
+    e     escape
+    -     hyphen
     NNN   where NNN means 3 octal digits (000-777)
-    xFFFF where FFFF means 4 hex digits  (not in traditional tr)
+    xFFFF where FFFF means 4 hex digits
 
 =head2 Unicode characters above xFFFF
 
@@ -96,8 +98,7 @@ verified them yet for the current Perl:
     [:rune:]
     [:special:]
     [=equiv=] (which says "Represents all characters belonging to the same
-equivalence class as equiv, ordered by their encoded values" -- but this
-does not seem clear to me).
+equivalence class as equiv, ordered by their encoded values".
     [c*n] -- shorthand for n copies of c. Not supported here.
 
 Unlike C<tr>, all such classes are guaranteed to be expanded in numerical
@@ -192,8 +193,8 @@ This may or not be the result you want... (suggestions for improvement welcome).
 
 Unicode title-case characters (e.g., U01c5, U01c8, U01cb, U01f2)
 are not supported in any special way (for example, with [:lower:] and [:upper:].
-Nor is the infamous dotless 'i'. No Unicode canonical form
-normalization is done either.
+Nor is the infamous U+0131 (LATIN SMALL LETTER DOTLESS I).
+No Unicode canonical form normalization is done either.
 
 You can specify the start of a range (like a-z) using a backslash code or
 XML-style character reference, but you cannot do that for the end of range.
@@ -207,7 +208,6 @@ C<tr>. Well, yeah. The main differences are:
   * Unicode support here
   * Some more backslash codes
   * -C (complement C<set2> is not supported here.
-
 
 My C<makeUnicodedata> -- can extract a table of Unicode characters with various
 properties; handy for finding the characters you need.
@@ -237,7 +237,7 @@ L<https://github.com/sderose>.
 ###############################################################################
 # Options
 #
-my $complement1    = 0;
+my $complement1   = 0;
 my $complement2   = 0;
 my $delete        = 0;
 my $force         = 0;

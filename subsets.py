@@ -156,7 +156,7 @@ if __name__ == "__main__":
             "--iencoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
-            "--ignoreCase", "-i", action="store_true",
+            "--ignoreCase", "--ignore-case", "-i", action="store_true",
             help="Disregard case distinctions.")
         parser.add_argument(
             "--lines", type=int, default=1000,

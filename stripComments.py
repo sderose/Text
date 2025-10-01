@@ -94,28 +94,28 @@ def processOptions():
         "--color", # Don't default. See below.
         help='Colorize the output.')
     parser.add_argument(
-        "--compact", "-c", action='store_true',
+        "--compact", "-c", action="store_true",
         help='Suppress blank lines.')
     parser.add_argument(
-        "--extension", type=str, default='py',
+        "--extension", type=str, default="py",
         help='Choose the default extension to assume for files without one.')
     parser.add_argument(
-        "--iencoding", type=str, metavar='E', default="utf-8",
+        "--iencoding", type=str, metavar="E", default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
-        "--oencoding", type=str, metavar='E',
+        "--oencoding", type=str, metavar="E",
         help='Use this character set for output files.')
     parser.add_argument(
-        "--quiet", "-q", action='store_true',
+        "--quiet", "-q", action="store_true",
         help='Suppress most messages.')
     parser.add_argument(
-        "--unicode", action='store_const', dest='iencoding',
+        "--unicode", action="store_const", dest='iencoding',
         const='utf8', help='Assume utf-8 for input files.')
     parser.add_argument(
-        "--verbose", "-v", action='count', default=0,
+        "--verbose", "-v", action="count", default=0,
         help='Add more messages (repeatable).')
     parser.add_argument(
-        "--version", action='version', version=__version__,
+        "--version", action="version", version=__version__,
         help='Display version information, then exit.')
 
     parser.add_argument(
@@ -126,7 +126,7 @@ def processOptions():
     lg.setVerbose(args0.verbose)
     if (args0.color is None):
         args0.color = ("CLI_COLOR" in os.environ and sys.stderr.isatty())
-    lg.setColors(args0.color)
+    #lg.setColors(args0.color)
     return(args0)
 
 

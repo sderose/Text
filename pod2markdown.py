@@ -358,7 +358,7 @@ if __name__ == "__main__":
             "--oencoding", type=str, metavar="E", default="utf-8",
             help="Use this character set for output files.")
         parser.add_argument(
-            "--oformat", "--outputFormat", "--output-format", type=str,
+            "--oformat", "--output-format", type=str,
             choices=[ "md", "mediawiki", "html" ],
             metavar="F", default="mediawiki",
             help="Assume this character set for input files. Default: utf-8.")

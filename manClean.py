@@ -212,7 +212,7 @@ if __name__ == "__main__":
             "--oencoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
-            "--oformat", "--outputFormat", "--output-format", type=str,
+            "--oformat", "--output-format", type=str,
             choices=[ "plain", "html", "math", "markdown" ],
             metavar="F", default="plain",
             help="What to map format sequences to (for 'math' cf --mathFont)")
