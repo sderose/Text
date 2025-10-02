@@ -153,7 +153,7 @@ if __name__ == "__main__":
             "--format", type=str, metavar="F", default="%04d",
             help="A format()-style spec for the numbers to insert.")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--ignoreCase", "--ignore-case", "-i", action="store_true",
@@ -165,7 +165,7 @@ if __name__ == "__main__":
             "--maxFiles", type=int, default=100,
             help="Don't write more than this many files.")
         parser.add_argument(
-            "--oencoding", type=str, metavar="E", default="utf-8",
+            "--oencoding", "--output-encoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
             "--opath", type=str, metavar="F", default="prefix_{}.txt",

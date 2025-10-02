@@ -157,7 +157,7 @@ if __name__ == "__main__":
             choices=[ "backslash", "html", "uri", "cpics" ],
             help="What kind of escaping to undo.")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--keep", action="store_true",

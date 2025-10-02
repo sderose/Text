@@ -200,7 +200,7 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--mathFontI", type=str, default="Mathematical Bold",
@@ -209,7 +209,7 @@ if __name__ == "__main__":
             "--mathFontB", type=str, default="Mathematical Italic",
             help="Which MATHEMATICAL characters to use for italic.")
         parser.add_argument(
-            "--oencoding", type=str, metavar="E", default="utf-8",
+            "--oencoding", "--output-encoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
             "--oformat", "--output-format", type=str,

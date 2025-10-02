@@ -168,7 +168,7 @@ def processOptions():
         "--field", "-f", "-k", type=int, default=None,
         help='Use this (regex) as the field delimiter.')
     parser.add_argument(
-        "--iencoding", type=str, metavar="E", default="utf-8",
+        "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
         help='Assume this character set for input files. Default: utf-8.')
     parser.add_argument(
         "--caseNorm", type=str, choices=[ "NONE", "UPPER", "CASEFOLD" ],

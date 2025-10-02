@@ -904,7 +904,7 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--quiet", "-q", action="store_true",

@@ -111,7 +111,7 @@ if __name__ == "__main__":
             "--comment", type=str, metavar="S", default="#",
             help='Treat lines starting with this as comments. Default: "#".')
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help='Assume this character set for input files. Default: utf-8.')
         parser.add_argument(
             "--indent", type=str, metavar="I", default="",

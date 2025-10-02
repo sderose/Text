@@ -311,13 +311,13 @@ def processOptions():
         "--escaped", action="store_true",
         help='Discard quotes wafter non-doubled backslash like "see \\\" and \\\'.".')
     parser.add_argument(
-        "--iencoding", type=str, metavar="E", default="utf-8",
+        "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
         help="Assume this character set for input files. Default: utf-8.")
     parser.add_argument(
         "--indents", action="store_true",
         help="Also report indentation decreases not to stacked columns.")
     parser.add_argument(
-        "--oencoding", type=str, metavar="E",
+        "--oencoding", "--output-encoding", type=str, metavar="E",
         help="Use this character set for output files.")
     parser.add_argument(
         "--parentheses", "--parens", action="store_true",

@@ -111,13 +111,13 @@ Supports \\xFF, \\uFFFF, \\UFFFFFFFF, \\x{FFF}, etc.
 Default: ','. Note: if len > 1, the whole string is the delimiter, not each
 character in rotation as with *nix 'paste'. To do that, set --cycleDelims.""")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--lstrip", action="store_true",
             help="Remove whitespace from start of lines.")
         parser.add_argument(
-            "--oencoding", type=str, metavar="E", default="utf-8",
+            "--oencoding", "--output-encoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
             "--quiet", "-q", action="store_true",

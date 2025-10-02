@@ -100,7 +100,7 @@ if __name__ == "__main__":
             parser = argparse.ArgumentParser(description=descr)
 
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help='Assume this character set for input files. Default: utf-8.')
         parser.add_argument(
             "--ignoreCase", "--ignore-case", "-i", action="store_true",
@@ -112,7 +112,7 @@ if __name__ == "__main__":
             "--multi", action="store_true",
             help='Show multiple hits per line.')
         parser.add_argument(
-            "--oencoding", type=str, metavar="E",
+            "--oencoding", "--output-encoding", type=str, metavar="E",
             help='Use this character set for output files.')
         parser.add_argument(
             "--quiet", "-q", action="store_true",

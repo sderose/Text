@@ -241,10 +241,10 @@ if __name__ == "__main__":
                 "reverse", "collate", "signature" ],
             help="What to do. Default: split.")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
-            "--oencoding", type=str, metavar="E", default="utf-8",
+            "--oencoding", "--output-encoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: Same as --iencoding.")
         parser.add_argument(
             "--outfile", type=str, metavar="P", default="result",

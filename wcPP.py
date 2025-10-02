@@ -234,7 +234,7 @@ if __name__ == "__main__":
             help="Count words (not the exact Posix definition yet).")
 
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
             "--oformat", "--output-format",

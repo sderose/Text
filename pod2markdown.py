@@ -349,13 +349,13 @@ if __name__ == "__main__":
             "--extract-to", "--extractTo", type=str, metavar="F", default="",
             dest="extractTo", help="Write a copy to this file.")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
             "--justPOD", action="store_true",
             help='Wait for "=pod" line to start.')
         parser.add_argument(
-            "--oencoding", type=str, metavar="E", default="utf-8",
+            "--oencoding", "--output-encoding", type=str, metavar="E", default="utf-8",
             help="Use this character set for output files.")
         parser.add_argument(
             "--oformat", "--output-format", type=str,

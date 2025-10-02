@@ -171,10 +171,10 @@ if __name__ == "__main__":
             "--help-quotes", action="store_true",
             help="Display the mnemonics for --quote, and their meanings.")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character coding for input. Default: utf-8.")
         parser.add_argument(
-            "--oencoding", type=str, metavar="E", default="utf-8",
+            "--oencoding", "--output-encoding", type=str, metavar="E", default="utf-8",
             help="Use this character coding for output. Default: iencoding.")
         parser.add_argument(
             "--quiet", "-q", action="store_true",

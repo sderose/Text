@@ -693,7 +693,7 @@ if __name__ == "__main__":
             default="/usr/share/dict/words",
             help="Dictionary to use.")
         parser.add_argument(
-            "--iencoding", type=str, metavar="E", default="utf-8",
+            "--iencoding", "--input-encoding", type=str, metavar="E", default="utf-8",
             help="Assume this character set for input files. Default: utf-8.")
         parser.add_argument(
             "--multibreak", action="store_true",
